@@ -275,7 +275,17 @@ export const participantBidItems = mysqlTable("participant_bid_items", {
   totalPrice: int("totalPrice").notNull(), // in cents
   deliveryTime: varchar("deliveryTime", { length: 100 }),
   notes: text("notes"),
+  // Compliance flags
+  isCompliant: boolean("isCompliant").default(true).notNull(),
+  complianceIssues: text("complianceIssues"), // JSON array of issues
+  priceCompliant: boolean("priceCompliant").default(true).notNull(),
+  deadlineCompliant: boolean("deadlineCompliant").default(true).notNull(),
+  documentsCompliant: boolean("documentsCompliant").default(true).notNull(),
+  specsCompliant: boolean("specsCompliant").default(true).notNull(),
+  supplierCompliant: boolean("supplierCompliant").default(true).notNull(),
+  quantityCompliant: boolean("quantityCompliant").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 /**

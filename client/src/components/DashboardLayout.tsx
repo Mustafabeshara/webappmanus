@@ -32,6 +32,7 @@ const menuItems = [
   { icon: FileText, label: "Tenders", path: "/tenders" },
   { icon: FileText, label: "Templates", path: "/templates" },
   { icon: DollarSign, label: "Budgets", path: "/budgets" },
+  { icon: Package, label: "Inventory", path: "/inventory" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

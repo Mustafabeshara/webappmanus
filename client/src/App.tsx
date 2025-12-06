@@ -15,6 +15,8 @@ import CreateTemplate from "./pages/CreateTemplate";
 import Budgets from "./pages/Budgets";
 import CreateBudget from "./pages/CreateBudget";
 import BudgetDetails from "./pages/BudgetDetails";
+import Inventory from "./pages/Inventory";
+import CreateProduct from "./pages/CreateProduct";
 
 function Router() {
   return (
@@ -94,6 +96,23 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Budgets />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Inventory - specific routes BEFORE dynamic routes */}
+      <Route path={"/inventory/create"}>
+        {() => (
+          <DashboardLayout>
+            <CreateProduct />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/inventory"}>
+        {() => (
+          <DashboardLayout>
+            <Inventory />
           </DashboardLayout>
         )}
       </Route>

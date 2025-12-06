@@ -15,6 +15,13 @@
       "when": 1765048813572,
       "tag": "0001_cheerful_violations",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1765055651994,
+      "tag": "0002_grey_namorita",
+      "breakpoints": true
     }
   ]
 }

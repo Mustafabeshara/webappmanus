@@ -379,15 +379,35 @@ export const appRouter = router({
         unitPrice: z.number().optional(),
         unit: z.string().optional(),
         specifications: z.string().optional(),
+        // Inventory fields
+        minStockLevel: z.number().optional(),
+        maxStockLevel: z.number().optional(),
+        initialQuantity: z.number().optional(),
+        location: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const sku = utils.generateProductSKU();
-        await db.createProduct({
-          ...input,
+        const { minStockLevel, maxStockLevel, initialQuantity, location, ...productData } = input;
+        
+        // Create product
+        const productId = await db.createProduct({
+          ...productData,
           sku,
           createdBy: ctx.user.id,
         } as any);
-        return { success: true, sku };
+        
+        // Create initial inventory record
+        if (productId) {
+          await db.createInventory({
+            productId,
+            quantity: initialQuantity || 0,
+            minStockLevel: minStockLevel || 0,
+            maxStockLevel: maxStockLevel,
+            location,
+          } as any);
+        }
+        
+        return { success: true, sku, productId };
       }),
     
     update: protectedProcedure
