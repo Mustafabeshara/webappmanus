@@ -17,6 +17,10 @@ import CreateBudget from "./pages/CreateBudget";
 import BudgetDetails from "./pages/BudgetDetails";
 import Inventory from "./pages/Inventory";
 import CreateProduct from "./pages/CreateProduct";
+import ProductDetails from "./pages/ProductDetails";
+import Suppliers from "./pages/Suppliers";
+import CreateSupplier from "./pages/CreateSupplier";
+import SupplierDetails from "./pages/SupplierDetails";
 
 function Router() {
   return (
@@ -109,10 +113,43 @@ function Router() {
         )}
       </Route>
       
+      <Route path={"/inventory/:id"}>
+        {() => (
+          <DashboardLayout>
+            <ProductDetails />
+          </DashboardLayout>
+        )}
+      </Route>
+      
       <Route path={"/inventory"}>
         {() => (
           <DashboardLayout>
             <Inventory />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Suppliers - specific routes BEFORE dynamic routes */}
+      <Route path={"/suppliers/create"}>
+        {() => (
+          <DashboardLayout>
+            <CreateSupplier />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/suppliers/:id"}>
+        {() => (
+          <DashboardLayout>
+            <SupplierDetails />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/suppliers"}>
+        {() => (
+          <DashboardLayout>
+            <Suppliers />
           </DashboardLayout>
         )}
       </Route>

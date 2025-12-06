@@ -367,7 +367,19 @@ export const appRouter = router({
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
-        return await db.getProductById(input.id);
+        const product = await db.getProductById(input.id);
+        if (!product) return null;
+        
+        // Get inventory data for this product
+        const inventoryList = await db.getInventoryByProduct(input.id);
+        const inventory = inventoryList && inventoryList.length > 0 ? inventoryList[0] : null;
+        
+        return {
+          ...product,
+          currentStock: inventory?.quantity || 0,
+          minStockLevel: inventory?.minStockLevel || 0,
+          location: inventory?.location || null,
+        };
       }),
     
     create: protectedProcedure

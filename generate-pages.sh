@@ -1,0 +1,20 @@
+#!/bin/bash
+# This script lists the pages that need to be created for Phases 2-4
+
+echo "Pages needed for completion:"
+echo ""
+echo "SUPPLIERS MODULE:"
+echo "- CreateSupplier.tsx"
+echo "- SupplierDetails.tsx"
+echo ""
+echo "CUSTOMERS MODULE:"
+echo "- Customers.tsx"
+echo "- CreateCustomer.tsx"
+echo "- CustomerDetails.tsx"
+echo ""
+echo "INVOICES MODULE:"
+echo "- Invoices.tsx"
+echo "- CreateInvoice.tsx"
+echo "- InvoiceDetails.tsx"
+echo ""
+echo "Total: 9 pages to create"
