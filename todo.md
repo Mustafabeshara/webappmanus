@@ -281,3 +281,41 @@
 - [ ] Add task quick actions to Dashboard
 - [ ] Add task notifications for assignments and updates
 - [x] Write tests for tasks module (4 tests passing)
+
+### User Management & Permissions Module (BACKEND COMPLETE ✅)
+- [x] Extend user schema with additional fields (phone, department, position, status)
+- [x] Database migration created (0006_nostalgic_lenny_balinger.sql)
+- [x] userPermissions table already exists in schema
+- [x] Build user CRUD operations in backend (getAllUsers with filters, getUserById, updateUser, deleteUser)
+- [x] Create permissions management system (getUserPermissions, setUserPermission, deleteUserPermission)
+- [x] Add role-based middleware (adminProcedure for route protection)
+- [x] Create users tRPC router (list, get, update, delete, permissions sub-router)
+- [x] Create Users list page with search/filter (admin only)
+- [ ] Create UserDetails page with permissions editor (frontend)
+- [ ] Add user status management (active/inactive/suspended) UI
+- [ ] Write tests for user management
+
+### Activity Audit Trails (BACKEND COMPLETE ✅)
+- [x] auditLogs table already exists in schema
+- [x] Build audit logging functions (createAuditLog, getAuditLogs)
+- [x] Create auditLogs tRPC router (list with entityType/entityId filters)
+- [ ] Add audit logging middleware to all mutations
+- [ ] Track all CRUD operations across modules
+- [ ] Create AuditLogs page with filters (frontend)
+- [ ] Add export audit logs functionality
+- [ ] Write tests for audit logging
+
+### Notifications System (BACKEND COMPLETE ✅)
+- [x] notifications table already exists in schema
+- [x] Build notification creation backend (createNotification, getUserNotifications, markNotificationRead, markAllNotificationsRead)
+- [x] Create notifications tRPC router (list, markAsRead, markAllAsRead)
+- [ ] Add notification triggers for key events (integration)
+- [ ] Create real-time notification polling (frontend)
+- [ ] Build notifications dropdown UI (frontend)
+- [ ] Add notification preferences (frontend)
+- [ ] Implement email notification integration
+- [ ] Add notification for budget alerts
+- [ ] Add notification for expense approvals
+- [ ] Add notification for task assignments
+- [ ] Add notification for low stock alerts
+- [ ] Write tests for notifications

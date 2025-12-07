@@ -128,10 +128,32 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getAllUsers() {
+export async function getAllUsers(filters: {
+  role?: string;
+  status?: string;
+  departmentId?: number;
+} = {}) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(users).orderBy(desc(users.createdAt));
+  
+  let query = db.select().from(users);
+  const conditions = [];
+  
+  if (filters.role) {
+    conditions.push(eq(users.role, filters.role as any));
+  }
+  if (filters.status) {
+    conditions.push(eq(users.status, filters.status as any));
+  }
+  if (filters.departmentId) {
+    conditions.push(eq(users.departmentId, filters.departmentId));
+  }
+  
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+  
+  return query.orderBy(desc(users.createdAt));
 }
 
 export async function updateUserRole(userId: number, role: "admin" | "user") {
@@ -1103,3 +1125,5 @@ export async function deleteTaskComment(id: number) {
   if (!db) throw new Error("Database not available");
   await db.delete(taskComments).where(eq(taskComments.id, id));
 }
+
+
