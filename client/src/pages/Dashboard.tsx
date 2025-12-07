@@ -12,7 +12,8 @@ import {
   CheckCircle,
   Clock,
   ArrowRight,
-  ClipboardCheck
+  ClipboardCheck,
+  BarChart3
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -245,6 +246,12 @@ export default function Dashboard() {
               <Button variant="outline" className="w-full justify-start">
                 <ClipboardCheck className="h-4 w-4 mr-2" />
                 Approve Expenses
+              </Button>
+            </Link>
+            <Link href="/expenses/analytics">
+              <Button variant="outline" className="w-full justify-start">
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Expense Analytics
               </Button>
             </Link>
             <Link href="/templates">

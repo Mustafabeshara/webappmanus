@@ -36,6 +36,7 @@ import ExpenseDetails from "./pages/ExpenseDetails";
 import BulkImportExpenses from "./pages/BulkImportExpenses";
 import ExpenseApprovalDashboard from "./pages/ExpenseApprovalDashboard";
 import MultiReceiptUpload from "./pages/MultiReceiptUpload";
+import ExpenseAnalytics from "./pages/ExpenseAnalytics";
 import Deliveries from "./pages/Deliveries";
 import CreateDelivery from "./pages/CreateDelivery";
 import DeliveryDetails from "./pages/DeliveryDetails";
@@ -252,6 +253,14 @@ function Router() {
         {() => (
           <DashboardLayout>
             <ExpenseApprovalDashboard />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/expenses/analytics"}>
+        {() => (
+          <DashboardLayout>
+            <ExpenseAnalytics />
           </DashboardLayout>
         )}
       </Route>

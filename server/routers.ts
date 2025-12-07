@@ -1157,6 +1157,180 @@ export const appRouter = router({
         
         return results;
       }),
+    
+    // Analytics endpoints
+    analyticsByCategory: protectedProcedure
+      .input(z.object({
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }))
+      .query(async ({ input }) => {
+        const expenses = await db.getAllExpenses();
+        const categories = await db.getAllBudgetCategories();
+        
+        // Filter by date range if provided
+        let filtered = expenses.filter(e => e.status === 'approved' || e.status === 'paid');
+        if (input.startDate) {
+          filtered = filtered.filter(e => new Date(e.expenseDate) >= input.startDate!);
+        }
+        if (input.endDate) {
+          filtered = filtered.filter(e => new Date(e.expenseDate) <= input.endDate!);
+        }
+        
+        // Group by category
+        const byCategory = new Map<number, { name: string; total: number; count: number }>();
+        for (const expense of filtered) {
+          if (!expense.categoryId) continue;
+          const existing = byCategory.get(expense.categoryId) || { name: '', total: 0, count: 0 };
+          const category = categories.find(c => c.id === expense.categoryId);
+          byCategory.set(expense.categoryId, {
+            name: category?.name || 'Unknown',
+            total: existing.total + expense.amount,
+            count: existing.count + 1,
+          });
+        }
+        
+        return Array.from(byCategory.entries()).map(([id, data]) => ({
+          categoryId: id,
+          categoryName: data.name,
+          totalAmount: data.total,
+          expenseCount: data.count,
+        }));
+      }),
+    
+    analyticsByDepartment: protectedProcedure
+      .input(z.object({
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }))
+      .query(async ({ input }) => {
+        const expenses = await db.getAllExpenses();
+        const departments = await db.getAllDepartments();
+        
+        // Filter by date range and approved status
+        let filtered = expenses.filter(e => e.status === 'approved' || e.status === 'paid');
+        if (input.startDate) {
+          filtered = filtered.filter(e => new Date(e.expenseDate) >= input.startDate!);
+        }
+        if (input.endDate) {
+          filtered = filtered.filter(e => new Date(e.expenseDate) <= input.endDate!);
+        }
+        
+        // Group by department
+        const byDepartment = new Map<number, { name: string; total: number; count: number }>();
+        for (const expense of filtered) {
+          if (!expense.departmentId) continue;
+          const existing = byDepartment.get(expense.departmentId) || { name: '', total: 0, count: 0 };
+          const department = departments.find(d => d.id === expense.departmentId);
+          byDepartment.set(expense.departmentId, {
+            name: department?.name || 'Unknown',
+            total: existing.total + expense.amount,
+            count: existing.count + 1,
+          });
+        }
+        
+        return Array.from(byDepartment.entries()).map(([id, data]) => ({
+          departmentId: id,
+          departmentName: data.name,
+          totalAmount: data.total,
+          expenseCount: data.count,
+        }));
+      }),
+    
+    budgetVariance: protectedProcedure
+      .input(z.object({
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }))
+      .query(async ({ input }) => {
+        const expenses = await db.getAllExpenses();
+        const budgets = await db.getAllBudgets();
+        
+        // Filter approved expenses by date range
+        let filtered = expenses.filter(e => e.status === 'approved' || e.status === 'paid');
+        if (input.startDate) {
+          filtered = filtered.filter(e => new Date(e.expenseDate) >= input.startDate!);
+        }
+        if (input.endDate) {
+          filtered = filtered.filter(e => new Date(e.expenseDate) <= input.endDate!);
+        }
+        
+        // Calculate spending by budget
+        const spendingByBudget = new Map<number, number>();
+        for (const expense of filtered) {
+          if (!expense.budgetId) continue;
+          const current = spendingByBudget.get(expense.budgetId) || 0;
+          spendingByBudget.set(expense.budgetId, current + expense.amount);
+        }
+        
+        // Compare with budget allocations
+        return budgets.map(budget => {
+          const spent = spendingByBudget.get(budget.id) || 0;
+          const allocated = budget.allocatedAmount;
+          const variance = allocated - spent;
+          const utilizationPercent = allocated > 0 ? (spent / allocated) * 100 : 0;
+          
+          return {
+            budgetId: budget.id,
+            budgetName: budget.name,
+            allocated,
+            spent,
+            remaining: variance,
+            utilizationPercent,
+            status: utilizationPercent > 100 ? 'over' : utilizationPercent > 90 ? 'warning' : 'ok',
+          };
+        });
+      }),
+    
+    trendOverTime: protectedProcedure
+      .input(z.object({
+        startDate: z.date(),
+        endDate: z.date(),
+        groupBy: z.enum(['day', 'week', 'month']).default('month'),
+      }))
+      .query(async ({ input }) => {
+        const expenses = await db.getAllExpenses();
+        
+        // Filter approved expenses by date range
+        const filtered = expenses.filter(e => {
+          const date = new Date(e.expenseDate);
+          return (e.status === 'approved' || e.status === 'paid') &&
+                 date >= input.startDate &&
+                 date <= input.endDate;
+        });
+        
+        // Group by time period
+        const byPeriod = new Map<string, { total: number; count: number }>();
+        for (const expense of filtered) {
+          const date = new Date(expense.expenseDate);
+          let periodKey: string;
+          
+          if (input.groupBy === 'day') {
+            periodKey = date.toISOString().split('T')[0];
+          } else if (input.groupBy === 'week') {
+            const weekStart = new Date(date);
+            weekStart.setDate(date.getDate() - date.getDay());
+            periodKey = weekStart.toISOString().split('T')[0];
+          } else { // month
+            periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          }
+          
+          const existing = byPeriod.get(periodKey) || { total: 0, count: 0 };
+          byPeriod.set(periodKey, {
+            total: existing.total + expense.amount,
+            count: existing.count + 1,
+          });
+        }
+        
+        return Array.from(byPeriod.entries())
+          .map(([period, data]) => ({
+            period,
+            totalAmount: data.total,
+            expenseCount: data.count,
+            averageAmount: data.count > 0 ? data.total / data.count : 0,
+          }))
+          .sort((a, b) => a.period.localeCompare(b.period));
+      }),
   }),
 
   // ============================================
