@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, FileText, DollarSign, Package, Users, TrendingUp, Truck, FolderOpen, BarChart3, Settings, Building2 } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, FileText, DollarSign, Package, Users, TrendingUp, Truck, FolderOpen, BarChart3, Settings, Building2, ShoppingCart, Receipt, UserCircle, ClipboardList, Bell, Shield, CheckSquare } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -34,6 +34,15 @@ const menuItems = [
   { icon: DollarSign, label: "Budgets", path: "/budgets" },
   { icon: Package, label: "Inventory", path: "/inventory" },
   { icon: Building2, label: "Suppliers", path: "/suppliers" },
+  { icon: Users, label: "Customers", path: "/customers" },
+  { icon: TrendingUp, label: "Invoices", path: "/invoices" },
+  { icon: ShoppingCart, label: "Purchase Orders", path: "/purchase-orders" },
+  { icon: Receipt, label: "Expenses", path: "/expenses" },
+  { icon: Truck, label: "Deliveries", path: "/deliveries" },
+  { icon: CheckSquare, label: "Tasks", path: "/tasks" },
+  { icon: UserCircle, label: "Users", path: "/users" },
+  { icon: Shield, label: "Audit Logs", path: "/audit-logs" },
+  { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

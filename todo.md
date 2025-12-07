@@ -102,3 +102,11 @@
 - [x] Remove duplicate migration file (0003_white_steve_rogers.sql)
 - [x] Test dashboard loading
 - [x] Verify all expenses queries work correctly
+
+
+## FOLLOW-UP TASKS
+- [ ] Add all 15 modules to sidebar navigation (currently only 6 visible)
+- [ ] Push latest changes to GitHub (toast notifications + bug fix)
+- [ ] Create test expense to verify toast notifications
+- [ ] Verify toast appears when notification is created
+- [ ] Create final checkpoint
