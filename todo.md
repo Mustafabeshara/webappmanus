@@ -358,4 +358,4 @@
 - [x] Add "Clear Selection" button
 - [ ] Test bulk download with multiple files
 - [ ] Test bulk delete with multiple files
-- [ ] Save final checkpoint
+- [x] Save final checkpoint
