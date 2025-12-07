@@ -651,6 +651,20 @@ export const taskComments = mysqlTable("task_comments", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+/**
+ * User dashboard widget preferences
+ */
+export const widgetPreferences = mysqlTable("widget_preferences", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  widgetType: varchar("widgetType", { length: 100 }).notNull(), // budget_overview, pending_approvals, low_stock, etc.
+  position: text("position").notNull(), // JSON: {x, y, w, h}
+  settings: text("settings"), // JSON: widget-specific settings
+  isVisible: boolean("isVisible").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -681,3 +695,5 @@ export type GoodsReceipt = typeof goodsReceipts.$inferSelect;
 export type GoodsReceiptItem = typeof goodsReceiptItems.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type TaskComment = typeof taskComments.$inferSelect;
+export type WidgetPreference = typeof widgetPreferences.$inferSelect;
+export type InsertWidgetPreference = typeof widgetPreferences.$inferInsert;

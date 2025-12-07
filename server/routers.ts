@@ -2121,6 +2121,56 @@ export const appRouter = router({
   }),
 
   // ============================================
+  // WIDGET PREFERENCES
+  // ============================================
+  widgets: router({    list: protectedProcedure
+      .query(async ({ ctx }) => {
+        return await db.getUserWidgetPreferences(ctx.user.id);
+      }),
+    
+    create: protectedProcedure
+      .input(z.object({
+        widgetType: z.string(),
+        position: z.string(), // JSON string
+        settings: z.string().optional(),
+        isVisible: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const result = await db.createWidgetPreference({
+          ...input,
+          userId: ctx.user.id,
+        });
+        return { widgetId: result.insertId };
+      }),
+    
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        position: z.string().optional(),
+        settings: z.string().optional(),
+        isVisible: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...updates } = input;
+        await db.updateWidgetPreference(id, updates);
+        return { success: true };
+      }),
+    
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteWidgetPreference(input.id);
+        return { success: true };
+      }),
+    
+    reset: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        await db.resetUserWidgets(ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // ============================================
   // SETTINGS
   // ============================================
   settings: router({

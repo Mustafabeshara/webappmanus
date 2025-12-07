@@ -1284,3 +1284,49 @@ export async function createTemplate(template: typeof tenderTemplates.$inferInse
   if (!db) throw new Error("Database not available");
   return await db.insert(tenderTemplates).values(template);
 }
+
+
+// ============================================
+// WIDGET PREFERENCES
+// ============================================
+
+export async function getUserWidgetPreferences(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error('Database connection failed');
+  return db.select().from(schema.widgetPreferences).where(eq(schema.widgetPreferences.userId, userId));
+}
+
+export async function createWidgetPreference(data: {
+  userId: number;
+  widgetType: string;
+  position: string; // JSON string
+  settings?: string; // JSON string
+  isVisible?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error('Database connection failed');
+  const [result] = await db.insert(schema.widgetPreferences).values(data);
+  return result;
+}
+
+export async function updateWidgetPreference(id: number, data: {
+  position?: string;
+  settings?: string;
+  isVisible?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error('Database connection failed');
+  await db.update(schema.widgetPreferences).set(data).where(eq(schema.widgetPreferences.id, id));
+}
+
+export async function deleteWidgetPreference(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error('Database connection failed');
+  await db.delete(schema.widgetPreferences).where(eq(schema.widgetPreferences.id, id));
+}
+
+export async function resetUserWidgets(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error('Database connection failed');
+  await db.delete(schema.widgetPreferences).where(eq(schema.widgetPreferences.userId, userId));
+}

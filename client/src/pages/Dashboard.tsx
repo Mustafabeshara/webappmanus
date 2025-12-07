@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { WidgetGrid } from "@/components/widgets/WidgetGrid";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,7 @@ export default function Dashboard() {
     startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)),
     endDate: new Date(),
   });
+  const [showWidgets, setShowWidgets] = useState(true);
 
   const { data: analytics, isLoading } = trpc.analytics.dashboard.useQuery();
   const { data: lowStock } = trpc.inventory.lowStock.useQuery();
@@ -121,6 +123,13 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Customizable Widgets */}
+      {showWidgets && (
+        <div className="mb-8">
+          <WidgetGrid />
+        </div>
+      )}
+      
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>

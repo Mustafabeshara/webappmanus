@@ -490,3 +490,54 @@
   - [x] Audit Logs page with filters and export
   - [x] Notifications dropdown (mobile view)
 - [ ] Create final checkpoint with all features
+
+
+## FINAL FEATURES - Dashboard Widgets, Email Notifications, Mobile Responsive
+
+### Phase 1: Dashboard Widgets Infrastructure
+- [ ] Install react-grid-layout for drag-and-drop widgets
+- [ ] Create widget container component
+- [ ] Create widget base component with common functionality
+- [ ] Add widget preferences schema to database
+- [ ] Create widget preferences backend functions
+
+### Phase 2: Individual Widget Components
+- [ ] Budget Overview Widget (total allocated vs spent)
+- [ ] Pending Approvals Widget (expenses/POs awaiting approval)
+- [ ] Low Stock Alert Widget (inventory below reorder level)
+- [ ] Recent Expenses Widget (last 5 expenses)
+- [ ] Task Summary Widget (tasks by status)
+- [ ] Revenue/Expense Chart Widget (trend over time)
+- [ ] Upcoming Deliveries Widget (deliveries this week)
+
+### Phase 3: Widget Customization
+- [ ] Add widget selector dialog
+- [ ] Implement drag-and-drop functionality
+- [ ] Implement resize functionality
+- [ ] Save user widget preferences to database
+- [ ] Load user widget preferences on dashboard
+- [ ] Add widget settings/configuration
+
+### Phase 4: Email Notifications
+- [ ] Set up email service configuration
+- [ ] Create email template system
+- [ ] Add expense approval notification trigger
+- [ ] Add budget exceeded notification trigger
+- [ ] Add low stock notification trigger
+- [ ] Add task assignment notification trigger
+- [ ] Create notification preferences in user settings
+
+### Phase 5: Mobile Responsiveness
+- [ ] Optimize Dashboard for mobile
+- [ ] Optimize all list pages for mobile (Tenders, Budgets, Inventory, etc.)
+- [ ] Optimize detail/form pages for mobile
+- [ ] Add touch-friendly controls (larger buttons, swipe actions)
+- [ ] Test on various screen sizes (phone, tablet, desktop)
+- [ ] Optimize navigation for mobile (collapsible sidebar)
+
+### Phase 6: Testing & Deployment
+- [ ] Test dashboard widgets (add, remove, drag, resize)
+- [ ] Test email notifications (all triggers)
+- [ ] Test mobile responsiveness (all pages)
+- [ ] Create final checkpoint
+- [ ] Push to GitHub
