@@ -238,3 +238,23 @@
 - [x] Add document list view with download/delete actions (FileViewer)
 - [ ] Test tender document upload and management (page has TypeScript errors preventing render)
 - [x] Create final checkpoint
+
+
+## FILE UPLOAD INTEGRATION ✅
+- [x] Complete files tRPC router with upload/download/delete procedures
+- [x] Add uploadToS3 procedure for base64 file uploads
+- [x] Integrate S3 storage with storagePut helper
+- [x] Add file metadata tracking in database
+- [x] Implement file upload in Tenders module with document categories
+
+## TENDER PARTICIPATION TOGGLE ✅
+- [x] Add updateParticipation tRPC procedure
+- [x] Create participation toggle button in Tenders page (both tabs)
+- [x] Add toast notifications for participation status changes
+- [ ] Test toggling between Our Tenders and All Tenders tabs (pending server restart)
+
+## FILE ATTACHMENTS FOR MODULES
+- [ ] Add file upload to Expenses module for receipts (in progress)
+- [ ] Add file upload to Deliveries module for proof-of-delivery
+- [ ] Test file attachments in both modules
+- [ ] Create final checkpoint

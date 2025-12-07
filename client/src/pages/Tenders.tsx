@@ -36,6 +36,7 @@ import {
 import { Plus, Search, Eye, Edit, FileText, Upload, Download, Trash2, FolderOpen } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import { FileUpload } from "@/components/FileUpload";
 import { FileViewer } from "@/components/FileViewer";
 
@@ -74,12 +75,45 @@ export default function Tenders() {
     return <Badge className={`status-badge ${statusClasses[status] || ""}`}>{status}</Badge>;
   };
 
+  const uploadToS3 = trpc.files.uploadToS3.useMutation();
+  const updateParticipation = trpc.tenders.updateParticipation.useMutation();
+  const utils = trpc.useUtils();
+
   const handleDocumentUpload = async (files: File[], category: string) => {
-    // Upload files with tender ID and category
+    if (!selectedTender) return;
+    
     for (const file of files) {
-      // File upload logic will be handled by FileUpload component
-      console.log(`Uploading ${file.name} to category: ${category}`);
+      try {
+        // Convert file to base64
+        const reader = new FileReader();
+        const fileData = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const base64 = (reader.result as string).split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        
+        // Upload to S3 and save metadata
+        await uploadToS3.mutateAsync({
+          fileName: file.name,
+          fileData,
+          mimeType: file.type,
+          entityType: "tender",
+          entityId: selectedTender,
+          category,
+        });
+        
+        toast.success(`${file.name} uploaded successfully`);
+      } catch (error) {
+        console.error(`Failed to upload ${file.name}:`, error);
+        toast.error(`Failed to upload ${file.name}`);
+      }
     }
+    
+    // Refresh file list
+    utils.files.getByEntity.invalidate({ entityType: "tender", entityId: selectedTender });
   };
 
   if (isLoading) {
@@ -177,6 +211,20 @@ export default function Tenders() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Button
+                            variant={tender.isParticipating ? "default" : "outline"}
+                            size="sm"
+                            onClick={async () => {
+                              await updateParticipation.mutateAsync({
+                                id: tender.id,
+                                isParticipating: !tender.isParticipating,
+                              });
+                              utils.tenders.list.invalidate();
+                              toast.success(tender.isParticipating ? "Removed from Our Tenders" : "Added to Our Tenders");
+                            }}
+                          >
+                            {tender.isParticipating ? "Participating" : "Not Participating"}
+                          </Button>
                           <Link href={`/tenders/${tender.id}`}>
                             <Button variant="ghost" size="sm">
                               <Eye className="h-4 w-4" />
@@ -264,6 +312,20 @@ export default function Tenders() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Button
+                            variant={tender.isParticipating ? "default" : "outline"}
+                            size="sm"
+                            onClick={async () => {
+                              await updateParticipation.mutateAsync({
+                                id: tender.id,
+                                isParticipating: !tender.isParticipating,
+                              });
+                              utils.tenders.list.invalidate();
+                              toast.success(tender.isParticipating ? "Removed from Our Tenders" : "Added to Our Tenders");
+                            }}
+                          >
+                            {tender.isParticipating ? "Participating" : "Not Participating"}
+                          </Button>
                           <Link href={`/tenders/${tender.id}`}>
                             <Button variant="ghost" size="sm">
                               <Eye className="h-4 w-4" />

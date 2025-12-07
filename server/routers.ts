@@ -740,6 +740,16 @@ export const appRouter = router({
         
         return { success: true, participantId };
       }),
+    
+    updateParticipation: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        isParticipating: z.boolean(),
+      }))
+      .mutation(async ({ input }) => {
+        await db.updateTender(input.id, { isParticipating: input.isParticipating });
+        return { success: true };
+      }),
   }),
 
   // ============================================
@@ -1397,6 +1407,44 @@ export const appRouter = router({
 
   // Files router for universal file management
   files: router({
+    uploadToS3: protectedProcedure
+      .input(z.object({
+        fileName: z.string(),
+        fileData: z.string(), // base64 encoded file data
+        mimeType: z.string(),
+        entityType: z.string(),
+        entityId: z.number(),
+        category: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Convert base64 to buffer
+        const buffer = Buffer.from(input.fileData, 'base64');
+        const fileSize = buffer.length;
+        
+        // Generate unique file key
+        const timestamp = Date.now();
+        const randomSuffix = Math.random().toString(36).substring(7);
+        const fileKey = `${input.entityType}/${input.entityId}/${timestamp}-${randomSuffix}-${input.fileName}`;
+        
+        // Upload to S3
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        
+        // Save metadata to database
+        const file = await db.createFile({
+          fileName: input.fileName,
+          fileKey,
+          fileUrl: url,
+          fileSize,
+          mimeType: input.mimeType,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          category: input.category,
+          uploadedBy: ctx.user.id,
+        });
+        
+        return file;
+      }),
+
     upload: protectedProcedure
       .input(z.object({
         fileName: z.string(),
