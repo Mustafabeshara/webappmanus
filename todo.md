@@ -319,3 +319,174 @@
 - [ ] Add notification for task assignments
 - [ ] Add notification for low stock alerts
 - [ ] Write tests for notifications
+
+
+## NEW IMPLEMENTATION - Final 3 Modules
+
+### User Management UI (Phase 1)
+- [ ] Create missing backend functions (setUserPermission, deleteUserPermission) in db.ts
+- [ ] Create users tRPC router with CRUD operations
+- [ ] Create permissions sub-router (list, set, delete)
+- [ ] Replace Users.tsx placeholder with full user list page
+- [ ] Add search and filter by role/status/department
+- [ ] Create UserDetails page with edit form
+- [ ] Add permissions editor with module checkboxes
+- [ ] Add user status management (active/inactive/suspended)
+- [ ] Write tests for user management
+
+### Notifications System (Phase 2)
+- [ ] Create notifications tRPC router (list, markAsRead, markAllAsRead)
+- [ ] Create NotificationDropdown component for header
+- [ ] Add bell icon with unread badge count
+- [ ] Implement real-time polling (every 30 seconds)
+- [ ] Create Notifications page for full list view
+- [ ] Add notification type icons and colors
+- [ ] Add "Mark all as read" functionality
+- [ ] Integrate into DashboardLayout header
+- [ ] Write tests for notifications
+
+### Audit Logs Viewer (Phase 3)
+- [ ] Create auditLogs tRPC router with filtering
+- [ ] Create AuditLogs page component
+- [ ] Add filters (user, action, module, date range)
+- [ ] Add search functionality
+- [ ] Display audit trail in table format
+- [ ] Add export to CSV functionality
+- [ ] Add pagination for large datasets
+- [ ] Write tests for audit logs
+
+### Notification Triggers Integration (Phase 4)
+- [ ] Add notification on expense approval/rejection
+- [ ] Add notification on task assignment
+- [ ] Add notification on low stock alert
+- [ ] Add notification on budget threshold (90%)
+- [ ] Add notification on PO approval needed
+- [ ] Add notification on delivery status change
+- [ ] Add audit log on all CRUD operations
+
+
+## SYSTEMATIC MODULE AUDIT & FIX
+
+### Phase 1: Fix TypeScript Compilation Errors ✅
+- [x] Identify all missing database functions causing TS errors
+- [x] Add missing tender template functions (getTemplateItems, createTemplateItem)
+- [x] Add missing tender participant functions (createTenderParticipant, createParticipantBidItem)
+- [x] Add missing tender item functions (getTenderItems, createTenderItem)
+- [x] Add missing customer communication functions
+- [x] Add missing inventory helper functions
+- [x] Add upsertUser function for auth SDK
+- [x] Add task comment functions
+- [x] Fix inventory router to join with product data
+- [x] Fix getUserNotifications query logic
+- [x] Verify all routers.ts function calls match db.ts exports
+- [x] Run TypeScript compilation and verify zero errors
+
+### Phase 2: Tenders Module Audit
+- [ ] Backend: Verify all CRUD operations in db.ts
+- [ ] Backend: Verify tenders router endpoints
+- [ ] Backend: Test tender templates functionality
+- [ ] Backend: Test tender participants and bid comparison
+- [ ] Frontend: Verify Tenders list page
+- [ ] Frontend: Verify CreateTender page
+- [ ] Frontend: Verify TenderDetails page
+- [ ] Frontend: Test all user interactions
+- [ ] Write/update tests for tenders module
+
+### Phase 3: All Other Modules Audit
+- [ ] Budgets: Verify backend + frontend + tests
+- [ ] Inventory: Verify backend + frontend + tests
+- [ ] Suppliers: Verify backend + frontend + tests
+- [ ] Customers: Verify backend + frontend + tests
+- [ ] Invoices: Verify backend + frontend + tests
+- [ ] Purchase Orders: Verify backend + frontend + tests
+- [ ] Expenses: Verify backend + frontend + tests
+- [ ] Deliveries: Verify backend + frontend + tests
+- [ ] Tasks: Verify backend + frontend + tests
+- [ ] Dashboard Analytics: Verify all charts and data
+- [ ] Expense Analytics: Verify reports and exports
+
+### Phase 4: User Management UI Implementation
+- [ ] Create complete Users list page with filters
+- [ ] Create UserDetails page with edit form
+- [ ] Create permissions editor component with module checkboxes
+- [ ] Add user status management (active/inactive/suspended)
+- [ ] Test user CRUD operations
+- [ ] Test permissions management
+- [ ] Write comprehensive tests
+
+### Phase 5: Notifications System Implementation
+- [ ] Create NotificationDropdown component for header
+- [ ] Add bell icon with unread count badge
+- [ ] Implement real-time polling (30 second interval)
+- [ ] Create full Notifications page
+- [ ] Add notification type icons and styling
+- [ ] Implement mark as read functionality
+- [ ] Implement mark all as read
+- [ ] Integrate into DashboardLayout header
+- [ ] Write comprehensive tests
+
+### Phase 6: Audit Logs Implementation
+- [ ] Create AuditLogs page with table view
+- [ ] Add filters (user, action, module, date range)
+- [ ] Add search functionality
+- [ ] Add pagination for large datasets
+- [ ] Add export to CSV functionality
+- [ ] Add audit log creation hooks in all mutations
+- [ ] Write comprehensive tests
+
+### Phase 7: Final Testing & Verification
+- [ ] Run all existing tests and verify passing
+- [ ] Test each module end-to-end in browser
+- [ ] Verify no TypeScript compilation errors
+- [ ] Verify no console errors in browser
+- [ ] Test user permissions and access control
+- [ ] Test notification triggers across modules
+- [ ] Verify audit logs are created for all actions
+- [ ] Create final checkpoint with complete documentation
+
+
+## THREE NEW MODULES IMPLEMENTATION ✅
+
+### User Management UI ✅
+- [x] Create Users list page with role management
+- [x] Create permissions editor dialog with module-level permissions
+- [x] Implement role change functionality (admin/user)
+- [x] Implement permission update functionality (canView, canCreate, canEdit, canDelete, canApprove)
+- [x] Add user contact information display
+- [x] Add department and status badges
+- [x] Fix toast imports to use sonner
+
+### Notifications System ✅
+- [x] Create NotificationsDropdown component
+- [x] Implement real-time polling (30s interval)
+- [x] Add unread count badge in header
+- [x] Implement mark as read functionality
+- [x] Implement mark all as read functionality
+- [x] Integrate into DashboardLayout header (mobile view)
+- [x] Add notification type icons and formatting
+- [x] Add time-ago formatting for timestamps
+
+### Audit Logs Viewer ✅
+- [x] Create AuditLogs page with comprehensive table view
+- [x] Implement entity type filter dropdown
+- [x] Implement action filter dropdown
+- [x] Implement search functionality across all fields
+- [x] Add CSV export functionality with proper formatting
+- [x] Display user names with lookup from users table
+- [x] Add timestamp formatting with date and time
+- [x] Add action badges with color coding
+- [x] Fix field names (changes instead of details)
+
+### Integration ✅
+- [x] Add Users and Audit Logs to DashboardLayout navigation
+- [x] Add Shield and Activity icons to navigation
+- [x] Add Users route to App.tsx
+- [x] Add AuditLogs route to App.tsx
+- [x] Verify zero TypeScript compilation errors
+
+### Remaining Tasks
+- [x] Test all three new modules in browser
+  - [x] Users page with permissions editor dialog
+  - [x] Audit Logs page with filters and export
+  - [x] Notifications dropdown (mobile view)
+- [ ] Create final checkpoint with all features

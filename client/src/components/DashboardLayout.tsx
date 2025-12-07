@@ -21,11 +21,12 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, FileText, DollarSign, Package, Users, TrendingUp, Truck, FolderOpen, BarChart3, Settings, Building2, ShoppingCart, Receipt, CheckSquare } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, FileText, DollarSign, Package, Users, TrendingUp, Truck, FolderOpen, BarChart3, Settings, Building2, ShoppingCart, Receipt, CheckSquare, Shield, Activity } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import { NotificationsDropdown } from './NotificationsDropdown';
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -40,6 +41,8 @@ const menuItems = [
   { icon: Receipt, label: "Expenses", path: "/expenses" },
   { icon: Truck, label: "Deliveries", path: "/deliveries" },
   { icon: CheckSquare, label: "Tasks", path: "/tasks" },
+  { icon: Shield, label: "Users", path: "/users" },
+  { icon: Activity, label: "Audit Logs", path: "/audit-logs" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -265,6 +268,7 @@ function DashboardLayoutContent({
                 </div>
               </div>
             </div>
+            <NotificationsDropdown />
           </div>
         )}
         <main className="flex-1 p-4">{children}</main>

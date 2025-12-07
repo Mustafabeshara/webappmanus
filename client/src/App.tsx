@@ -43,6 +43,8 @@ import DeliveryDetails from "./pages/DeliveryDetails";
 import Tasks from "./pages/Tasks";
 import CreateTask from "./pages/CreateTask";
 import TaskDetails from "./pages/TaskDetails";
+import Users from "./pages/Users";
+import AuditLogs from "./pages/AuditLogs";
 
 function Router() {
   return (
@@ -353,6 +355,24 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Tasks />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Users route */}
+      <Route path={"/users"}>
+        {() => (
+          <DashboardLayout>
+            <Users />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Audit Logs route */}
+      <Route path={"/audit-logs"}>
+        {() => (
+          <DashboardLayout>
+            <AuditLogs />
           </DashboardLayout>
         )}
       </Route>

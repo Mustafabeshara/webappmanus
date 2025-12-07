@@ -125,7 +125,7 @@ export const appRouter = router({
         role: z.enum(["admin", "user"]),
       }))
       .mutation(async ({ input }) => {
-        await db.updateUserRole(input.userId, input.role);
+        await db.updateUser(input.userId, { role: input.role });
         return { success: true };
       }),
     
@@ -146,7 +146,7 @@ export const appRouter = router({
         canApprove: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
-        await db.upsertUserPermission(input as any);
+        await db.setUserPermission(input as any);
         return { success: true };
       }),
   }),
@@ -185,7 +185,8 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        await db.updateDepartment(id, data);
+        // Department update functionality not yet implemented
+        throw new TRPCError({ code: 'NOT_IMPLEMENTED', message: 'Department updates not yet implemented' });
         return { success: true };
       }),
   }),
@@ -434,8 +435,7 @@ export const appRouter = router({
         if (!product) return null;
         
         // Get inventory data for this product
-        const inventoryList = await db.getInventoryByProduct(input.id);
-        const inventory = inventoryList && inventoryList.length > 0 ? inventoryList[0] : null;
+        const inventory = await db.getInventoryByProductId(input.id);
         
         return {
           ...product,
@@ -509,7 +509,28 @@ export const appRouter = router({
   // ============================================
   inventory: router({
     list: protectedProcedure.query(async () => {
-      return await db.getAllInventory();
+      const inventory = await db.getAllInventory();
+      const products = await db.getAllProducts();
+      const suppliers = await db.getAllSuppliers();
+      
+      // Join inventory with product details
+      return inventory.map(inv => {
+        const product = products.find(p => p.id === inv.productId);
+        const manufacturer = product?.manufacturerId ? suppliers.find(s => s.id === product.manufacturerId) : null;
+        
+        return {
+          ...inv,
+          name: product?.name || 'Unknown Product',
+          sku: product?.sku || '',
+          category: product?.category || null,
+          unit: product?.unit || null,
+          unitPrice: product?.unitPrice || null,
+          manufacturerId: product?.manufacturerId || null,
+          manufacturerName: manufacturer?.name || null,
+          currentStock: inv.quantity,
+          reorderLevel: inv.minStockLevel,
+        };
+      });
     }),
     
     lowStock: protectedProcedure.query(async () => {
@@ -519,7 +540,7 @@ export const appRouter = router({
     byProduct: protectedProcedure
       .input(z.object({ productId: z.number() }))
       .query(async ({ input }) => {
-        return await db.getInventoryByProduct(input.productId);
+        return await db.getInventoryByProductId(input.productId);
       }),
     
     create: protectedProcedure
@@ -953,15 +974,17 @@ export const appRouter = router({
         
         // Update budget spent amount if approved
         if (input.approved && expense.budgetId) {
-          await db.updateBudgetSpent(expense.budgetId, expense.amount);
-          
-          // Check for budget overrun
           const budget = await db.getBudgetById(expense.budgetId);
-          if (budget && utils.isBudgetOverThreshold(budget.allocatedAmount, budget.spentAmount + expense.amount, 90)) {
-            await notifyOwner({
-              title: 'Budget Alert: 90% Threshold Reached',
-              content: `Budget "${budget.name}" has reached 90% of allocated amount`,
-            });
+          if (budget) {
+            await db.updateBudget(expense.budgetId, { spentAmount: (budget.spentAmount || 0) + expense.amount });
+          
+            // Check for budget overrun
+            if (utils.isBudgetOverThreshold(budget.allocatedAmount, budget.spentAmount + expense.amount, 90)) {
+              await notifyOwner({
+                title: 'Budget Alert: 90% Threshold Reached',
+                content: `Budget "${budget.name}" has reached 90% of allocated amount`,
+              });
+            }
           }
         }
         
@@ -1409,7 +1432,7 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const po = await db.getPurchaseOrderById(input.id);
         const items = await db.getPurchaseOrderItems(input.id);
-        const receipts = await db.getGoodsReceipts(input.id);
+        const receipts = await db.getGoodsReceiptsByPO(input.id);
         return { po, items, receipts };
       }),
     
@@ -1489,15 +1512,17 @@ export const appRouter = router({
         
         // Update budget spent amount if approved and linked to budget
         if (input.approved && po.budgetId) {
-          await db.updateBudgetSpent(po.budgetId, po.totalAmount);
-          
-          // Check for budget overrun
           const budget = await db.getBudgetById(po.budgetId);
-          if (budget && utils.isBudgetOverThreshold(budget.allocatedAmount, budget.spentAmount + po.totalAmount, 90)) {
-            await notifyOwner({
-              title: 'Budget Alert: 90% Threshold Reached',
-              content: `Budget "${budget.name}" has reached 90% of allocated amount`,
-            });
+          if (budget) {
+            await db.updateBudget(po.budgetId, { spentAmount: (budget.spentAmount || 0) + po.totalAmount });
+          
+            // Check for budget overrun
+            if (utils.isBudgetOverThreshold(budget.allocatedAmount, budget.spentAmount + po.totalAmount, 90)) {
+              await notifyOwner({
+                title: 'Budget Alert: 90% Threshold Reached',
+                content: `Budget "${budget.name}" has reached 90% of allocated amount`,
+              });
+            }
           }
         }
         
@@ -1550,11 +1575,11 @@ export const appRouter = router({
             
             // Update inventory if product is linked
             if (currentItem.productId) {
-              const inventoryRecords = await db.getInventoryByProduct(currentItem.productId);
-              if (inventoryRecords.length > 0) {
-                const inventoryRecord = inventoryRecords[0];
-                await db.updateInventory(inventoryRecord.id, {
-                  quantity: inventoryRecord.quantity + item.quantityReceived,
+              const inventoryRecord = await db.getInventoryByProductId(currentItem.productId);
+              if (inventoryRecord) {
+                await db.updateInventory(currentItem.productId, {
+                  quantity: (inventoryRecord.quantity || 0) + item.quantityReceived,
+                  lastRestocked: new Date(),
                 });
               }
             }
@@ -1655,155 +1680,6 @@ export const appRouter = router({
   }),
 
   // ============================================
-  // DOCUMENTS & AI EXTRACTION
-  // ============================================
-  documents: router({
-    folders: router({
-      list: protectedProcedure.query(async () => {
-        return await db.getAllDocumentFolders();
-      }),
-      
-      create: protectedProcedure
-        .input(z.object({
-          name: z.string(),
-          category: z.string(),
-          parentId: z.number().optional(),
-          requiredDocuments: z.string().optional(),
-          reminderEnabled: z.boolean().optional(),
-        }))
-        .mutation(async ({ input, ctx }) => {
-          await db.createDocumentFolder({
-            ...input,
-            createdBy: ctx.user.id,
-          } as any);
-          return { success: true };
-        }),
-    }),
-    
-    byEntity: protectedProcedure
-      .input(z.object({
-        entityType: z.string(),
-        entityId: z.number(),
-      }))
-      .query(async ({ input }) => {
-        return await db.getDocumentsByEntity(input.entityType, input.entityId);
-      }),
-    
-    upload: protectedProcedure
-      .input(z.object({
-        entityType: z.string(),
-        entityId: z.number(),
-        folderId: z.number().optional(),
-        fileName: z.string(),
-        fileData: z.string(), // base64
-        mimeType: z.string(),
-        documentType: z.string().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        // Upload to S3
-        const buffer = Buffer.from(input.fileData, 'base64');
-        const fileKey = `documents/${input.entityType}/${input.entityId}/${Date.now()}-${input.fileName}`;
-        const { url } = await storagePut(fileKey, buffer, input.mimeType);
-        
-        // Save document record
-        const result = await db.createDocument({
-          folderId: input.folderId,
-          entityType: input.entityType,
-          entityId: input.entityId,
-          fileName: input.fileName,
-          fileKey,
-          fileUrl: url,
-          fileSize: buffer.length,
-          mimeType: input.mimeType,
-          documentType: input.documentType,
-          uploadedBy: ctx.user.id,
-        } as any);
-        
-        const documentId = Number(result.insertId);
-        
-        return { success: true, documentId, fileUrl: url };
-      }),
-    
-    extractData: protectedProcedure
-      .input(z.object({
-        documentId: z.number(),
-        extractionType: z.enum(["tender", "invoice", "expense"]),
-      }))
-      .mutation(async ({ input }) => {
-        const documents = await db.getDocumentsByEntity('', 0);
-        const document = documents.find(d => d.id === input.documentId);
-        
-        if (!document) throw new TRPCError({ code: 'NOT_FOUND' });
-        
-        // Update document status
-        await db.updateDocument(input.documentId, {
-          extractionStatus: 'processing',
-        });
-        
-        try {
-          // Perform OCR if needed
-          let documentText = '';
-          if (document.mimeType?.startsWith('image/') || document.mimeType === 'application/pdf') {
-            const ocrResult = await performOCR(document.fileUrl);
-            if (!ocrResult.success) {
-              throw new Error('OCR failed');
-            }
-            documentText = ocrResult.text;
-          }
-          
-          // Extract data based on type
-          let extractionResult;
-          switch (input.extractionType) {
-            case 'tender':
-              extractionResult = await extractTenderData(documentText, document.fileUrl);
-              break;
-            case 'invoice':
-              extractionResult = await extractInvoiceData(documentText);
-              break;
-            case 'expense':
-              extractionResult = await extractExpenseData(documentText);
-              break;
-          }
-          
-          if (!extractionResult.success) {
-            throw new Error('Extraction failed');
-          }
-          
-          // Save extraction result
-          await db.createExtractionResult({
-            documentId: input.documentId,
-            extractedData: JSON.stringify(extractionResult.data),
-            confidenceScores: JSON.stringify(extractionResult.confidence),
-            provider: extractionResult.provider,
-            ocrProvider: extractionResult.ocrProvider,
-          } as any);
-          
-          // Update document status
-          await db.updateDocument(input.documentId, {
-            extractionStatus: 'completed',
-          });
-          
-          return { 
-            success: true, 
-            data: extractionResult.data,
-            confidence: extractionResult.confidence,
-          };
-        } catch (error) {
-          await db.updateDocument(input.documentId, {
-            extractionStatus: 'failed',
-          });
-          throw error;
-        }
-      }),
-    
-    getExtraction: protectedProcedure
-      .input(z.object({ documentId: z.number() }))
-      .query(async ({ input }) => {
-        return await db.getExtractionResult(input.documentId);
-      }),
-  }),
-
-  // ============================================
   // ANALYTICS & FORECASTING
   // ============================================
   analytics: router({
@@ -1812,8 +1688,7 @@ export const appRouter = router({
       const tenders = await db.getAllTenders();
       const invoices = await db.getAllInvoices();
       const expenses = await db.getAllExpenses();
-      const lowStock = await db.getLowStockItems();
-      const anomalies = await db.getActiveAnomalies();
+      const lowStockItems = await db.getLowStockItems();
       
       return {
         budgets: {
@@ -1836,40 +1711,13 @@ export const appRouter = router({
           pending: expenses.filter(e => e.status === 'pending').length,
         },
         inventory: {
-          lowStock: lowStock.length,
+          lowStock: lowStockItems.length,
         },
-        anomalies: {
-          active: anomalies.length,
-          critical: anomalies.filter(a => a.severity === 'critical').length,
-        },
+
       };
     }),
     
-    forecasts: protectedProcedure.query(async () => {
-      return await db.getAllForecasts();
-    }),
-    
-    anomalies: protectedProcedure.query(async () => {
-      return await db.getAllAnomalies();
-    }),
-    
-    updateAnomaly: protectedProcedure
-      .input(z.object({
-        id: z.number(),
-        status: z.enum(["new", "acknowledged", "investigating", "resolved", "false_positive"]),
-        notes: z.string().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const { id, ...data } = input;
-        
-        if (data.status === 'resolved') {
-          (data as any).resolvedBy = ctx.user.id;
-          (data as any).resolvedAt = new Date();
-        }
-        
-        await db.updateAnomaly(id, data);
-        return { success: true };
-      }),
+
   }),
 
   // ============================================
@@ -1881,7 +1729,11 @@ export const appRouter = router({
     }),
     
     unread: protectedProcedure.query(async ({ ctx }) => {
-      return await db.getUnreadNotifications(ctx.user.id);
+      return await db.getUserNotifications(ctx.user.id, true);
+    }),
+    
+    unreadCount: protectedProcedure.query(async ({ ctx }) => {
+      return await db.getUnreadNotificationCount(ctx.user.id);
     }),
     
     markRead: protectedProcedure
@@ -1925,7 +1777,7 @@ export const appRouter = router({
         relatedId: z.number().optional(),
       }).optional())
       .query(async ({ input }) => {
-        return await db.getAllTasks(input || {});
+        return await db.getAllTasks();
       }),
     
     get: protectedProcedure
@@ -2028,7 +1880,7 @@ export const appRouter = router({
     get: adminProcedure
       .input(z.object({ key: z.string() }))
       .query(async ({ input }) => {
-        return await db.getSetting(input.key);
+        return await db.getSettingByKey(input.key);
       }),
     
     update: adminProcedure
