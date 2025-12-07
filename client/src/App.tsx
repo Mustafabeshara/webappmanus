@@ -21,6 +21,12 @@ import ProductDetails from "./pages/ProductDetails";
 import Suppliers from "./pages/Suppliers";
 import CreateSupplier from "./pages/CreateSupplier";
 import SupplierDetails from "./pages/SupplierDetails";
+import Expenses from "./pages/Expenses";
+import Deliveries from "./pages/Deliveries";
+import PurchaseOrders from "./pages/PurchaseOrders";
+import Tasks from "./pages/Tasks";
+import Users from "./pages/Users";
+import AuditLogs from "./pages/AuditLogs";
 
 function Router() {
   return (
@@ -150,6 +156,60 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Suppliers />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Expenses */}
+      <Route path={"/expenses"}>
+        {() => (
+          <DashboardLayout>
+            <Expenses />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Purchase Orders */}
+      <Route path={"/purchase-orders"}>
+        {() => (
+          <DashboardLayout>
+            <PurchaseOrders />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Deliveries */}
+      <Route path={"/deliveries"}>
+        {() => (
+          <DashboardLayout>
+            <Deliveries />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Tasks */}
+      <Route path={"/tasks"}>
+        {() => (
+          <DashboardLayout>
+            <Tasks />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Users */}
+      <Route path={"/users"}>
+        {() => (
+          <DashboardLayout>
+            <Users />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Audit Logs */}
+      <Route path={"/audit-logs"}>
+        {() => (
+          <DashboardLayout>
+            <AuditLogs />
           </DashboardLayout>
         )}
       </Route>

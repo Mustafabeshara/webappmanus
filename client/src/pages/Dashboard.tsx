@@ -16,6 +16,7 @@ import {
 import { Link } from "wouter";
 import { useEffect, useRef } from "react";
 import { showNotificationToast } from "@/lib/toastNotifications";
+import { soundNotifications } from "@/lib/soundNotifications";
 
 export default function Dashboard() {
   const { data: analytics, isLoading } = trpc.analytics.dashboard.useQuery();
@@ -44,9 +45,10 @@ export default function Dashboard() {
       n => !previousNotificationIds.current.has(n.id)
     );
 
-    // Show toast for each new notification
+    // Show toast and play sound for each new notification
     newNotifications.forEach(notification => {
       showNotificationToast(notification);
+      soundNotifications.playForNotificationType(notification.type);
     });
 
     // Update tracked IDs
