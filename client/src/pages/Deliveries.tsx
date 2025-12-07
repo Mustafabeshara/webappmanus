@@ -29,8 +29,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Truck, Package, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Plus, Truck, Package, CheckCircle, XCircle, Clock, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { FileUpload } from "@/components/FileUpload";
 
 type DeliveryStatus = "planned" | "in_transit" | "delivered" | "cancelled";
 
@@ -43,6 +44,9 @@ const statusConfig: Record<DeliveryStatus, { label: string; variant: "default" |
 
 export default function Deliveries() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDeliveredDialogOpen, setIsDeliveredDialogOpen] = useState(false);
+  const [selectedDeliveryId, setSelectedDeliveryId] = useState<number | null>(null);
+  const [proofFiles, setProofFiles] = useState<File[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<DeliveryStatus | "all">("all");
   
   const { data: deliveries, isLoading, refetch } = trpc.deliveries.list.useQuery();
@@ -78,6 +82,8 @@ export default function Deliveries() {
       toast.error(`Failed to update delivery: ${error.message}`);
     },
   });
+  
+  const uploadToS3Mutation = trpc.files.uploadToS3.useMutation();
 
   const [formData, setFormData] = useState({
     customerId: "",
@@ -120,8 +126,65 @@ export default function Deliveries() {
   };
 
   const handleStatusChange = (id: number, status: DeliveryStatus) => {
-    const deliveredDate = status === "delivered" ? new Date() : undefined;
-    updateMutation.mutate({ id, status, deliveredDate });
+    if (status === "delivered") {
+      // Open dialog to require proof-of-delivery upload
+      setSelectedDeliveryId(id);
+      setIsDeliveredDialogOpen(true);
+    } else {
+      updateMutation.mutate({ id, status });
+    }
+  };
+  
+  const handleMarkAsDelivered = async () => {
+    if (!selectedDeliveryId) return;
+    
+    if (proofFiles.length === 0) {
+      toast.error("Please upload at least one proof-of-delivery document");
+      return;
+    }
+    
+    try {
+      // Upload proof-of-delivery files first
+      for (const file of proofFiles) {
+        const reader = new FileReader();
+        const uploadPromise = new Promise((resolve, reject) => {
+          reader.onloadend = async () => {
+            try {
+              const base64 = reader.result as string;
+              await uploadToS3Mutation.mutateAsync({
+                fileName: file.name,
+                fileData: base64,
+                mimeType: file.type,
+                entityType: 'delivery',
+                entityId: selectedDeliveryId,
+                category: 'proof_of_delivery',
+              });
+              resolve(true);
+            } catch (error) {
+              reject(error);
+            }
+          };
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(file);
+        await uploadPromise;
+      }
+      
+      // Update delivery status to delivered
+      await updateMutation.mutateAsync({
+        id: selectedDeliveryId,
+        status: "delivered",
+        deliveredDate: new Date(),
+      });
+      
+      toast.success("Delivery marked as delivered");
+      setIsDeliveredDialogOpen(false);
+      setProofFiles([]);
+      setSelectedDeliveryId(null);
+      refetch();
+    } catch (error: any) {
+      toast.error(`Failed to mark as delivered: ${error.message}`);
+    }
   };
 
   const addItem = () => {
@@ -470,6 +533,70 @@ export default function Deliveries() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Mark as Delivered Dialog */}
+      <Dialog open={isDeliveredDialogOpen} onOpenChange={setIsDeliveredDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Mark as Delivered</DialogTitle>
+            <DialogDescription>
+              Upload proof-of-delivery documents (photos, signed receipts, etc.) to complete this delivery.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Proof of Delivery *</Label>
+              <p className="text-sm text-muted-foreground mb-2">
+                Upload at least one document showing proof of delivery (photos, signed receipts, delivery notes)
+              </p>
+              <FileUpload
+                onFilesSelected={setProofFiles}
+                maxFiles={10}
+                maxSizeMB={5}
+                accept="image/*,application/pdf"
+              />
+              {proofFiles.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-sm text-green-600">
+                    {proofFiles.length} file(s) ready to upload
+                  </p>
+                  <ul className="text-sm text-muted-foreground mt-1">
+                    {proofFiles.map((file, idx) => (
+                      <li key={idx}>• {file.name}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsDeliveredDialogOpen(false);
+                setProofFiles([]);
+                setSelectedDeliveryId(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleMarkAsDelivered}
+              disabled={uploadToS3Mutation.isPending || updateMutation.isPending}
+            >
+              {uploadToS3Mutation.isPending || updateMutation.isPending ? (
+                <>
+                  <Upload className="mr-2 h-4 w-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                "Mark as Delivered"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

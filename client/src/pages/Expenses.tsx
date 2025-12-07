@@ -92,7 +92,7 @@ export default function Expenses() {
     toast.success(`${files.length} receipt(s) ready to upload`);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.title || !formData.categoryId || !formData.amount) {
@@ -100,15 +100,53 @@ export default function Expenses() {
       return;
     }
 
-    createMutation.mutate({
-      title: formData.title,
-      description: formData.description || undefined,
-      categoryId: parseInt(formData.categoryId),
-      budgetId: formData.budgetId ? parseInt(formData.budgetId) : undefined,
-      departmentId: formData.departmentId ? parseInt(formData.departmentId) : undefined,
-      amount: Math.round(parseFloat(formData.amount) * 100), // Convert to cents
-      notes: formData.notes || undefined,
-    });
+    try {
+      // Create expense first
+      const expense = await createMutation.mutateAsync({
+        title: formData.title,
+        description: formData.description || undefined,
+        categoryId: parseInt(formData.categoryId),
+        budgetId: formData.budgetId ? parseInt(formData.budgetId) : undefined,
+        departmentId: formData.departmentId ? parseInt(formData.departmentId) : undefined,
+        amount: Math.round(parseFloat(formData.amount) * 100), // Convert to cents
+        notes: formData.notes || undefined,
+      });
+      
+      // Upload receipts if any
+      if (receiptFiles.length > 0) {
+        for (const file of receiptFiles) {
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64 = reader.result as string;
+            await uploadToS3Mutation.mutateAsync({
+              fileName: file.name,
+              fileData: base64,
+              mimeType: file.type,
+              entityType: 'expense',
+              entityId: expense.id,
+              category: 'receipt',
+            });
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+      
+      toast.success("Expense created successfully");
+      setIsCreateDialogOpen(false);
+      setReceiptFiles([]);
+      setFormData({
+        title: "",
+        description: "",
+        categoryId: "",
+        budgetId: "",
+        departmentId: "",
+        amount: "",
+        notes: "",
+      });
+      refetch();
+    } catch (error: any) {
+      toast.error(`Failed to create expense: ${error.message}`);
+    }
   };
 
   const handleApprove = (id: number, approved: boolean) => {

@@ -264,3 +264,16 @@
 - [ ] Verify S3 storage and file download
 - [ ] Test file attachments in Expenses
 - [x] Create final checkpoint
+
+
+## FINAL FILE UPLOAD INTEGRATION
+- [ ] Update expense create mutation to upload receipts to S3
+- [ ] Save receipt file metadata linked to expense ID
+- [ ] Create "Mark as Delivered" dialog for Deliveries
+- [ ] Add proof-of-delivery upload requirement
+- [ ] Restart server to regenerate tRPC types
+- [ ] Test receipt upload in Expenses module
+- [ ] Test proof-of-delivery upload in Deliveries
+- [ ] Test tender document upload
+- [ ] Verify S3 storage and file retrieval
+- [ ] Create final checkpoint
