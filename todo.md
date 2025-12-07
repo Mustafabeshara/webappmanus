@@ -25,25 +25,50 @@
 - [x] Tax calculation
 - [x] Customer-invoice linkage
 
-## CURRENT PHASE: Phase 4 - Expenses + Deliveries Modules 🚧
+## CURRENT PHASE: Phase 4 - Purchase Orders + Expenses + Deliveries Modules 🚧
+
+### Purchase Orders Module (NEW)
+- [x] Database schema (purchase_orders, purchase_order_items, goods_receipts, goods_receipt_items)
+- [x] Database helpers (CRUD operations)
+- [x] tRPC router with full API
+- [x] Auto-generated PO reference numbers (PO-YYYYMM-XXXXXX)
+- [x] Auto-generated goods receipt numbers (GRN-YYYYMM-XXXXXX)
+- [x] List page with search/filter and status tracking
+- [x] Create PO page with line items and calculations
+- [x] PO details page with approval workflow
+- [x] Link to suppliers (required)
+- [x] Link to tenders and budgets (optional)
+- [x] Approval workflows (approve/reject with reasons)
+- [x] Status tracking (draft/submitted/approved/rejected/completed/cancelled)
+- [x] Receive goods interface with line-item tracking
+- [x] Partial/full receipt status tracking
+- [x] Automatic inventory updates on goods receipt
+- [x] Payment terms and delivery address fields
+- [x] Goods receipt history display
+- [x] Budget integration (updates spent amount on approval)
+- [x] Navigation menu updated
 
 ### Expenses Module
 - [ ] List page with search/filter
 - [ ] Create expense page
 - [ ] Expense details page
-- [ ] Budget linkage
+- [ ] Budget linkage and validation
 - [ ] Multi-level approval workflows
 - [ ] Auto-generated expense reference numbers
+- [ ] Receipt attachment support
+- [ ] Category-based tracking
 
 ### Deliveries Module
 - [ ] List page with search/filter
 - [ ] Create delivery page
 - [ ] Delivery details page
-- [ ] Shipment tracking
-- [ ] Status updates
-- [ ] Link to tenders and inventory
+- [ ] Shipment tracking with status updates
+- [ ] Link to POs, tenders, and customers
+- [ ] Automatic inventory updates on delivery
+- [ ] Delivery confirmation workflow
+- [ ] Multiple delivery addresses support
 
-## UPCOMING PHASES
+## UPCOMING PHASE
 
 ### Phase 5: Documents + Analytics + Admin Modules
 - [ ] Document management with folders
@@ -61,8 +86,9 @@
 - [x] Customer schema - Fixed field names
 
 ## 📝 NOTES
-- Building 2 modules per phase
-- Saving checkpoint after each phase
-- No placeholders - only complete features
-- Edit pages not needed - users can recreate records
+- Phase 4 expanded to include PO module (3 modules total)
+- PO module includes full procurement workflow
+- Automatic inventory updates on goods receipt
+- Building complete features only - no placeholders
+- Saving checkpoint after Phase 4 completion
 

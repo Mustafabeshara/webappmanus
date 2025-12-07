@@ -902,6 +902,186 @@ export const appRouter = router({
   }),
 
   // ============================================
+  // PURCHASE ORDERS
+  // ============================================
+  purchaseOrders: router({
+    list: protectedProcedure.query(async () => {
+      return await db.getAllPurchaseOrders();
+    }),
+    
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const po = await db.getPurchaseOrderById(input.id);
+        const items = await db.getPurchaseOrderItems(input.id);
+        const receipts = await db.getGoodsReceipts(input.id);
+        return { po, items, receipts };
+      }),
+    
+    create: protectedProcedure
+      .input(z.object({
+        supplierId: z.number(),
+        tenderId: z.number().optional(),
+        budgetId: z.number().optional(),
+        deliveryDate: z.date().optional(),
+        subtotal: z.number(),
+        taxAmount: z.number().optional(),
+        totalAmount: z.number(),
+        paymentTerms: z.string().optional(),
+        deliveryAddress: z.string().optional(),
+        notes: z.string().optional(),
+        items: z.array(z.object({
+          productId: z.number().optional(),
+          description: z.string(),
+          quantity: z.number(),
+          unitPrice: z.number(),
+          totalPrice: z.number(),
+          notes: z.string().optional(),
+        })),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { items, ...poData } = input;
+        const poNumber = utils.generatePONumber();
+        
+        const result = await db.createPurchaseOrder({
+          ...poData,
+          poNumber,
+          taxAmount: poData.taxAmount || 0,
+          createdBy: ctx.user.id,
+        } as any);
+        
+        const poId = Number(result.insertId);
+        
+        for (const item of items) {
+          await db.createPurchaseOrderItem({
+            poId,
+            ...item,
+          } as any);
+        }
+        
+        return { success: true, poId, poNumber };
+      }),
+    
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(["draft", "submitted", "approved", "rejected", "completed", "cancelled"]).optional(),
+        deliveryDate: z.date().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await db.updatePurchaseOrder(id, data);
+        return { success: true };
+      }),
+    
+    approve: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        approved: z.boolean(),
+        rejectionReason: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const po = await db.getPurchaseOrderById(input.id);
+        if (!po) throw new TRPCError({ code: 'NOT_FOUND' });
+        
+        await db.updatePurchaseOrder(input.id, {
+          status: input.approved ? "approved" : "rejected",
+          approvedBy: ctx.user.id,
+          approvedAt: new Date(),
+          rejectionReason: input.rejectionReason,
+        });
+        
+        // Update budget spent amount if approved and linked to budget
+        if (input.approved && po.budgetId) {
+          await db.updateBudgetSpent(po.budgetId, po.totalAmount);
+          
+          // Check for budget overrun
+          const budget = await db.getBudgetById(po.budgetId);
+          if (budget && utils.isBudgetOverThreshold(budget.allocatedAmount, budget.spentAmount + po.totalAmount, 90)) {
+            await notifyOwner({
+              title: 'Budget Alert: 90% Threshold Reached',
+              content: `Budget "${budget.name}" has reached 90% of allocated amount`,
+            });
+          }
+        }
+        
+        return { success: true };
+      }),
+    
+    receiveGoods: protectedProcedure
+      .input(z.object({
+        poId: z.number(),
+        items: z.array(z.object({
+          poItemId: z.number(),
+          quantityReceived: z.number(),
+          batchNumber: z.string().optional(),
+          expiryDate: z.date().optional(),
+          condition: z.enum(["good", "damaged", "defective"]).optional(),
+          notes: z.string().optional(),
+        })),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { poId, items, notes } = input;
+        const receiptNumber = utils.generateGoodsReceiptNumber();
+        
+        // Create goods receipt
+        const receiptResult = await db.createGoodsReceipt({
+          poId,
+          receiptNumber,
+          receivedBy: ctx.user.id,
+          notes,
+        } as any);
+        
+        const receiptId = Number(receiptResult.insertId);
+        
+        // Create receipt items and update PO item received quantities
+        for (const item of items) {
+          await db.createGoodsReceiptItem({
+            receiptId,
+            ...item,
+            condition: item.condition || "good",
+          } as any);
+          
+          // Update PO item received quantity
+          const poItem = await db.getPurchaseOrderItems(poId);
+          const currentItem = poItem.find(i => i.id === item.poItemId);
+          if (currentItem) {
+            const newReceivedQty = currentItem.receivedQuantity + item.quantityReceived;
+            await db.updatePurchaseOrderItem(item.poItemId, {
+              receivedQuantity: newReceivedQty,
+            });
+            
+            // Update inventory if product is linked
+            if (currentItem.productId) {
+              const inventoryRecords = await db.getInventoryByProduct(currentItem.productId);
+              if (inventoryRecords.length > 0) {
+                const inventoryRecord = inventoryRecords[0];
+                await db.updateInventory(inventoryRecord.id, {
+                  quantity: inventoryRecord.quantity + item.quantityReceived,
+                });
+              }
+            }
+          }
+        }
+        
+        // Check if PO is fully received and update status
+        const allItems = await db.getPurchaseOrderItems(poId);
+        const fullyReceived = allItems.every(item => item.receivedQuantity >= item.quantity);
+        const partiallyReceived = allItems.some(item => item.receivedQuantity > 0);
+        
+        await db.updatePurchaseOrder(poId, {
+          receivedStatus: fullyReceived ? "fully_received" : (partiallyReceived ? "partially_received" : "not_received"),
+          receivedDate: fullyReceived ? new Date() : undefined,
+          status: fullyReceived ? "completed" : undefined,
+        });
+        
+        return { success: true, receiptId, receiptNumber };
+      }),
+  }),
+
+  // ============================================
   // DELIVERIES
   // ============================================
   deliveries: router({

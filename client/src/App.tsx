@@ -27,6 +27,9 @@ import CustomerDetails from "./pages/CustomerDetails";
 import Invoices from "./pages/Invoices";
 import CreateInvoice from "./pages/CreateInvoice";
 import InvoiceDetails from "./pages/InvoiceDetails";
+import PurchaseOrders from "./pages/PurchaseOrders";
+import CreatePurchaseOrder from "./pages/CreatePurchaseOrder";
+import PurchaseOrderDetails from "./pages/PurchaseOrderDetails";
 
 function Router() {
   return (
@@ -206,6 +209,31 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Invoices />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Purchase Orders - specific routes BEFORE dynamic routes */}
+      <Route path={"/purchase-orders/create"}>
+        {() => (
+          <DashboardLayout>
+            <CreatePurchaseOrder />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/purchase-orders/:id"}>
+        {() => (
+          <DashboardLayout>
+            <PurchaseOrderDetails />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/purchase-orders"}>
+        {() => (
+          <DashboardLayout>
+            <PurchaseOrders />
           </DashboardLayout>
         )}
       </Route>

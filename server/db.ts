@@ -21,6 +21,10 @@ import {
   invoices,
   invoiceItems,
   expenses,
+  purchaseOrders,
+  purchaseOrderItems,
+  goodsReceipts,
+  goodsReceiptItems,
   deliveries,
   deliveryItems,
   documentFolders,
@@ -646,6 +650,91 @@ export async function updateExpense(id: number, data: Partial<typeof expenses.$i
   if (!db) throw new Error("Database not available");
   
   await db.update(expenses).set(data).where(eq(expenses.id, id));
+}
+
+// ============================================
+// PURCHASE ORDERS
+// ============================================
+
+export async function getAllPurchaseOrders() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(purchaseOrders).orderBy(desc(purchaseOrders.createdAt));
+}
+
+export async function getPurchaseOrderById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db.select().from(purchaseOrders).where(eq(purchaseOrders.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getPurchaseOrderItems(poId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(purchaseOrderItems).where(eq(purchaseOrderItems.poId, poId));
+}
+
+export async function createPurchaseOrder(po: typeof purchaseOrders.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const [result] = await db.insert(purchaseOrders).values(po);
+  return { insertId: result.insertId };
+}
+
+export async function createPurchaseOrderItem(item: typeof purchaseOrderItems.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const [result] = await db.insert(purchaseOrderItems).values(item);
+  return { insertId: result.insertId };
+}
+
+export async function updatePurchaseOrder(id: number, data: Partial<typeof purchaseOrders.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(purchaseOrders).set(data).where(eq(purchaseOrders.id, id));
+}
+
+export async function updatePurchaseOrderItem(id: number, data: Partial<typeof purchaseOrderItems.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(purchaseOrderItems).set(data).where(eq(purchaseOrderItems.id, id));
+}
+
+export async function getGoodsReceipts(poId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(goodsReceipts)
+    .where(eq(goodsReceipts.poId, poId))
+    .orderBy(desc(goodsReceipts.receiptDate));
+}
+
+export async function getGoodsReceiptItems(receiptId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(goodsReceiptItems)
+    .where(eq(goodsReceiptItems.receiptId, receiptId));
+}
+
+export async function createGoodsReceipt(receipt: typeof goodsReceipts.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const [result] = await db.insert(goodsReceipts).values(receipt);
+  return { insertId: result.insertId };
+}
+
+export async function createGoodsReceiptItem(item: typeof goodsReceiptItems.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const [result] = await db.insert(goodsReceiptItems).values(item);
+  return { insertId: result.insertId };
 }
 
 // ============================================

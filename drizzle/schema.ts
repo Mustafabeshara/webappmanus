@@ -350,6 +350,80 @@ export const expenses = mysqlTable("expenses", {
 });
 
 /**
+ * Purchase Orders for procurement workflow
+ */
+export const purchaseOrders = mysqlTable("purchase_orders", {
+  id: int("id").autoincrement().primaryKey(),
+  poNumber: varchar("poNumber", { length: 100 }).notNull().unique(),
+  supplierId: int("supplierId").notNull(),
+  tenderId: int("tenderId"),
+  budgetId: int("budgetId"),
+  issueDate: timestamp("issueDate").defaultNow().notNull(),
+  deliveryDate: timestamp("deliveryDate"),
+  status: mysqlEnum("status", ["draft", "submitted", "approved", "rejected", "completed", "cancelled"]).default("draft").notNull(),
+  approvalLevel: int("approvalLevel").default(0).notNull(),
+  approvedBy: int("approvedBy"),
+  approvedAt: timestamp("approvedAt"),
+  rejectionReason: text("rejectionReason"),
+  subtotal: int("subtotal").notNull(), // in cents
+  taxAmount: int("taxAmount").default(0).notNull(),
+  totalAmount: int("totalAmount").notNull(),
+  paymentTerms: text("paymentTerms"),
+  deliveryAddress: text("deliveryAddress"),
+  notes: text("notes"),
+  receivedStatus: mysqlEnum("receivedStatus", ["not_received", "partially_received", "fully_received"]).default("not_received").notNull(),
+  receivedDate: timestamp("receivedDate"),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Purchase Order line items
+ */
+export const purchaseOrderItems = mysqlTable("purchase_order_items", {
+  id: int("id").autoincrement().primaryKey(),
+  poId: int("poId").notNull(),
+  productId: int("productId"),
+  description: text("description").notNull(),
+  quantity: int("quantity").notNull(),
+  receivedQuantity: int("receivedQuantity").default(0).notNull(),
+  unitPrice: int("unitPrice").notNull(), // in cents
+  totalPrice: int("totalPrice").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Goods Receipt records for tracking PO deliveries
+ */
+export const goodsReceipts = mysqlTable("goods_receipts", {
+  id: int("id").autoincrement().primaryKey(),
+  poId: int("poId").notNull(),
+  receiptNumber: varchar("receiptNumber", { length: 100 }).notNull().unique(),
+  receiptDate: timestamp("receiptDate").defaultNow().notNull(),
+  receivedBy: int("receivedBy").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/**
+ * Goods Receipt line items
+ */
+export const goodsReceiptItems = mysqlTable("goods_receipt_items", {
+  id: int("id").autoincrement().primaryKey(),
+  receiptId: int("receiptId").notNull(),
+  poItemId: int("poItemId").notNull(),
+  quantityReceived: int("quantityReceived").notNull(),
+  batchNumber: varchar("batchNumber", { length: 100 }),
+  expiryDate: timestamp("expiryDate"),
+  condition: mysqlEnum("condition", ["good", "damaged", "defective"]).default("good").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/**
  * Deliveries
  */
 export const deliveries = mysqlTable("deliveries", {
@@ -550,3 +624,7 @@ export type Forecast = typeof forecasts.$inferSelect;
 export type Anomaly = typeof anomalies.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
+export type PurchaseOrderItem = typeof purchaseOrderItems.$inferSelect;
+export type GoodsReceipt = typeof goodsReceipts.$inferSelect;
+export type GoodsReceiptItem = typeof goodsReceiptItems.$inferSelect;
