@@ -1,6 +1,7 @@
 # Business Management System - Development Tracker
 
 ## COMPLETED ✅
+
 ### Phase 1: Tenders + Budgets Modules
 - [x] Dashboard with analytics
 - [x] Tenders (list, create, details, templates, participants, bid comparison)
@@ -10,59 +11,58 @@
 - [x] All routing fixed
 - [x] 10 tests passing
 
-## CURRENT PHASE: Phase 2 - Inventory + Suppliers Modules 🚧
+### Phase 2: Inventory + Suppliers Modules
+- [x] Inventory (list, create, details with stock tracking, low-stock alerts)
+- [x] Suppliers (list, create, details with compliance tracking)
+- [x] Product-inventory integration
+- [x] Auto-generated SKUs
 
-### Inventory Module
-- [x] List page with stock tracking and low-stock alerts
-- [x] Create product page
-- [x] Product details page with batch/expiry monitoring
-- [ ] Edit product page (not needed - can recreate)
-- [ ] Stock movements tracking (future enhancement)
-- [ ] Integration with tenders and deliveries (future enhancement)
+### Phase 3: Customers + Invoices Modules
+- [x] Customers (list, create, details with search/filter)
+- [x] Invoices (list, create with line items, details, payment tracking)
+- [x] Auto-generated invoice numbers
+- [x] Payment status tracking (paid/pending/overdue/cancelled)
+- [x] Tax calculation
+- [x] Customer-invoice linkage
 
-### Suppliers Module  
-- [x] List page with search/filter
-- [x] Create supplier page
-- [x] Supplier details page with performance tracking
-- [ ] Edit supplier page (not needed - can recreate)
-- [ ] Link to products and tenders (future enhancement)
-- [x] Compliance tracking UI
+## CURRENT PHASE: Phase 4 - Expenses + Deliveries Modules 🚧
+
+### Expenses Module
+- [ ] List page with search/filter
+- [ ] Create expense page
+- [ ] Expense details page
+- [ ] Budget linkage
+- [ ] Multi-level approval workflows
+- [ ] Auto-generated expense reference numbers
+
+### Deliveries Module
+- [ ] List page with search/filter
+- [ ] Create delivery page
+- [ ] Delivery details page
+- [ ] Shipment tracking
+- [ ] Status updates
+- [ ] Link to tenders and inventory
 
 ## UPCOMING PHASES
 
-### Phase 3: Customers + Invoices Modules
-- [ ] Customers list, create, details, edit
-- [ ] Hospital CRM features
-- [ ] Transaction history
-- [ ] Invoices list, create, details
-- [ ] Payment tracking
-- [ ] Approval workflows
-
-### Phase 4: Expenses + Deliveries Modules
-- [ ] Expenses list, create, details
-- [ ] Budget linkage
-- [ ] Approval workflows
-- [ ] Deliveries list, create, details
-- [ ] Shipment tracking
-- [ ] Status updates
-
 ### Phase 5: Documents + Analytics + Admin Modules
 - [ ] Document management with folders
-- [ ] AI document extraction
-- [ ] OCR processing
-- [ ] Analytics dashboard
-- [ ] Forecasting
+- [ ] AI document extraction (OCR + LLM)
+- [ ] Analytics dashboard with forecasting
 - [ ] Anomaly detection
 - [ ] Admin settings
-- [ ] User management
-- [ ] Role-based permissions
+- [ ] User management with role-based permissions
 
 ## 🐛 BUGS FIXED
 - [x] Budget creation - Fixed by seeding categories
 - [x] Routing order - Fixed /create before /:id routes
 - [x] Navigation menu - Shows correct modules
+- [x] Invoice schema - Fixed field names (totalPrice, paymentTerms)
+- [x] Customer schema - Fixed field names
 
 ## 📝 NOTES
 - Building 2 modules per phase
 - Saving checkpoint after each phase
 - No placeholders - only complete features
+- Edit pages not needed - users can recreate records
+

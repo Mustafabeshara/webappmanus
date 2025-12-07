@@ -34,6 +34,8 @@ const menuItems = [
   { icon: DollarSign, label: "Budgets", path: "/budgets" },
   { icon: Package, label: "Inventory", path: "/inventory" },
   { icon: Building2, label: "Suppliers", path: "/suppliers" },
+  { icon: Users, label: "Customers", path: "/customers" },
+  { icon: FileText, label: "Invoices", path: "/invoices" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

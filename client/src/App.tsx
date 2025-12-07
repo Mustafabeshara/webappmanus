@@ -21,6 +21,12 @@ import ProductDetails from "./pages/ProductDetails";
 import Suppliers from "./pages/Suppliers";
 import CreateSupplier from "./pages/CreateSupplier";
 import SupplierDetails from "./pages/SupplierDetails";
+import Customers from "./pages/Customers";
+import CreateCustomer from "./pages/CreateCustomer";
+import CustomerDetails from "./pages/CustomerDetails";
+import Invoices from "./pages/Invoices";
+import CreateInvoice from "./pages/CreateInvoice";
+import InvoiceDetails from "./pages/InvoiceDetails";
 
 function Router() {
   return (
@@ -150,6 +156,56 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Suppliers />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Customers - specific routes BEFORE dynamic routes */}
+      <Route path={"/customers/create"}>
+        {() => (
+          <DashboardLayout>
+            <CreateCustomer />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/customers/:id"}>
+        {() => (
+          <DashboardLayout>
+            <CustomerDetails />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/customers"}>
+        {() => (
+          <DashboardLayout>
+            <Customers />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Invoices - specific routes BEFORE dynamic routes */}
+      <Route path={"/invoices/create"}>
+        {() => (
+          <DashboardLayout>
+            <CreateInvoice />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/invoices/:id"}>
+        {() => (
+          <DashboardLayout>
+            <InvoiceDetails />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/invoices"}>
+        {() => (
+          <DashboardLayout>
+            <Invoices />
           </DashboardLayout>
         )}
       </Route>
