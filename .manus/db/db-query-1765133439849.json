@@ -1,0 +1,44 @@
+{
+  "query": "SHOW CREATE TABLE expenses",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user i7FUhNGQxjduCiw.3c99e327379d --database mQ5aqYpP74zBSbqXk7AHKK --execute SHOW CREATE TABLE expenses",
+  "rows": [
+    {
+      "Table": "expenses",
+      "Create Table": "CREATE TABLE `expenses` ("
+    }
+  ],
+  "messages": [
+    "  `id` int(11) NOT NULL AUTO_INCREMENT,",
+    "  `expenseNumber` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,",
+    "  `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `categoryId` int(11) NOT NULL,",
+    "  `budgetId` int(11) DEFAULT NULL,",
+    "  `departmentId` int(11) DEFAULT NULL,",
+    "  `tenderId` int(11) DEFAULT NULL,",
+    "  `amount` int(11) NOT NULL,",
+    "  `expenseDate` timestamp NULL DEFAULT NULL,",
+    "  `status` enum('draft','pending','approved','rejected','paid') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'draft',",
+    "  `approvedBy` int(11) DEFAULT NULL,",
+    "  `approvedAt` timestamp NULL DEFAULT NULL,",
+    "  `rejectionReason` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `notes` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `createdBy` int(11) NOT NULL,",
+    "  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  `receiptUrl` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+    "  `approvalStatus` enum('pending','approved','rejected') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,",
+    "  UNIQUE KEY `expenses_expenseNumber_unique` (`expenseNumber`),",
+    "  KEY `budget_id_idx` (`budgetId`),",
+    "  KEY `department_id_idx` (`departmentId`),",
+    "  KEY `created_by_idx` (`createdBy`),",
+    "  KEY `status_idx` (`status`),",
+    "  KEY `expense_date_idx` (`expenseDate`),",
+    "  KEY `category_id_idx` (`categoryId`)",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001"
+  ],
+  "stdout": "Table\tCreate Table\nexpenses\tCREATE TABLE `expenses` (\n  `id` int(11) NOT NULL AUTO_INCREMENT,\n  `expenseNumber` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `description` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `categoryId` int(11) NOT NULL,\n  `budgetId` int(11) DEFAULT NULL,\n  `departmentId` int(11) DEFAULT NULL,\n  `tenderId` int(11) DEFAULT NULL,\n  `amount` int(11) NOT NULL,\n  `expenseDate` timestamp NULL DEFAULT NULL,\n  `status` enum('draft','pending','approved','rejected','paid') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'draft',\n  `approvedBy` int(11) DEFAULT NULL,\n  `approvedAt` timestamp NULL DEFAULT NULL,\n  `rejectionReason` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `notes` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `createdBy` int(11) NOT NULL,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `receiptUrl` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,\n  `approvalStatus` enum('pending','approved','rejected') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,\n  UNIQUE KEY `expenses_expenseNumber_unique` (`expenseNumber`),\n  KEY `budget_id_idx` (`budgetId`),\n  KEY `department_id_idx` (`departmentId`),\n  KEY `created_by_idx` (`createdBy`),\n  KEY `status_idx` (`status`),\n  KEY `expense_date_idx` (`expenseDate`),\n  KEY `category_id_idx` (`categoryId`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci AUTO_INCREMENT=30001\n",
+  "stderr": "",
+  "execution_time_ms": 1685
+}

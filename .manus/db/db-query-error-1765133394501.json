@@ -1,0 +1,8 @@
+{
+  "query": "select `id`, `expenseNumber`, `title`, `description`, `categoryId`, `budgetId`, `departmentId`, `tenderId`, `amount`, `expenseDate`, `status`, `approvalLevel`, `approvedBy`, `approvedAt`, `rejectionReason`, `receiptUrl`, `notes`, `createdBy`, `createdAt`, `updatedAt` from `expenses` order by `expenses`.`createdAt` desc",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user i7FUhNGQxjduCiw.3c99e327379d --database mQ5aqYpP74zBSbqXk7AHKK --execute select `id`, `expenseNumber`, `title`, `description`, `categoryId`, `budgetId`, `departmentId`, `tenderId`, `amount`, `expenseDate`, `status`, `approvalLevel`, `approvedBy`, `approvedAt`, `rejectionReason`, `receiptUrl`, `notes`, `createdBy`, `createdAt`, `updatedAt` from `expenses` order by `expenses`.`createdAt` desc",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'approvallevel' in 'field list'"
+  ]
+}

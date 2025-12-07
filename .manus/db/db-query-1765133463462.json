@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE expenses ADD COLUMN approvalLevel INT NOT NULL DEFAULT 0 AFTER status",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user i7FUhNGQxjduCiw.3c99e327379d --database mQ5aqYpP74zBSbqXk7AHKK --execute ALTER TABLE expenses ADD COLUMN approvalLevel INT NOT NULL DEFAULT 0 AFTER status",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1980
+}

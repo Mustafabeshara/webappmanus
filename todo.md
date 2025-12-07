@@ -213,3 +213,12 @@
 - [x] Fix schema to match database OR update database to match schema (server restart resolved)
 - [x] Test dashboard loading (working correctly)
 - [x] Verify expenses queries work correctly
+
+
+## BUG FIX - Expenses Query Error (Permanent Fix) ✅
+- [x] Run exact failing SQL query to get actual database error (ERROR 1054: Unknown column 'approvallevel')
+- [x] Check if approvalLevel column exists and has correct case (column was missing entirely)
+- [x] Verify all column names match between schema and database (found mismatch)
+- [x] Fix any column name mismatches permanently (added approvalLevel INT column)
+- [x] Test dashboard loading (working perfectly with all stats)
+- [x] Verify fix persists after server restart (permanent database change)
