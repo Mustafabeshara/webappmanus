@@ -541,3 +541,39 @@
 - [ ] Test mobile responsiveness (all pages)
 - [ ] Create final checkpoint
 - [ ] Push to GitHub
+
+
+## REAL-TIME NOTIFICATION SYSTEM (NEW REQUEST)
+
+### Phase 1: Notification Triggers
+- [ ] Add notification trigger when expense is submitted for approval
+- [ ] Add notification trigger when expense is approved/rejected
+- [ ] Add notification trigger when budget exceeds 80% utilization
+- [ ] Add notification trigger when budget exceeds 100% (over budget)
+- [ ] Add notification trigger when inventory falls below reorder level
+- [ ] Add notification trigger when task is assigned to user
+- [ ] Add notification trigger when task status changes
+- [ ] Add notification trigger when purchase order needs approval
+- [ ] Add notification trigger when delivery status changes
+- [ ] Add notification trigger when invoice is overdue
+
+### Phase 2: Enhanced Notification UI
+- [ ] Improve NotificationsDropdown with better styling
+- [ ] Add toast notifications for immediate alerts
+- [ ] Implement real-time polling (every 30 seconds)
+- [ ] Add notification sound option
+- [ ] Add notification grouping by type
+- [ ] Show notification preview in dropdown
+
+### Phase 3: Notification Preferences
+- [ ] Create notification preferences table in database
+- [ ] Add notification preferences page
+- [ ] Allow users to enable/disable specific notification types
+- [ ] Add "Do Not Disturb" mode
+- [ ] Add notification frequency settings
+
+### Phase 4: Testing
+- [ ] Test all notification triggers
+- [ ] Test real-time updates
+- [ ] Test notification preferences
+- [ ] Create final checkpoint

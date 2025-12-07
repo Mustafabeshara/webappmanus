@@ -11,6 +11,7 @@ import { performOCR, extractTenderData, extractInvoiceData, extractExpenseData, 
 import * as dashboardAnalytics from "./dashboardAnalytics";
 import { notifyOwner } from "./_core/notification";
 import { createPermissionMiddleware, checkResourceAccess, logAudit, validateApproval } from "./_core/permissions";
+import * as notificationHelpers from "./_core/notificationHelpers";
 
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -633,7 +634,18 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
+        const inventory = await db.getInventoryById(id);
+        if (!inventory) throw new TRPCError({ code: 'NOT_FOUND' });
+        
         await db.updateInventory(id, data);
+        
+        // Notification: Check for low stock after update
+        const updatedQty = data.quantity !== undefined ? data.quantity : inventory.quantity;
+        const minLevel = data.minStockLevel !== undefined ? data.minStockLevel : inventory.minStockLevel;
+        if (updatedQty <= minLevel) {
+          await notificationHelpers.notifyLowStock(id);
+        }
+        
         return { success: true };
       }),
   }),
@@ -1133,6 +1145,13 @@ export const appRouter = router({
             reason: input.rejectionReason,
           },
         });
+        
+        // Notification: Notify submitter of approval/rejection
+        if (input.approved) {
+          await notificationHelpers.notifyExpenseApproved(input.id, expense.createdBy, ctx.user.name || 'Admin');
+        } else {
+          await notificationHelpers.notifyExpenseRejected(input.id, expense.createdBy, ctx.user.name || 'Admin', input.rejectionReason);
+        }
         
         // Update budget spent amount if approved
         if (input.approved && expense.budgetId) {
@@ -1706,6 +1725,9 @@ export const appRouter = router({
           changes: { status: { from: po.status, to: input.approved ? 'approved' : 'rejected' } },
         });
         
+        // Notification: Send notification about approval status
+        // (Note: Approval notification would go to PO creator - not yet implemented in helpers)
+        
         // Update budget spent amount if approved and linked to budget
         if (input.approved && po.budgetId) {
           const budget = await db.getBudgetById(po.budgetId);
@@ -2036,6 +2058,11 @@ export const appRouter = router({
           changes: { title: input.title, assigneeId: input.assigneeId },
         });
         
+        // Notification: Notify assignee of new task
+        if (input.assigneeId && input.assigneeId !== ctx.user.id) {
+          await notificationHelpers.notifyTaskAssigned(taskId, input.assigneeId, ctx.user.name || 'Admin');
+        }
+        
         return { taskId };
       }),
     
@@ -2067,6 +2094,17 @@ export const appRouter = router({
         }
         
         await db.updateTask(id, updates as any);
+        
+        // Notification: Notify on status change
+        if (updates.status && task.assigneeId && task.assigneeId !== ctx.user.id) {
+          await notificationHelpers.notifyTaskStatusChanged(id, task.assigneeId, updates.status, ctx.user.name || 'Admin');
+        }
+        
+        // Notification: Notify on reassignment
+        if (updates.assigneeId && updates.assigneeId !== task.assigneeId) {
+          await notificationHelpers.notifyTaskAssigned(id, updates.assigneeId, ctx.user.name || 'Admin');
+        }
+        
         return { success: true };
       }),
     
