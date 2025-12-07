@@ -14,11 +14,44 @@ import {
   ArrowRight
 } from "lucide-react";
 import { Link } from "wouter";
+import { useEffect, useRef } from "react";
+import { showNotificationToast } from "@/lib/toastNotifications";
 
 export default function Dashboard() {
   const { data: analytics, isLoading } = trpc.analytics.dashboard.useQuery();
   const { data: lowStock } = trpc.inventory.lowStock.useQuery();
-  const { data: unreadNotifications } = trpc.notifications.unread.useQuery();
+  const { data: unreadNotifications, refetch } = trpc.notifications.unread.useQuery(undefined, {
+    refetchInterval: 30000, // Poll every 30 seconds
+  });
+  
+  // Track previous notification IDs to detect new ones
+  const previousNotificationIds = useRef<Set<number>>(new Set());
+  const isInitialLoad = useRef(true);
+
+  // Show toast for new notifications
+  useEffect(() => {
+    if (!unreadNotifications) return;
+
+    // Skip toast on initial load
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      previousNotificationIds.current = new Set(unreadNotifications.map(n => n.id));
+      return;
+    }
+
+    // Check for new notifications
+    const newNotifications = unreadNotifications.filter(
+      n => !previousNotificationIds.current.has(n.id)
+    );
+
+    // Show toast for each new notification
+    newNotifications.forEach(notification => {
+      showNotificationToast(notification);
+    });
+
+    // Update tracked IDs
+    previousNotificationIds.current = new Set(unreadNotifications.map(n => n.id));
+  }, [unreadNotifications]);
 
   if (isLoading) {
     return (
