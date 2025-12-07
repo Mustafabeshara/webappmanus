@@ -10,6 +10,7 @@ import { storagePut } from "./storage";
 import { performOCR, extractTenderData, extractInvoiceData, extractExpenseData, generateForecast, detectAnomalies, analyzeTenderWinRate } from "./aiService";
 import * as dashboardAnalytics from "./dashboardAnalytics";
 import { notifyOwner } from "./_core/notification";
+import { createPermissionMiddleware, checkResourceAccess, logAudit, validateApproval } from "./_core/permissions";
 
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -219,17 +220,24 @@ export const appRouter = router({
   // BUDGETS
   // ============================================
   budgets: router({
-    list: protectedProcedure.query(async () => {
-      return await db.getAllBudgets();
-    }),
+    list: protectedProcedure
+      .use(createPermissionMiddleware('budgets', 'view'))
+      .query(async () => {
+        return await db.getAllBudgets();
+      }),
     
     get: protectedProcedure
+      .use(createPermissionMiddleware('budgets', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return await db.getBudgetById(input.id);
+      .query(async ({ input, ctx }) => {
+        const budget = await db.getBudgetById(input.id);
+        if (!budget) throw new TRPCError({ code: 'NOT_FOUND', message: 'Budget not found' });
+        await checkResourceAccess(ctx, budget, 'budget');
+        return budget;
       }),
     
     create: protectedProcedure
+      .use(createPermissionMiddleware('budgets', 'create'))
       .input(z.object({
         name: z.string(),
         categoryId: z.number(),
@@ -239,14 +247,24 @@ export const appRouter = router({
         notes: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        await db.createBudget({
+        const result = await db.createBudget({
           ...input,
           createdBy: ctx.user.id,
         } as any);
+        
+        await logAudit({
+          userId: ctx.user.id,
+          action: 'create',
+          entityType: 'budget',
+          entityId: Number(result.insertId),
+          changes: { name: input.name, allocatedAmount: input.allocatedAmount },
+        });
+        
         return { success: true };
       }),
     
     update: protectedProcedure
+      .use(createPermissionMiddleware('budgets', 'edit'))
       .input(z.object({
         id: z.number(),
         name: z.string().optional(),
@@ -255,13 +273,29 @@ export const appRouter = router({
         approvalStatus: z.enum(["pending", "approved", "rejected"]).optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
+        
+        const budget = await db.getBudgetById(id);
+        if (!budget) throw new TRPCError({ code: 'NOT_FOUND', message: 'Budget not found' });
+        await checkResourceAccess(ctx, budget, 'budget');
+        
+        if (data.allocatedAmount && data.allocatedAmount !== budget.allocatedAmount) {
+          await logAudit({
+            userId: ctx.user.id,
+            action: 'update',
+            entityType: 'budget',
+            entityId: id,
+            changes: { allocatedAmount: { from: budget.allocatedAmount, to: data.allocatedAmount } },
+          });
+        }
+        
         await db.updateBudget(id, data);
         return { success: true };
       }),
     
     approve: protectedProcedure
+      .use(createPermissionMiddleware('budgets', 'approve'))
       .input(z.object({
         id: z.number(),
         approved: z.boolean(),
@@ -271,13 +305,23 @@ export const appRouter = router({
         const budget = await db.getBudgetById(input.id);
         if (!budget) throw new TRPCError({ code: 'NOT_FOUND' });
         
+        await validateApproval(ctx, budget, 'budgets');
+        
         await db.updateBudget(input.id, {
           approvalStatus: input.approved ? "approved" : "rejected",
+          status: input.approved ? "active" : "draft",
           approvedBy: ctx.user.id,
           approvedAt: new Date(),
         });
         
-        // Notify owner of budget approval/rejection
+        await logAudit({
+          userId: ctx.user.id,
+          action: input.approved ? 'approve' : 'reject',
+          entityType: 'budget',
+          entityId: input.id,
+          changes: { status: { from: budget.approvalStatus, to: input.approved ? 'approved' : 'rejected' } },
+        });
+        
         await notifyOwner({
           title: `Budget ${input.approved ? 'Approved' : 'Rejected'}`,
           content: `Budget "${budget.name}" has been ${input.approved ? 'approved' : 'rejected'} by ${ctx.user.name}`,
@@ -291,17 +335,21 @@ export const appRouter = router({
   // SUPPLIERS
   // ============================================
   suppliers: router({
-    list: protectedProcedure.query(async () => {
-      return await db.getAllSuppliers();
-    }),
+    list: protectedProcedure
+      .use(createPermissionMiddleware('suppliers', 'view'))
+      .query(async () => {
+        return await db.getAllSuppliers();
+      }),
     
     get: protectedProcedure
+      .use(createPermissionMiddleware('suppliers', 'view'))
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return await db.getSupplierById(input.id);
       }),
     
     create: protectedProcedure
+      .use(createPermissionMiddleware('suppliers', 'create'))
       .input(z.object({
         name: z.string(),
         contactPerson: z.string().optional(),
@@ -322,6 +370,7 @@ export const appRouter = router({
       }),
     
     update: protectedProcedure
+      .use(createPermissionMiddleware('suppliers', 'edit'))
       .input(z.object({
         id: z.number(),
         name: z.string().optional(),
@@ -346,17 +395,21 @@ export const appRouter = router({
   // CUSTOMERS
   // ============================================
   customers: router({
-    list: protectedProcedure.query(async () => {
-      return await db.getAllCustomers();
-    }),
+    list: protectedProcedure
+      .use(createPermissionMiddleware('customers', 'view'))
+      .query(async () => {
+        return await db.getAllCustomers();
+      }),
     
     get: protectedProcedure
+      .use(createPermissionMiddleware('customers', 'view'))
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return await db.getCustomerById(input.id);
       }),
     
     create: protectedProcedure
+      .use(createPermissionMiddleware('customers', 'create'))
       .input(z.object({
         name: z.string(),
         type: z.enum(["hospital", "clinic", "pharmacy", "other"]),
@@ -379,6 +432,7 @@ export const appRouter = router({
       }),
     
     update: protectedProcedure
+      .use(createPermissionMiddleware('customers', 'edit'))
       .input(z.object({
         id: z.number(),
         name: z.string().optional(),
@@ -508,7 +562,9 @@ export const appRouter = router({
   // INVENTORY
   // ============================================
   inventory: router({
-    list: protectedProcedure.query(async () => {
+    list: protectedProcedure
+      .use(createPermissionMiddleware('inventory', 'view'))
+      .query(async () => {
       const inventory = await db.getAllInventory();
       const products = await db.getAllProducts();
       const suppliers = await db.getAllSuppliers();
@@ -533,17 +589,21 @@ export const appRouter = router({
       });
     }),
     
-    lowStock: protectedProcedure.query(async () => {
-      return await db.getLowStockItems();
-    }),
+    lowStock: protectedProcedure
+      .use(createPermissionMiddleware('inventory', 'view'))
+      .query(async () => {
+        return await db.getLowStockItems();
+      }),
     
     byProduct: protectedProcedure
+      .use(createPermissionMiddleware('inventory', 'view'))
       .input(z.object({ productId: z.number() }))
       .query(async ({ input }) => {
         return await db.getInventoryByProductId(input.productId);
       }),
     
     create: protectedProcedure
+      .use(createPermissionMiddleware('inventory', 'create'))
       .input(z.object({
         productId: z.number(),
         quantity: z.number(),
@@ -560,6 +620,7 @@ export const appRouter = router({
       }),
     
     update: protectedProcedure
+      .use(createPermissionMiddleware('inventory', 'edit'))
       .input(z.object({
         id: z.number(),
         quantity: z.number().optional(),
@@ -644,14 +705,20 @@ export const appRouter = router({
   // TENDERS
   // ============================================
   tenders: router({
-    list: protectedProcedure.query(async () => {
-      return await db.getAllTenders();
-    }),
+    list: protectedProcedure
+      .use(createPermissionMiddleware('tenders', 'view'))
+      .query(async () => {
+        return await db.getAllTenders();
+      }),
     
     get: protectedProcedure
+      .use(createPermissionMiddleware('tenders', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         const tender = await db.getTenderById(input.id);
+        if (!tender) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tender not found' });
+        await checkResourceAccess(ctx, tender, 'tender');
+        
         const items = await db.getTenderItems(input.id);
         const participants = await db.getTenderParticipants(input.id);
         
@@ -667,6 +734,7 @@ export const appRouter = router({
       }),
     
     create: protectedProcedure
+      .use(createPermissionMiddleware('tenders', 'create'))
       .input(z.object({
         title: z.string(),
         description: z.string().optional(),
@@ -708,6 +776,14 @@ export const appRouter = router({
             } as any);
           }
         }
+        
+        await logAudit({
+          userId: ctx.user.id,
+          action: 'create',
+          entityType: 'tender',
+          entityId: tenderId,
+          changes: { title: input.title, referenceNumber },
+        });
         
         return { success: true, tenderId, referenceNumber };
       }),
@@ -759,6 +835,7 @@ export const appRouter = router({
       }),
     
     update: protectedProcedure
+      .use(createPermissionMiddleware('tenders', 'edit'))
       .input(z.object({
         id: z.number(),
         title: z.string().optional(),
@@ -776,17 +853,25 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
         
+        const tender = await db.getTenderById(id);
+        if (!tender) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tender not found' });
+        await checkResourceAccess(ctx, tender, 'tender');
+        
         if (data.status === 'awarded' && data.awardedSupplierId) {
           (data as any).awardedAt = new Date();
           
-          // Notify owner of tender award
-          const tender = await db.getTenderById(id);
-          if (tender) {
-            await notifyOwner({
-              title: 'Tender Awarded',
-              content: `Tender "${tender.title}" has been awarded by ${ctx.user.name}`,
-            });
-          }
+          await logAudit({
+            userId: ctx.user.id,
+            action: 'award',
+            entityType: 'tender',
+            entityId: id,
+            changes: { awardedSupplierId: data.awardedSupplierId, awardedValue: data.awardedValue },
+          });
+          
+          await notifyOwner({
+            title: 'Tender Awarded',
+            content: `Tender "${tender.title}" has been awarded by ${ctx.user.name}`,
+          });
         }
         
         await db.updateTender(id, data);
@@ -830,19 +915,26 @@ export const appRouter = router({
   // INVOICES
   // ============================================
   invoices: router({
-    list: protectedProcedure.query(async () => {
-      return await db.getAllInvoices();
-    }),
+    list: protectedProcedure
+      .use(createPermissionMiddleware('invoices', 'view'))
+      .query(async () => {
+        return await db.getAllInvoices();
+      }),
     
     get: protectedProcedure
+      .use(createPermissionMiddleware('invoices', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         const invoice = await db.getInvoiceById(input.id);
+        if (!invoice) throw new TRPCError({ code: 'NOT_FOUND', message: 'Invoice not found' });
+        await checkResourceAccess(ctx, invoice, 'invoice');
+        
         const items = await db.getInvoiceItems(input.id);
         return { invoice, items };
       }),
     
     create: protectedProcedure
+      .use(createPermissionMiddleware('invoices', 'create'))
       .input(z.object({
         customerId: z.number(),
         tenderId: z.number().optional(),
@@ -880,18 +972,32 @@ export const appRouter = router({
           } as any);
         }
         
+        await logAudit({
+          userId: ctx.user.id,
+          action: 'create',
+          entityType: 'invoice',
+          entityId: invoiceId,
+          changes: { invoiceNumber, totalAmount: input.totalAmount },
+        });
+        
         return { success: true, invoiceId, invoiceNumber };
       }),
     
     update: protectedProcedure
+      .use(createPermissionMiddleware('invoices', 'edit'))
       .input(z.object({
         id: z.number(),
         status: z.enum(["draft", "sent", "paid", "overdue", "cancelled"]).optional(),
         paidAmount: z.number().optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
+        
+        const invoice = await db.getInvoiceById(id);
+        if (!invoice) throw new TRPCError({ code: 'NOT_FOUND', message: 'Invoice not found' });
+        await checkResourceAccess(ctx, invoice, 'invoice');
+        
         await db.updateInvoice(id, data);
         return { success: true };
       }),
@@ -901,17 +1007,27 @@ export const appRouter = router({
   // EXPENSES
   // ============================================
   expenses: router({
-    list: protectedProcedure.query(async () => {
-      return await db.getAllExpenses();
-    }),
+    list: protectedProcedure
+      .use(createPermissionMiddleware('expenses', 'view'))
+      .query(async () => {
+        return await db.getAllExpenses();
+      }),
     
     get: protectedProcedure
+      .use(createPermissionMiddleware('expenses', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return await db.getExpenseById(input.id);
+      .query(async ({ input, ctx }) => {
+        const expense = await db.getExpenseById(input.id);
+        if (!expense) throw new TRPCError({ code: 'NOT_FOUND', message: 'Expense not found' });
+        
+        // IDOR Prevention: Check resource access
+        await checkResourceAccess(ctx, expense, 'expense');
+        
+        return expense;
       }),
     
     create: protectedProcedure
+      .use(createPermissionMiddleware('expenses', 'create'))
       .input(z.object({
         title: z.string(),
         description: z.string().optional(),
@@ -933,10 +1049,22 @@ export const appRouter = router({
           createdBy: ctx.user.id,
         } as any);
         
-        return { success: true, expenseNumber, expenseId: Number(result.insertId) };
+        const expenseId = Number(result.insertId);
+        
+        // Audit Log: Expense creation
+        await logAudit({
+          userId: ctx.user.id,
+          action: 'create',
+          entityType: 'expense',
+          entityId: expenseId,
+          changes: { title: input.title, amount: input.amount },
+        });
+        
+        return { success: true, expenseNumber, expenseId };
       }),
     
     update: protectedProcedure
+      .use(createPermissionMiddleware('expenses', 'edit'))
       .input(z.object({
         id: z.number(),
         title: z.string().optional(),
@@ -946,13 +1074,31 @@ export const appRouter = router({
         receiptUrl: z.string().optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
+        
+        // IDOR Prevention: Check resource access
+        const expense = await db.getExpenseById(id);
+        if (!expense) throw new TRPCError({ code: 'NOT_FOUND', message: 'Expense not found' });
+        await checkResourceAccess(ctx, expense, 'expense');
+        
+        // Audit Log: Track amount changes
+        if (data.amount && data.amount !== expense.amount) {
+          await logAudit({
+            userId: ctx.user.id,
+            action: 'update',
+            entityType: 'expense',
+            entityId: id,
+            changes: { amount: { from: expense.amount, to: data.amount } },
+          });
+        }
+        
         await db.updateExpense(id, data);
         return { success: true };
       }),
     
     approve: protectedProcedure
+      .use(createPermissionMiddleware('expenses', 'approve'))
       .input(z.object({
         id: z.number(),
         approved: z.boolean(),
@@ -965,11 +1111,27 @@ export const appRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expense must be in pending status to approve/reject' });
         }
         
+        // Validate approval workflow (prevent self-approval)
+        await validateApproval(ctx, expense, 'expenses');
+        
         await db.updateExpense(input.id, {
           status: input.approved ? "approved" : "rejected",
+          approvalStatus: input.approved ? "approved" : "rejected",
           approvedBy: ctx.user.id,
           approvedAt: new Date(),
           rejectionReason: input.rejectionReason,
+        });
+        
+        // Audit Log: Expense approval/rejection
+        await logAudit({
+          userId: ctx.user.id,
+          action: input.approved ? 'approve' : 'reject',
+          entityType: 'expense',
+          entityId: input.id,
+          changes: {
+            status: { from: expense.status, to: input.approved ? 'approved' : 'rejected' },
+            reason: input.rejectionReason,
+          },
         });
         
         // Update budget spent amount if approved
@@ -1425,20 +1587,27 @@ export const appRouter = router({
   // PURCHASE ORDERS
   // ============================================
   purchaseOrders: router({
-    list: protectedProcedure.query(async () => {
-      return await db.getAllPurchaseOrders();
-    }),
+    list: protectedProcedure
+      .use(createPermissionMiddleware('purchaseOrders', 'view'))
+      .query(async () => {
+        return await db.getAllPurchaseOrders();
+      }),
     
     get: protectedProcedure
+      .use(createPermissionMiddleware('purchaseOrders', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         const po = await db.getPurchaseOrderById(input.id);
+        if (!po) throw new TRPCError({ code: 'NOT_FOUND', message: 'Purchase order not found' });
+        await checkResourceAccess(ctx, po, 'purchaseOrder');
+        
         const items = await db.getPurchaseOrderItems(input.id);
         const receipts = await db.getGoodsReceiptsByPO(input.id);
         return { po, items, receipts };
       }),
     
     create: protectedProcedure
+      .use(createPermissionMiddleware('purchaseOrders', 'create'))
       .input(z.object({
         supplierId: z.number(),
         tenderId: z.number().optional(),
@@ -1479,23 +1648,38 @@ export const appRouter = router({
           } as any);
         }
         
+        await logAudit({
+          userId: ctx.user.id,
+          action: 'create',
+          entityType: 'purchaseOrder',
+          entityId: poId,
+          changes: { poNumber, totalAmount: input.totalAmount },
+        });
+        
         return { success: true, poId, poNumber };
       }),
     
     update: protectedProcedure
+      .use(createPermissionMiddleware('purchaseOrders', 'edit'))
       .input(z.object({
         id: z.number(),
         status: z.enum(["draft", "submitted", "approved", "rejected", "completed", "cancelled"]).optional(),
         deliveryDate: z.date().optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
+        
+        const po = await db.getPurchaseOrderById(id);
+        if (!po) throw new TRPCError({ code: 'NOT_FOUND', message: 'Purchase order not found' });
+        await checkResourceAccess(ctx, po, 'purchaseOrder');
+        
         await db.updatePurchaseOrder(id, data);
         return { success: true };
       }),
     
     approve: protectedProcedure
+      .use(createPermissionMiddleware('purchaseOrders', 'approve'))
       .input(z.object({
         id: z.number(),
         approved: z.boolean(),
@@ -1505,11 +1689,21 @@ export const appRouter = router({
         const po = await db.getPurchaseOrderById(input.id);
         if (!po) throw new TRPCError({ code: 'NOT_FOUND' });
         
+        await validateApproval(ctx, po, 'purchaseOrders');
+        
         await db.updatePurchaseOrder(input.id, {
           status: input.approved ? "approved" : "rejected",
           approvedBy: ctx.user.id,
           approvedAt: new Date(),
           rejectionReason: input.rejectionReason,
+        });
+        
+        await logAudit({
+          userId: ctx.user.id,
+          action: input.approved ? 'approve' : 'reject',
+          entityType: 'purchaseOrder',
+          entityId: input.id,
+          changes: { status: { from: po.status, to: input.approved ? 'approved' : 'rejected' } },
         });
         
         // Update budget spent amount if approved and linked to budget
@@ -1607,19 +1801,26 @@ export const appRouter = router({
   // DELIVERIES
   // ============================================
   deliveries: router({
-    list: protectedProcedure.query(async () => {
-      return await db.getAllDeliveries();
-    }),
+    list: protectedProcedure
+      .use(createPermissionMiddleware('deliveries', 'view'))
+      .query(async () => {
+        return await db.getAllDeliveries();
+      }),
     
     get: protectedProcedure
+      .use(createPermissionMiddleware('deliveries', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         const delivery = await db.getDeliveryById(input.id);
+        if (!delivery) throw new TRPCError({ code: 'NOT_FOUND', message: 'Delivery not found' });
+        await checkResourceAccess(ctx, delivery, 'delivery');
+        
         const items = await db.getDeliveryItems(input.id);
         return { delivery, items };
       }),
     
     create: protectedProcedure
+      .use(createPermissionMiddleware('deliveries', 'create'))
       .input(z.object({
         customerId: z.number(),
         tenderId: z.number().optional(),
@@ -1655,18 +1856,32 @@ export const appRouter = router({
           } as any);
         }
         
+        await logAudit({
+          userId: ctx.user.id,
+          action: 'create',
+          entityType: 'delivery',
+          entityId: deliveryId,
+          changes: { deliveryNumber },
+        });
+        
         return { success: true, deliveryId, deliveryNumber };
       }),
     
     update: protectedProcedure
+      .use(createPermissionMiddleware('deliveries', 'edit'))
       .input(z.object({
         id: z.number(),
         status: z.enum(["planned", "in_transit", "delivered", "cancelled"]).optional(),
         deliveredDate: z.date().optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
+        
+        const delivery = await db.getDeliveryById(id);
+        if (!delivery) throw new TRPCError({ code: 'NOT_FOUND', message: 'Delivery not found' });
+        await checkResourceAccess(ctx, delivery, 'delivery');
+        
         await db.updateDelivery(id, data);
         
         // Update inventory when delivered
@@ -1770,6 +1985,7 @@ export const appRouter = router({
   // ============================================
   tasks: router({
     list: protectedProcedure
+      .use(createPermissionMiddleware('tasks', 'view'))
       .input(z.object({
         assigneeId: z.number().optional(),
         creatorId: z.number().optional(),
@@ -1783,12 +1999,17 @@ export const appRouter = router({
       }),
     
     get: protectedProcedure
+      .use(createPermissionMiddleware('tasks', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        return await db.getTaskById(input.id);
+      .query(async ({ input, ctx }) => {
+        const task = await db.getTaskById(input.id);
+        if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+        await checkResourceAccess(ctx, task, 'task');
+        return task;
       }),
     
     create: protectedProcedure
+      .use(createPermissionMiddleware('tasks', 'create'))
       .input(z.object({
         title: z.string().min(1),
         description: z.string().optional(),
@@ -1805,10 +2026,21 @@ export const appRouter = router({
           ...input,
           creatorId: ctx.user.id,
         } as any);
-        return { taskId: result.insertId };
+        
+        const taskId = Number(result.insertId);
+        await logAudit({
+          userId: ctx.user.id,
+          action: 'create',
+          entityType: 'task',
+          entityId: taskId,
+          changes: { title: input.title, assigneeId: input.assigneeId },
+        });
+        
+        return { taskId };
       }),
     
     update: protectedProcedure
+      .use(createPermissionMiddleware('tasks', 'edit'))
       .input(z.object({
         id: z.number(),
         title: z.string().min(1).optional(),
@@ -1822,8 +2054,12 @@ export const appRouter = router({
         relatedId: z.number().optional(),
         tags: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...updates } = input;
+        
+        const task = await db.getTaskById(id);
+        if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+        await checkResourceAccess(ctx, task, 'task');
         
         // Auto-set completedAt when status changes to done
         if (updates.status === "done" && !updates.completedAt) {
@@ -1835,8 +2071,21 @@ export const appRouter = router({
       }),
     
     delete: protectedProcedure
+      .use(createPermissionMiddleware('tasks', 'delete'))
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const task = await db.getTaskById(input.id);
+        if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+        await checkResourceAccess(ctx, task, 'task');
+        
+        await logAudit({
+          userId: ctx.user.id,
+          action: 'delete',
+          entityType: 'task',
+          entityId: input.id,
+          changes: { title: task.title },
+        });
+        
         await db.deleteTask(input.id);
         return { success: true };
       }),

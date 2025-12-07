@@ -96,10 +96,10 @@ export function createPermissionMiddleware(
  * Implements H2: Resource-Level Authorization
  */
 export interface ResourceOwnership {
-  createdBy?: number;
-  userId?: number;
-  assigneeId?: number;
-  departmentId?: number;
+  createdBy?: number | null;
+  userId?: number | null;
+  assigneeId?: number | null;
+  departmentId?: number | null;
 }
 
 export async function checkResourceAccess(
