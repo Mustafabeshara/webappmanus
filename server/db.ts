@@ -1125,3 +1125,162 @@ export async function updateInventoryQuantity(productId: number, quantityChange:
     });
   }
 }
+
+
+// ============================================
+// EXPENSE ANALYTICS
+// ============================================
+export async function getExpensesByCategory(startDate?: Date, endDate?: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  
+  let query = db
+    .select({
+      categoryId: expenses.categoryId,
+      categoryName: budgetCategories.name,
+      totalAmount: sql<number>`SUM(${expenses.amount})`,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(expenses)
+    .leftJoin(budgetCategories, eq(expenses.categoryId, budgetCategories.id))
+    .groupBy(expenses.categoryId, budgetCategories.name);
+  
+  if (startDate && endDate) {
+    query = query.where(and(
+      gte(expenses.expenseDate, startDate),
+      lte(expenses.expenseDate, endDate)
+    )) as any;
+  }
+  
+  return await query;
+}
+
+export async function getExpensesByDepartment(startDate?: Date, endDate?: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  
+  let query = db
+    .select({
+      departmentId: expenses.departmentId,
+      departmentName: departments.name,
+      totalAmount: sql<number>`SUM(${expenses.amount})`,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(expenses)
+    .leftJoin(departments, eq(expenses.departmentId, departments.id))
+    .groupBy(expenses.departmentId, departments.name);
+  
+  if (startDate && endDate) {
+    query = query.where(and(
+      gte(expenses.expenseDate, startDate),
+      lte(expenses.expenseDate, endDate)
+    )) as any;
+  }
+  
+  return await query;
+}
+
+// ============================================
+// DEPARTMENTS (UPDATE)
+// ============================================
+export async function updateDepartment(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  return await db.update(departments).set(data).where(eq(departments.id, id));
+}
+
+// ============================================
+// SETTINGS (SET)
+// ============================================
+export async function setSetting(key: string, value: string, category: string, description?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  
+  // Check if setting exists
+  const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+  
+  if (existing.length > 0) {
+    // Update existing
+    return await db.update(settings)
+      .set({ value, category, description, updatedAt: new Date() })
+      .where(eq(settings.key, key));
+  } else {
+    // Create new
+    return await db.insert(settings).values({ key, value, category, description });
+  }
+}
+
+
+// ============================================
+// MISSING FUNCTIONS
+// ============================================
+
+// Goods Receipts (wrapper for existing function)
+export async function getGoodsReceipts(purchaseOrderId?: number) {
+  if (purchaseOrderId) {
+    return await getGoodsReceiptsByPO(purchaseOrderId);
+  }
+  return await getAllGoodsReceipts();
+}
+
+// Inventory
+export async function getInventoryById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(inventory).where(eq(inventory.id, id)).limit(1);
+  return result[0] || null;
+}
+
+// Budget Analytics
+export async function getBudgetsByCategory() {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  
+  return await db
+    .select({
+      categoryId: budgets.categoryId,
+      categoryName: budgetCategories.name,
+      totalAllocated: sql<number>`SUM(${budgets.allocatedAmount})`,
+      totalSpent: sql<number>`SUM(${budgets.spentAmount})`,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(budgets)
+    .leftJoin(budgetCategories, eq(budgets.categoryId, budgetCategories.id))
+    .groupBy(budgets.categoryId, budgetCategories.name);
+}
+
+// Departments
+export async function deleteDepartment(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  return await db.delete(departments).where(eq(departments.id, id));
+}
+
+
+// Tender Templates
+export async function getAllTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(tenderTemplates).orderBy(desc(tenderTemplates.createdAt));
+}
+
+// Budget Categories
+export async function getBudgetCategories() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(budgetCategories).orderBy(asc(budgetCategories.name));
+}
+
+
+export async function getTemplateById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(tenderTemplates).where(eq(tenderTemplates.id, id)).limit(1);
+  return result[0] || null;
+}
+
+export async function createTemplate(template: typeof tenderTemplates.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.insert(tenderTemplates).values(template);
+}
