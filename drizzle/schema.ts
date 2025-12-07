@@ -343,6 +343,7 @@ export const expenses = mysqlTable("expenses", {
   approvedBy: int("approvedBy"),
   approvedAt: timestamp("approvedAt"),
   rejectionReason: text("rejectionReason"),
+  receiptUrl: text("receiptUrl"), // S3 URL for receipt image
   notes: text("notes"),
   createdBy: int("createdBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
