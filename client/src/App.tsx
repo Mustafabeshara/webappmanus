@@ -252,6 +252,14 @@ function Router() {
         )}
       </Route>
       
+      <Route path={"/expenses/multi-upload"}>
+        {() => (
+          <DashboardLayout>
+            <MultiReceiptUpload />
+          </DashboardLayout>
+        )}
+      </Route>
+      
       <Route path={"/expenses/bulk-import"}>
         {() => (
           <DashboardLayout>

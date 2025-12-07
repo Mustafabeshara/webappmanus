@@ -168,3 +168,21 @@
 - [x] Real-time extraction on box completion
 - [ ] Test bounding box OCR extraction with real receipts
 - [ ] Write tests for region-based OCR
+
+### Multi-Receipt Upload (COMPLETE ✅)
+- [x] Add backend endpoint for batch receipt processing (batchUploadReceipts)
+- [x] Support multiple file uploads in single request (array of base64 files)
+- [x] Implement sequential OCR processing for multiple receipts
+- [x] Auto-create expense drafts from extracted data (draft status)
+- [x] Return processing results with success/error status per receipt
+- [x] Create MultiReceiptUpload page component
+- [x] Add drag-and-drop file upload zone with file validation
+- [x] Show upload progress bar during processing
+- [x] Display extraction results in review table with status badges
+- [x] Show expense number, title, amount for each result
+- [x] Link to view created expenses directly from results
+- [x] Add route /expenses/multi-upload
+- [x] Add "Multi-Receipt Upload" button to Expenses page header
+- [x] File validation (image only, max 5MB per file)
+- [x] Clear all and upload more functionality
+- [ ] Write tests for batch processing

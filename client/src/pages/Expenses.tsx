@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Search, FileText, TrendingUp, Clock, CheckCircle2, DollarSign, Upload } from "lucide-react";
+import { Plus, Search, FileText, TrendingUp, Clock, CheckCircle2, DollarSign, Upload, Images } from "lucide-react";
 
 export default function Expenses() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -101,10 +101,16 @@ export default function Expenses() {
           <p className="text-muted-foreground">Track and manage business expenses</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/expenses/multi-upload">
+            <Button variant="outline">
+              <Images className="mr-2 h-4 w-4" />
+              Multi-Receipt Upload
+            </Button>
+          </Link>
           <Link href="/expenses/bulk-import">
             <Button variant="outline">
               <Upload className="mr-2 h-4 w-4" />
-              Bulk Import
+              CSV Import
             </Button>
           </Link>
           <Link href="/expenses/create">

@@ -987,6 +987,86 @@ export const appRouter = router({
         };
       }),
     
+    batchUploadReceipts: protectedProcedure
+      .input(z.object({
+        receipts: z.array(z.object({
+          file: z.string(), // base64 encoded image
+          filename: z.string(),
+        })),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const results = [];
+        
+        // Process each receipt
+        for (const receipt of input.receipts) {
+          try {
+            // Decode base64 image
+            const base64Data = receipt.file.split(',')[1] || receipt.file;
+            const buffer = Buffer.from(base64Data, 'base64');
+            
+            // Upload to S3
+            const fileKey = `receipts/${ctx.user.id}/${Date.now()}-${receipt.filename}`;
+            const { url } = await storagePut(fileKey, buffer, 'image/jpeg');
+            
+            // Perform OCR
+            const ocrResult = await performOCR(url);
+            
+            // Extract expense data
+            const extractedData = await extractExpenseData(ocrResult.text);
+            
+            // Auto-create draft expense if extraction successful
+            let expenseId = null;
+            let expenseNumber = null;
+            
+            if (extractedData.success && extractedData.data) {
+              const data = extractedData.data;
+              
+              // Only create if we have at least title and amount
+              if (data.title && data.amount) {
+                expenseNumber = await utils.generateExpenseNumber();
+                const createResult = await db.createExpense({
+                  expenseNumber,
+                  title: data.title,
+                  description: data.description || (data.vendor ? `Vendor: ${data.vendor}` : ''),
+                  amount: data.amount,
+                  expenseDate: data.expenseDate || new Date(),
+                  categoryId: data.categoryId,
+                  budgetId: data.budgetId,
+                  departmentId: data.departmentId,
+                  receiptUrl: url,
+                  status: 'draft',
+                  createdBy: ctx.user.id,
+                });
+                expenseId = createResult.insertId;
+              }
+            }
+            
+            results.push({
+              success: true,
+              filename: receipt.filename,
+              receiptUrl: url,
+              extractedData,
+              expenseId,
+              expenseNumber,
+            });
+          } catch (error: any) {
+            results.push({
+              success: false,
+              filename: receipt.filename,
+              error: error.message || 'Failed to process receipt',
+            });
+          }
+        }
+        
+        return {
+          success: true,
+          results,
+          totalProcessed: results.length,
+          successCount: results.filter(r => r.success).length,
+          errorCount: results.filter(r => !r.success).length,
+        };
+      }),
+    
     bulkImport: protectedProcedure
       .input(z.object({
         expenses: z.array(z.object({
