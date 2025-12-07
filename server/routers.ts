@@ -919,8 +919,13 @@ export const appRouter = router({
         const fileKey = `receipts/${ctx.user.id}/${Date.now()}-${input.filename}`;
         const { url } = await storagePut(fileKey, buffer, 'image/jpeg');
         
-        // Perform OCR on the receipt
-        const ocrResult = await performOCR(url);
+        // Perform OCR on the receipt using RapidOCR
+        const { performRapidOCR } = await import('./rapidocr');
+        const ocrResult = await performRapidOCR(base64Data);
+        
+        if (!ocrResult.success) {
+          throw new Error(ocrResult.error || 'OCR failed');
+        }
         
         // Extract expense data from OCR text
         const extractedData = await extractExpenseData(ocrResult.text);
@@ -944,19 +949,17 @@ export const appRouter = router({
         fieldType: z.enum(['title', 'amount', 'date', 'vendor', 'description']),
       }))
       .mutation(async ({ input }) => {
-        // Note: This is a simplified implementation
-        // In production, you would:
-        // 1. Download the image from S3
-        // 2. Crop to the bounding box coordinates
-        // 3. Perform OCR on the cropped region
-        // 4. Parse the result based on fieldType
+        // Download image from S3
+        const response = await fetch(input.receiptUrl);
+        const buffer = await response.arrayBuffer();
+        const base64Data = Buffer.from(buffer).toString('base64');
         
-        // For now, we'll perform OCR on the full image and return a simulated result
-        const ocrResult = await performOCR(input.receiptUrl);
+        // Perform OCR on the specific region using RapidOCR
+        const { extractRegionText } = await import('./rapidocr');
+        const extractedText = await extractRegionText(base64Data, input.boundingBox);
         
-        // Extract relevant portion based on field type
-        // This is a simplified version - in production you'd crop the image first
-        const extractedData = await extractExpenseData(ocrResult.text);
+        // Parse the extracted text based on field type
+        const extractedData = await extractExpenseData(extractedText);
         
         let value = null;
         if (extractedData.success && extractedData.data) {
@@ -983,7 +986,7 @@ export const appRouter = router({
           success: true,
           fieldType: input.fieldType,
           value,
-          text: ocrResult.text.substring(0, 200), // First 200 chars for preview
+          text: extractedText.substring(0, 200), // First 200 chars for preview
         };
       }),
     
@@ -1008,15 +1011,20 @@ export const appRouter = router({
             const fileKey = `receipts/${ctx.user.id}/${Date.now()}-${receipt.filename}`;
             const { url } = await storagePut(fileKey, buffer, 'image/jpeg');
             
-            // Perform OCR
-            const ocrResult = await performOCR(url);
+            // Perform OCR using RapidOCR
+            const { performRapidOCR } = await import('./rapidocr');
+            const ocrResult = await performRapidOCR(base64Data);
+            
+            if (!ocrResult.success) {
+              throw new Error(ocrResult.error || 'OCR failed');
+            }
             
             // Extract expense data
             const extractedData = await extractExpenseData(ocrResult.text);
             
             // Auto-create draft expense if extraction successful
-            let expenseId = null;
-            let expenseNumber = null;
+            let expenseId: number | undefined = undefined;
+            let expenseNumber: string | undefined = undefined;
             
             if (extractedData.success && extractedData.data) {
               const data = extractedData.data;

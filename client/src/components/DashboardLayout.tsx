@@ -38,6 +38,7 @@ const menuItems = [
   { icon: FileText, label: "Invoices", path: "/invoices" },
   { icon: ShoppingCart, label: "Purchase Orders", path: "/purchase-orders" },
   { icon: Receipt, label: "Expenses", path: "/expenses" },
+  { icon: Truck, label: "Deliveries", path: "/deliveries" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
