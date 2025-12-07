@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Upload, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function CreateExpense() {
@@ -31,11 +31,36 @@ export default function CreateExpense() {
     new Date().toISOString().split("T")[0]
   );
   const [notes, setNotes] = useState("");
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState<string>("");
+  const [isUploading, setIsUploading] = useState(false);
 
   const { data: budgetCategories = [] } = trpc.budgetCategories.list.useQuery();
   const { data: budgets = [] } = trpc.budgets.list.useQuery();
   const { data: departments = [] } = trpc.departments.list.useQuery();
   const { data: tenders = [] } = trpc.tenders.list.useQuery();
+
+  const uploadReceiptMutation = trpc.expenses.uploadReceipt.useMutation({
+    onSuccess: (data) => {
+      setReceiptUrl(data.receiptUrl);
+      setIsUploading(false);
+      toast.success("Receipt uploaded and processed");
+      
+      // Auto-populate fields from OCR extraction
+      if (data.extractedData?.success && data.extractedData.data) {
+        const extracted = data.extractedData.data;
+        if (extracted.title) setTitle(extracted.title);
+        if (extracted.amount) setAmount((extracted.amount / 100).toString());
+        if (extracted.expenseDate) setExpenseDate(new Date(extracted.expenseDate).toISOString().split("T")[0]);
+        if (extracted.vendor) setDescription(`Vendor: ${extracted.vendor}`);
+        if (extracted.description && !description) setDescription(extracted.description);
+      }
+    },
+    onError: (error) => {
+      setIsUploading(false);
+      toast.error("Failed to upload receipt: " + error.message);
+    },
+  });
 
   const createMutation = trpc.expenses.create.useMutation({
     onSuccess: (data) => {
@@ -84,12 +109,44 @@ export default function CreateExpense() {
       tenderId: tenderId ? parseInt(tenderId) : undefined,
       amount: expenseAmountCents,
       expenseDate: new Date(expenseDate),
+      receiptUrl: receiptUrl || undefined,
       notes: notes || undefined,
     });
   };
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File size must be less than 5MB');
+      return;
+    }
+
+    setReceiptFile(file);
+    setIsUploading(true);
+
+    // Convert to base64 and upload
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      uploadReceiptMutation.mutate({
+        file: base64,
+        filename: file.name,
+      });
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -175,6 +232,59 @@ export default function CreateExpense() {
                 rows={3}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Receipt Upload */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Receipt Upload (Optional)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="receipt">Upload Receipt Image</Label>
+              <div className="flex items-center gap-4">
+                <Input
+                  id="receipt"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  disabled={isUploading}
+                  className="cursor-pointer"
+                />
+                {isUploading && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Processing receipt...
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Upload a receipt image to automatically extract expense details using OCR. Supported
+                formats: JPG, PNG. Max size: 5MB.
+              </p>
+            </div>
+
+            {receiptUrl && (
+              <div className="space-y-2">
+                <Label>Receipt Preview</Label>
+                <div className="border rounded-lg p-4">
+                  <img
+                    src={receiptUrl}
+                    alt="Receipt"
+                    className="max-w-full h-auto max-h-64 object-contain"
+                  />
+                </div>
+                <Alert>
+                  <Upload className="h-4 w-4" />
+                  <AlertTitle>Receipt Uploaded</AlertTitle>
+                  <AlertDescription>
+                    Expense details have been automatically extracted and populated in the form.
+                    Please review and adjust as needed.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
           </CardContent>
         </Card>
 

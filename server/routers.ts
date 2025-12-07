@@ -837,6 +837,7 @@ export const appRouter = router({
         tenderId: z.number().optional(),
         amount: z.number(),
         expenseDate: z.date().optional(),
+        receiptUrl: z.string().optional(),
         notes: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -858,6 +859,7 @@ export const appRouter = router({
         description: z.string().optional(),
         amount: z.number().optional(),
         status: z.enum(["draft", "pending", "approved", "rejected", "paid"]).optional(),
+        receiptUrl: z.string().optional(),
         notes: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
@@ -901,6 +903,33 @@ export const appRouter = router({
         }
         
         return { success: true };
+      }),
+    
+    uploadReceipt: protectedProcedure
+      .input(z.object({
+        file: z.string(), // base64 encoded image
+        filename: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Decode base64 image
+        const base64Data = input.file.split(',')[1] || input.file;
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        // Upload to S3
+        const fileKey = `receipts/${ctx.user.id}/${Date.now()}-${input.filename}`;
+        const { url } = await storagePut(fileKey, buffer, 'image/jpeg');
+        
+        // Perform OCR on the receipt
+        const ocrResult = await performOCR(url);
+        
+        // Extract expense data from OCR text
+        const extractedData = await extractExpenseData(ocrResult.text);
+        
+        return {
+          success: true,
+          receiptUrl: url,
+          extractedData,
+        };
       }),
   }),
 

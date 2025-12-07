@@ -226,6 +226,23 @@ export default function ExpenseDetails() {
             </div>
           )}
 
+          {expense.receiptUrl && (
+            <div>
+              <Label className="text-muted-foreground">Receipt</Label>
+              <div className="mt-2 border rounded-lg p-4 bg-muted/50">
+                <img
+                  src={expense.receiptUrl}
+                  alt="Receipt"
+                  className="max-w-full h-auto max-h-96 object-contain cursor-pointer"
+                  onClick={() => window.open(expense.receiptUrl!, '_blank')}
+                />
+                <p className="text-sm text-muted-foreground mt-2">
+                  Click image to view full size
+                </p>
+              </div>
+            </div>
+          )}
+
           {expense.notes && (
             <div>
               <Label className="text-muted-foreground">Notes</Label>

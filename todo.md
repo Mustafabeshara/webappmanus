@@ -104,3 +104,16 @@
 - [x] Wrote comprehensive tests for Expenses module (10 tests)
 - [x] All tests passing (100%)
 - [x] Updated todo.md with completed items
+
+### Expense Receipt Attachments (COMPLETE ✅)
+- [x] Add receiptUrl field to expenses schema
+- [x] Create database migration for receipt field (0004_serious_mandarin.sql)
+- [x] Add file upload to CreateExpense page with preview
+- [x] Display receipt image in ExpenseDetails page (clickable to open full size)
+- [x] Implement S3 upload in backend (uploadReceipt endpoint)
+- [x] Integrate OCR for receipt extraction (performOCR)
+- [x] Auto-populate expense fields from OCR results (title, amount, date, vendor)
+- [x] File validation (image only, max 5MB)
+- [x] Loading states during upload and processing
+- [x] Tests for receipt URL storage (2 passing tests)
+- [x] OCR tests skipped (require external services, tested manually)
