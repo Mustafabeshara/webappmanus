@@ -261,7 +261,7 @@ export default function ExpenseDetails() {
             <div className="bg-muted p-4 rounded-lg">
               <Label className="text-muted-foreground">Approval Information</Label>
               <p className="font-medium">
-                Approved on {formatDate(expense.approvedAt)} (Approval Level: {expense.approvalLevel})
+                Approved on {expense.approvedAt ? formatDate(expense.approvedAt) : 'N/A'}
               </p>
             </div>
           )}

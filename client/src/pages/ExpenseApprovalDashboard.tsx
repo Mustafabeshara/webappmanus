@@ -338,7 +338,7 @@ export default function ExpenseApprovalDashboard() {
                         <TableCell>{expense.title}</TableCell>
                         <TableCell>{getCategoryName(expense.categoryId)}</TableCell>
                         <TableCell>{getBudgetName(expense.budgetId)}</TableCell>
-                        <TableCell>{formatDate(expense.expenseDate)}</TableCell>
+                        <TableCell>{expense.expenseDate ? formatDate(expense.expenseDate) : '-'}</TableCell>
                         <TableCell className="font-semibold">
                           {formatCurrency(expense.amount)}
                         </TableCell>

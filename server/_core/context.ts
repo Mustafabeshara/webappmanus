@@ -1,6 +1,7 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
 import { sdk } from "./sdk";
+import { isSessionExpired } from "./session";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -15,6 +16,12 @@ export async function createContext(
 
   try {
     user = await sdk.authenticateRequest(opts.req);
+    
+    // Check session timeout (H5: Session Timeout Configuration)
+    if (user && isSessionExpired(user)) {
+      console.log(`Session expired for user ${user.id}`);
+      user = null;
+    }
   } catch (error) {
     // Authentication is optional for public procedures.
     user = null;

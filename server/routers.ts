@@ -1204,7 +1204,7 @@ export const appRouter = router({
             const isDuplicate = allExpenses.some(e => 
               e.title === expense.title && 
               e.amount === expense.amount && 
-              new Date(e.expenseDate).toISOString().split('T')[0] === expense.expenseDate
+              e.expenseDate && new Date(e.expenseDate).toISOString().split('T')[0] === expense.expenseDate
             );
             
             if (isDuplicate) {
@@ -1257,10 +1257,10 @@ export const appRouter = router({
         // Filter by date range if provided
         let filtered = expenses.filter(e => e.status === 'approved' || e.status === 'paid');
         if (input.startDate) {
-          filtered = filtered.filter(e => new Date(e.expenseDate) >= input.startDate!);
+          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) >= input.startDate!);
         }
         if (input.endDate) {
-          filtered = filtered.filter(e => new Date(e.expenseDate) <= input.endDate!);
+          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) <= input.endDate!);
         }
         
         // Group by category
@@ -1296,10 +1296,10 @@ export const appRouter = router({
         // Filter by date range and approved status
         let filtered = expenses.filter(e => e.status === 'approved' || e.status === 'paid');
         if (input.startDate) {
-          filtered = filtered.filter(e => new Date(e.expenseDate) >= input.startDate!);
+          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) >= input.startDate!);
         }
         if (input.endDate) {
-          filtered = filtered.filter(e => new Date(e.expenseDate) <= input.endDate!);
+          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) <= input.endDate!);
         }
         
         // Group by department
@@ -1335,13 +1335,13 @@ export const appRouter = router({
         // Filter approved expenses by date range
         let filtered = expenses.filter(e => e.status === 'approved' || e.status === 'paid');
         if (input.startDate) {
-          filtered = filtered.filter(e => new Date(e.expenseDate) >= input.startDate!);
+          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) >= input.startDate!);
         }
         if (input.endDate) {
-          filtered = filtered.filter(e => new Date(e.expenseDate) <= input.endDate!);
+          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) <= input.endDate!);
         }
         
-        // Calculate spending by budget
+        // Calculate variance by budget
         const spendingByBudget = new Map<number, number>();
         for (const expense of filtered) {
           if (!expense.budgetId) continue;
@@ -1379,6 +1379,7 @@ export const appRouter = router({
         
         // Filter approved expenses by date range
         const filtered = expenses.filter(e => {
+          if (!e.expenseDate) return false;
           const date = new Date(e.expenseDate);
           return (e.status === 'approved' || e.status === 'paid') &&
                  date >= input.startDate &&
@@ -1388,6 +1389,7 @@ export const appRouter = router({
         // Group by time period
         const byPeriod = new Map<string, { total: number; count: number }>();
         for (const expense of filtered) {
+          if (!expense.expenseDate) continue;
           const date = new Date(expense.expenseDate);
           let periodKey: string;
           

@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, decimal } from "drizzle-orm/mysql-core";
+import { mysqlTable, int, varchar, text, timestamp, boolean, mysqlEnum, index } from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
 
 /**
@@ -83,7 +83,13 @@ export const budgets = mysqlTable("budgets", {
   createdBy: int("createdBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  categoryIdIdx: index("category_id_idx").on(table.categoryId),
+  departmentIdIdx: index("department_id_idx").on(table.departmentId),
+  createdByIdx: index("created_by_idx").on(table.createdBy),
+  statusIdx: index("status_idx").on(table.status),
+  fiscalYearIdx: index("fiscal_year_idx").on(table.fiscalYear),
+}));
 
 /**
  * Suppliers and manufacturers
@@ -333,7 +339,7 @@ export const invoiceItems = mysqlTable("invoice_items", {
  */
 export const expenses = mysqlTable("expenses", {
   id: int("id").autoincrement().primaryKey(),
-  expenseNumber: varchar("expenseNumber", { length: 100 }).notNull().unique(),
+  expenseNumber: varchar("expenseNumber", { length: 50 }).notNull().unique(),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
   categoryId: int("categoryId").notNull(),
@@ -341,18 +347,25 @@ export const expenses = mysqlTable("expenses", {
   departmentId: int("departmentId"),
   tenderId: int("tenderId"),
   amount: int("amount").notNull(), // in cents
-  expenseDate: timestamp("expenseDate").defaultNow().notNull(),
+  expenseDate: timestamp("expenseDate"),
+  receiptUrl: text("receiptUrl"),
   status: mysqlEnum("status", ["draft", "pending", "approved", "rejected", "paid"]).default("draft").notNull(),
-  approvalLevel: int("approvalLevel").default(0).notNull(),
+  approvalStatus: mysqlEnum("approvalStatus", ["pending", "approved", "rejected"]).default("pending").notNull(),
   approvedBy: int("approvedBy"),
   approvedAt: timestamp("approvedAt"),
   rejectionReason: text("rejectionReason"),
-  receiptUrl: text("receiptUrl"),
   notes: text("notes"),
   createdBy: int("createdBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  budgetIdIdx: index("budget_id_idx").on(table.budgetId),
+  departmentIdIdx: index("department_id_idx").on(table.departmentId),
+  createdByIdx: index("created_by_idx").on(table.createdBy),
+  statusIdx: index("status_idx").on(table.status),
+  expenseDateIdx: index("expense_date_idx").on(table.expenseDate),
+  categoryIdIdx: index("category_id_idx").on(table.categoryId),
+}));
 
 /**
  * Purchase Orders for procurement workflow

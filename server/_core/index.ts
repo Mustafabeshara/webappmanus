@@ -7,6 +7,10 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { validateEnvironment } from "./envValidation";
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -28,14 +32,75 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  // Validate environment variables at startup (L7)
+  validateEnvironment();
+
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  // OAuth callback under /api/oauth/callback
+
+  // Security headers (L9: Helmet)
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "https:", "blob:"],
+        connectSrc: ["'self'", "https://api.manus.im", "wss:"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }));
+
+  // CORS configuration (M7)
+  app.use(cors({
+    origin: process.env.FRONTEND_URL || true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }));
+
+  // Rate limiting (H4)
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // stricter limit for auth endpoints
+    skipSuccessfulRequests: true,
+    message: 'Too many authentication attempts, please try again later.',
+  });
+
+  // Configure body parser with size limits (M8)
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ limit: "10mb", extended: true }));
+
+  // Health check endpoint (L8)
+  app.get('/health', async (req, res) => {
+    try {
+      res.json({ 
+        status: 'healthy', 
+        timestamp: new Date().toISOString(),
+        version: process.env.npm_package_version || '1.0.0',
+      });
+    } catch (error) {
+      res.status(503).json({ 
+        status: 'unhealthy', 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+  // OAuth callback under /api/oauth/callback (with rate limiting)
+  app.use('/api/oauth', authLimiter);
   registerOAuthRoutes(app);
-  // tRPC API
+  // tRPC API (with rate limiting)
+  app.use('/api/trpc', apiLimiter);
   app.use(
     "/api/trpc",
     createExpressMiddleware({
