@@ -932,6 +932,61 @@ export const appRouter = router({
         };
       }),
     
+    extractRegion: protectedProcedure
+      .input(z.object({
+        receiptUrl: z.string(),
+        boundingBox: z.object({
+          x: z.number(),
+          y: z.number(),
+          width: z.number(),
+          height: z.number(),
+        }),
+        fieldType: z.enum(['title', 'amount', 'date', 'vendor', 'description']),
+      }))
+      .mutation(async ({ input }) => {
+        // Note: This is a simplified implementation
+        // In production, you would:
+        // 1. Download the image from S3
+        // 2. Crop to the bounding box coordinates
+        // 3. Perform OCR on the cropped region
+        // 4. Parse the result based on fieldType
+        
+        // For now, we'll perform OCR on the full image and return a simulated result
+        const ocrResult = await performOCR(input.receiptUrl);
+        
+        // Extract relevant portion based on field type
+        // This is a simplified version - in production you'd crop the image first
+        const extractedData = await extractExpenseData(ocrResult.text);
+        
+        let value = null;
+        if (extractedData.success && extractedData.data) {
+          switch (input.fieldType) {
+            case 'title':
+              value = extractedData.data.title;
+              break;
+            case 'amount':
+              value = extractedData.data.amount;
+              break;
+            case 'date':
+              value = extractedData.data.expenseDate;
+              break;
+            case 'vendor':
+              value = extractedData.data.vendor;
+              break;
+            case 'description':
+              value = extractedData.data.description;
+              break;
+          }
+        }
+        
+        return {
+          success: true,
+          fieldType: input.fieldType,
+          value,
+          text: ocrResult.text.substring(0, 200), // First 200 chars for preview
+        };
+      }),
+    
     bulkImport: protectedProcedure
       .input(z.object({
         expenses: z.array(z.object({

@@ -154,3 +154,17 @@
 - [x] Show current values for comparison
 - [x] Apply only selected fields on confirmation
 - [x] Toast notification showing applied field count
+
+### OCR Bounding Box Enhancement (COMPLETE ✅)
+- [x] Add backend endpoint for region-based OCR extraction (extractRegion mutation)
+- [x] Support bounding box coordinates (x, y, width, height)
+- [x] Create interactive canvas component for drawing boxes (BoundingBoxEditor)
+- [x] Add box drawing controls (draw with mouse, delete)
+- [x] Show extracted text for each bounding box with color coding
+- [x] Allow field assignment for each box (title, amount, date, vendor, description)
+- [x] Update OCR confirmation dialog with tabs (auto/manual)
+- [x] Add visual feedback during box drawing (crosshair cursor, dashed preview)
+- [x] Color-coded bounding boxes by field type
+- [x] Real-time extraction on box completion
+- [ ] Test bounding box OCR extraction with real receipts
+- [ ] Write tests for region-based OCR

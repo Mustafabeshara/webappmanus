@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { BoundingBoxEditor } from "@/components/BoundingBoxEditor";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function CreateExpense() {
   const [, setLocation] = useLocation();
@@ -47,11 +49,14 @@ export default function CreateExpense() {
   const [showOcrConfirmation, setShowOcrConfirmation] = useState(false);
   const [extractedData, setExtractedData] = useState<any>(null);
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
+  const [showBoundingBoxEditor, setShowBoundingBoxEditor] = useState(false);
 
   const { data: budgetCategories = [] } = trpc.budgetCategories.list.useQuery();
   const { data: budgets = [] } = trpc.budgets.list.useQuery();
   const { data: departments = [] } = trpc.departments.list.useQuery();
   const { data: tenders = [] } = trpc.tenders.list.useQuery();
+
+  const extractRegionMutation = trpc.expenses.extractRegion.useMutation();
 
   const uploadReceiptMutation = trpc.expenses.uploadReceipt.useMutation({
     onSuccess: (data) => {
@@ -170,6 +175,55 @@ export default function CreateExpense() {
       newSelected.add(field);
     }
     setSelectedFields(newSelected);
+  };
+
+  const handleExtractRegion = async (box: any) => {
+    if (!receiptUrl) return null;
+    
+    const result = await extractRegionMutation.mutateAsync({
+      receiptUrl,
+      boundingBox: {
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+      },
+      fieldType: box.fieldType,
+    });
+    
+    return result;
+  };
+
+  const handleApplyBoundingBoxes = (boxes: any[]) => {
+    // Apply extracted values from bounding boxes
+    boxes.forEach((box) => {
+      if (box.extractedValue !== null && box.extractedValue !== undefined) {
+        switch (box.fieldType) {
+          case 'title':
+            setTitle(box.extractedValue);
+            break;
+          case 'amount':
+            if (typeof box.extractedValue === 'number') {
+              setAmount((box.extractedValue / 100).toString());
+            }
+            break;
+          case 'date':
+            if (box.extractedValue) {
+              setExpenseDate(new Date(box.extractedValue).toISOString().split('T')[0]);
+            }
+            break;
+          case 'vendor':
+            setDescription(`Vendor: ${box.extractedValue}`);
+            break;
+          case 'description':
+            if (!description) setDescription(box.extractedValue);
+            break;
+        }
+      }
+    });
+    
+    setShowOcrConfirmation(false);
+    toast.success(`Applied ${boxes.length} field(s) from bounding boxes`);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -471,15 +525,21 @@ export default function CreateExpense() {
 
       {/* OCR Confirmation Dialog */}
       <Dialog open={showOcrConfirmation} onOpenChange={setShowOcrConfirmation}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Review Extracted Data</DialogTitle>
             <DialogDescription>
-              Select which fields you want to apply from the receipt. Uncheck any fields that look incorrect.
+              Choose automatic extraction or manually draw bounding boxes to correct errors.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
+          <Tabs defaultValue="auto" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="auto">Auto-Extracted</TabsTrigger>
+              <TabsTrigger value="manual">Manual Selection</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="auto" className="space-y-4 py-4">
             {extractedData?.data && (
               <div className="space-y-3">
                 {/* Title */}
@@ -595,41 +655,46 @@ export default function CreateExpense() {
                 )}
               </div>
             )}
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSelectedFields(new Set());
-              }}
-            >
-              Deselect All
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const allFields = new Set<string>();
-                if (extractedData?.data.title) allFields.add('title');
-                if (extractedData?.data.amount) allFields.add('amount');
-                if (extractedData?.data.expenseDate) allFields.add('expenseDate');
-                if (extractedData?.data.vendor || extractedData?.data.description) allFields.add('description');
-                setSelectedFields(allFields);
-              }}
-            >
-              Select All
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setShowOcrConfirmation(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleConfirmOcr} disabled={selectedFields.size === 0}>
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Apply Selected ({selectedFields.size})
-            </Button>
-          </DialogFooter>
+            
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelectedFields(new Set());
+                }}
+              >
+                Deselect All
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const allFields = new Set<string>();
+                  if (extractedData?.data.title) allFields.add('title');
+                  if (extractedData?.data.amount) allFields.add('amount');
+                  if (extractedData?.data.expenseDate) allFields.add('expenseDate');
+                  if (extractedData?.data.vendor || extractedData?.data.description) allFields.add('description');
+                  setSelectedFields(allFields);
+                }}
+              >
+                Select All
+              </Button>
+              <Button onClick={handleConfirmOcr} disabled={selectedFields.size === 0}>
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Apply Selected ({selectedFields.size})
+              </Button>
+            </div>
+            </TabsContent>
+            
+            <TabsContent value="manual" className="py-4">
+              {receiptUrl && (
+                <BoundingBoxEditor
+                  imageUrl={receiptUrl}
+                  onExtract={handleExtractRegion}
+                  onApply={handleApplyBoundingBoxes}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>
