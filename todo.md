@@ -222,3 +222,19 @@
 - [x] Fix any column name mismatches permanently (added approvalLevel INT column)
 - [x] Test dashboard loading (working perfectly with all stats)
 - [x] Verify fix persists after server restart (permanent database change)
+
+
+## GITHUB PUSH
+- [ ] Configure GitHub remote repository
+- [ ] Add all changes and commit
+- [ ] Push to GitHub repository
+
+## TENDER MODULE RESTRUCTURE
+- [ ] Split Tender page into two tabs (Our Tenders vs All Tenders)
+- [ ] Add tender participation status field to database
+- [ ] Create document management system for tenders
+- [ ] Add document categories (registration, catalogs, submissions)
+- [ ] Integrate FileUpload component for tender documents
+- [ ] Add document list view with download/delete actions
+- [ ] Test tender document upload and management
+- [ ] Create final checkpoint
