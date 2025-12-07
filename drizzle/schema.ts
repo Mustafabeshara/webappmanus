@@ -1,4 +1,4 @@
-import { mysqlTable, int, varchar, text, timestamp, boolean, mysqlEnum, index } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, decimal } from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
 
 /**
@@ -11,10 +11,6 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  phone: varchar("phone", { length: 20 }),
-  departmentId: int("departmentId"),
-  position: varchar("position", { length: 100 }),
-  status: mysqlEnum("status", ["active", "inactive", "suspended"]).default("active").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -83,13 +79,7 @@ export const budgets = mysqlTable("budgets", {
   createdBy: int("createdBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (table) => ({
-  categoryIdIdx: index("category_id_idx").on(table.categoryId),
-  departmentIdIdx: index("department_id_idx").on(table.departmentId),
-  createdByIdx: index("created_by_idx").on(table.createdBy),
-  statusIdx: index("status_idx").on(table.status),
-  fiscalYearIdx: index("fiscal_year_idx").on(table.fiscalYear),
-}));
+});
 
 /**
  * Suppliers and manufacturers
@@ -339,7 +329,7 @@ export const invoiceItems = mysqlTable("invoice_items", {
  */
 export const expenses = mysqlTable("expenses", {
   id: int("id").autoincrement().primaryKey(),
-  expenseNumber: varchar("expenseNumber", { length: 50 }).notNull().unique(),
+  expenseNumber: varchar("expenseNumber", { length: 100 }).notNull().unique(),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
   categoryId: int("categoryId").notNull(),
@@ -347,98 +337,16 @@ export const expenses = mysqlTable("expenses", {
   departmentId: int("departmentId"),
   tenderId: int("tenderId"),
   amount: int("amount").notNull(), // in cents
-  expenseDate: timestamp("expenseDate"),
-  receiptUrl: text("receiptUrl"),
+  expenseDate: timestamp("expenseDate").defaultNow().notNull(),
   status: mysqlEnum("status", ["draft", "pending", "approved", "rejected", "paid"]).default("draft").notNull(),
-  approvalStatus: mysqlEnum("approvalStatus", ["pending", "approved", "rejected"]).default("pending").notNull(),
-  approvedBy: int("approvedBy"),
-  approvedAt: timestamp("approvedAt"),
-  rejectionReason: text("rejectionReason"),
-  notes: text("notes"),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (table) => ({
-  budgetIdIdx: index("budget_id_idx").on(table.budgetId),
-  departmentIdIdx: index("department_id_idx").on(table.departmentId),
-  createdByIdx: index("created_by_idx").on(table.createdBy),
-  statusIdx: index("status_idx").on(table.status),
-  expenseDateIdx: index("expense_date_idx").on(table.expenseDate),
-  categoryIdIdx: index("category_id_idx").on(table.categoryId),
-}));
-
-/**
- * Purchase Orders for procurement workflow
- */
-export const purchaseOrders = mysqlTable("purchase_orders", {
-  id: int("id").autoincrement().primaryKey(),
-  poNumber: varchar("poNumber", { length: 100 }).notNull().unique(),
-  supplierId: int("supplierId").notNull(),
-  tenderId: int("tenderId"),
-  budgetId: int("budgetId"),
-  issueDate: timestamp("issueDate").defaultNow().notNull(),
-  deliveryDate: timestamp("deliveryDate"),
-  status: mysqlEnum("status", ["draft", "submitted", "approved", "rejected", "completed", "cancelled"]).default("draft").notNull(),
   approvalLevel: int("approvalLevel").default(0).notNull(),
   approvedBy: int("approvedBy"),
   approvedAt: timestamp("approvedAt"),
   rejectionReason: text("rejectionReason"),
-  subtotal: int("subtotal").notNull(), // in cents
-  taxAmount: int("taxAmount").default(0).notNull(),
-  totalAmount: int("totalAmount").notNull(),
-  paymentTerms: text("paymentTerms"),
-  deliveryAddress: text("deliveryAddress"),
   notes: text("notes"),
-  receivedStatus: mysqlEnum("receivedStatus", ["not_received", "partially_received", "fully_received"]).default("not_received").notNull(),
-  receivedDate: timestamp("receivedDate"),
   createdBy: int("createdBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
-/**
- * Purchase Order line items
- */
-export const purchaseOrderItems = mysqlTable("purchase_order_items", {
-  id: int("id").autoincrement().primaryKey(),
-  poId: int("poId").notNull(),
-  productId: int("productId"),
-  description: text("description").notNull(),
-  quantity: int("quantity").notNull(),
-  receivedQuantity: int("receivedQuantity").default(0).notNull(),
-  unitPrice: int("unitPrice").notNull(), // in cents
-  totalPrice: int("totalPrice").notNull(),
-  notes: text("notes"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
-/**
- * Goods Receipt records for tracking PO deliveries
- */
-export const goodsReceipts = mysqlTable("goods_receipts", {
-  id: int("id").autoincrement().primaryKey(),
-  poId: int("poId").notNull(),
-  receiptNumber: varchar("receiptNumber", { length: 100 }).notNull().unique(),
-  receiptDate: timestamp("receiptDate").defaultNow().notNull(),
-  receivedBy: int("receivedBy").notNull(),
-  notes: text("notes"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
-/**
- * Goods Receipt line items
- */
-export const goodsReceiptItems = mysqlTable("goods_receipt_items", {
-  id: int("id").autoincrement().primaryKey(),
-  receiptId: int("receiptId").notNull(),
-  poItemId: int("poItemId").notNull(),
-  quantityReceived: int("quantityReceived").notNull(),
-  batchNumber: varchar("batchNumber", { length: 100 }),
-  expiryDate: timestamp("expiryDate"),
-  condition: mysqlEnum("condition", ["good", "damaged", "defective"]).default("good").notNull(),
-  notes: text("notes"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 /**
@@ -618,53 +526,6 @@ export const settings = mysqlTable("settings", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-/**
- * Tasks for project and work management
- */
-export const tasks = mysqlTable("tasks", {
-  id: int("id").autoincrement().primaryKey(),
-  title: varchar("title", { length: 255 }).notNull(),
-  description: text("description"),
-  assigneeId: int("assigneeId"), // user ID
-  creatorId: int("creatorId").notNull(), // user who created the task
-  priority: mysqlEnum("priority", ["low", "medium", "high", "urgent"]).default("medium").notNull(),
-  status: mysqlEnum("status", ["todo", "in_progress", "review", "done", "cancelled"]).default("todo").notNull(),
-  dueDate: timestamp("dueDate"),
-  completedAt: timestamp("completedAt"),
-  // Link to other modules
-  relatedModule: varchar("relatedModule", { length: 50 }), // tender, budget, invoice, po, expense, delivery
-  relatedId: int("relatedId"), // ID of the related entity
-  tags: text("tags"), // JSON array of tags
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
-/**
- * Comments on tasks for collaboration
- */
-export const taskComments = mysqlTable("task_comments", {
-  id: int("id").autoincrement().primaryKey(),
-  taskId: int("taskId").notNull(),
-  userId: int("userId").notNull(),
-  comment: text("comment").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
-/**
- * User dashboard widget preferences
- */
-export const widgetPreferences = mysqlTable("widget_preferences", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  widgetType: varchar("widgetType", { length: 100 }).notNull(), // budget_overview, pending_approvals, low_stock, etc.
-  position: text("position").notNull(), // JSON: {x, y, w, h}
-  settings: text("settings"), // JSON: widget-specific settings
-  isVisible: boolean("isVisible").default(true).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
 // Type exports
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -689,11 +550,3 @@ export type Forecast = typeof forecasts.$inferSelect;
 export type Anomaly = typeof anomalies.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
-export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
-export type PurchaseOrderItem = typeof purchaseOrderItems.$inferSelect;
-export type GoodsReceipt = typeof goodsReceipts.$inferSelect;
-export type GoodsReceiptItem = typeof goodsReceiptItems.$inferSelect;
-export type Task = typeof tasks.$inferSelect;
-export type TaskComment = typeof taskComments.$inferSelect;
-export type WidgetPreference = typeof widgetPreferences.$inferSelect;
-export type InsertWidgetPreference = typeof widgetPreferences.$inferInsert;

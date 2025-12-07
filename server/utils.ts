@@ -27,20 +27,6 @@ export function generateExpenseNumber(): string {
   return `EXP-${year}${month}-${random}`;
 }
 
-export function generatePONumber(): string {
-  const year = new Date().getFullYear();
-  const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  const random = nanoid(6).toUpperCase();
-  return `PO-${year}${month}-${random}`;
-}
-
-export function generateGoodsReceiptNumber(): string {
-  const year = new Date().getFullYear();
-  const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  const random = nanoid(6).toUpperCase();
-  return `GRN-${year}${month}-${random}`;
-}
-
 export function generateDeliveryNumber(): string {
   const year = new Date().getFullYear();
   const month = String(new Date().getMonth() + 1).padStart(2, '0');

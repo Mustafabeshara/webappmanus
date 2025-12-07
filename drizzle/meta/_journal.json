@@ -22,48 +22,6 @@
       "when": 1765055651994,
       "tag": "0002_grey_namorita",
       "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1765107605298,
-      "tag": "0003_flashy_king_bedlam",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "5",
-      "when": 1765109153627,
-      "tag": "0004_serious_mandarin",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "5",
-      "when": 1765117022647,
-      "tag": "0005_next_daredevil",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "5",
-      "when": 1765117956731,
-      "tag": "0006_nostalgic_lenny_balinger",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "5",
-      "when": 1765123552085,
-      "tag": "0007_freezing_miek",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "5",
-      "when": 1765125905461,
-      "tag": "0008_lean_forge",
-      "breakpoints": true
     }
   ]
 }

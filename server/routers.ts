@@ -8,10 +8,7 @@ import * as db from "./db";
 import * as utils from "./utils";
 import { storagePut } from "./storage";
 import { performOCR, extractTenderData, extractInvoiceData, extractExpenseData, generateForecast, detectAnomalies, analyzeTenderWinRate } from "./aiService";
-import * as dashboardAnalytics from "./dashboardAnalytics";
 import { notifyOwner } from "./_core/notification";
-import { createPermissionMiddleware, checkResourceAccess, logAudit, validateApproval } from "./_core/permissions";
-import * as notificationHelpers from "./_core/notificationHelpers";
 
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -42,68 +39,6 @@ async function checkPermission(userId: number, module: string, action: 'view' | 
 export const appRouter = router({
   system: systemRouter,
   
-  // ============================================
-  // DASHBOARD ANALYTICS
-  // ============================================
-  dashboard: router({
-    tenderAnalytics: protectedProcedure
-      .input(z.object({
-        startDate: z.date().optional(),
-        endDate: z.date().optional(),
-      }))
-      .query(async ({ input }) => {
-        return await dashboardAnalytics.getTenderAnalytics(input.startDate, input.endDate);
-      }),
-    
-    budgetAnalytics: protectedProcedure
-      .input(z.object({
-        fiscalYear: z.number().optional(),
-      }))
-      .query(async ({ input }) => {
-        return await dashboardAnalytics.getBudgetAnalytics(input.fiscalYear);
-      }),
-    
-    invoiceAnalytics: protectedProcedure
-      .input(z.object({
-        startDate: z.date().optional(),
-        endDate: z.date().optional(),
-      }))
-      .query(async ({ input }) => {
-        return await dashboardAnalytics.getInvoiceAnalytics(input.startDate, input.endDate);
-      }),
-    
-    purchaseOrderAnalytics: protectedProcedure
-      .input(z.object({
-        startDate: z.date().optional(),
-        endDate: z.date().optional(),
-      }))
-      .query(async ({ input }) => {
-        return await dashboardAnalytics.getPurchaseOrderAnalytics(input.startDate, input.endDate);
-      }),
-    
-    inventoryAnalytics: protectedProcedure
-      .query(async () => {
-        return await dashboardAnalytics.getInventoryAnalytics();
-      }),
-    
-    deliveryAnalytics: protectedProcedure
-      .input(z.object({
-        startDate: z.date().optional(),
-        endDate: z.date().optional(),
-      }))
-      .query(async ({ input }) => {
-        return await dashboardAnalytics.getDeliveryAnalytics(input.startDate, input.endDate);
-      }),
-    
-    recentActivity: protectedProcedure
-      .input(z.object({
-        limit: z.number().default(10),
-      }))
-      .query(async ({ input }) => {
-        return await dashboardAnalytics.getRecentActivity(input.limit);
-      }),
-  }),
-  
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -127,7 +62,7 @@ export const appRouter = router({
         role: z.enum(["admin", "user"]),
       }))
       .mutation(async ({ input }) => {
-        await db.updateUser(input.userId, { role: input.role });
+        await db.updateUserRole(input.userId, input.role);
         return { success: true };
       }),
     
@@ -148,7 +83,7 @@ export const appRouter = router({
         canApprove: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
-        await db.setUserPermission(input as any);
+        await db.upsertUserPermission(input as any);
         return { success: true };
       }),
   }),
@@ -187,8 +122,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        // Department update functionality not yet implemented
-        throw new TRPCError({ code: 'NOT_IMPLEMENTED', message: 'Department updates not yet implemented' });
+        await db.updateDepartment(id, data);
         return { success: true };
       }),
   }),
@@ -221,24 +155,17 @@ export const appRouter = router({
   // BUDGETS
   // ============================================
   budgets: router({
-    list: protectedProcedure
-      .use(createPermissionMiddleware('budgets', 'view'))
-      .query(async () => {
-        return await db.getAllBudgets();
-      }),
+    list: protectedProcedure.query(async () => {
+      return await db.getAllBudgets();
+    }),
     
     get: protectedProcedure
-      .use(createPermissionMiddleware('budgets', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input, ctx }) => {
-        const budget = await db.getBudgetById(input.id);
-        if (!budget) throw new TRPCError({ code: 'NOT_FOUND', message: 'Budget not found' });
-        await checkResourceAccess(ctx, budget, 'budget');
-        return budget;
+      .query(async ({ input }) => {
+        return await db.getBudgetById(input.id);
       }),
     
     create: protectedProcedure
-      .use(createPermissionMiddleware('budgets', 'create'))
       .input(z.object({
         name: z.string(),
         categoryId: z.number(),
@@ -248,24 +175,14 @@ export const appRouter = router({
         notes: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const result = await db.createBudget({
+        await db.createBudget({
           ...input,
           createdBy: ctx.user.id,
         } as any);
-        
-        await logAudit({
-          userId: ctx.user.id,
-          action: 'create',
-          entityType: 'budget',
-          entityId: Number(result.insertId),
-          changes: { name: input.name, allocatedAmount: input.allocatedAmount },
-        });
-        
         return { success: true };
       }),
     
     update: protectedProcedure
-      .use(createPermissionMiddleware('budgets', 'edit'))
       .input(z.object({
         id: z.number(),
         name: z.string().optional(),
@@ -274,29 +191,13 @@ export const appRouter = router({
         approvalStatus: z.enum(["pending", "approved", "rejected"]).optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ input, ctx }) => {
+      .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        
-        const budget = await db.getBudgetById(id);
-        if (!budget) throw new TRPCError({ code: 'NOT_FOUND', message: 'Budget not found' });
-        await checkResourceAccess(ctx, budget, 'budget');
-        
-        if (data.allocatedAmount && data.allocatedAmount !== budget.allocatedAmount) {
-          await logAudit({
-            userId: ctx.user.id,
-            action: 'update',
-            entityType: 'budget',
-            entityId: id,
-            changes: { allocatedAmount: { from: budget.allocatedAmount, to: data.allocatedAmount } },
-          });
-        }
-        
         await db.updateBudget(id, data);
         return { success: true };
       }),
     
     approve: protectedProcedure
-      .use(createPermissionMiddleware('budgets', 'approve'))
       .input(z.object({
         id: z.number(),
         approved: z.boolean(),
@@ -306,23 +207,13 @@ export const appRouter = router({
         const budget = await db.getBudgetById(input.id);
         if (!budget) throw new TRPCError({ code: 'NOT_FOUND' });
         
-        await validateApproval(ctx, budget, 'budgets');
-        
         await db.updateBudget(input.id, {
           approvalStatus: input.approved ? "approved" : "rejected",
-          status: input.approved ? "active" : "draft",
           approvedBy: ctx.user.id,
           approvedAt: new Date(),
         });
         
-        await logAudit({
-          userId: ctx.user.id,
-          action: input.approved ? 'approve' : 'reject',
-          entityType: 'budget',
-          entityId: input.id,
-          changes: { status: { from: budget.approvalStatus, to: input.approved ? 'approved' : 'rejected' } },
-        });
-        
+        // Notify owner of budget approval/rejection
         await notifyOwner({
           title: `Budget ${input.approved ? 'Approved' : 'Rejected'}`,
           content: `Budget "${budget.name}" has been ${input.approved ? 'approved' : 'rejected'} by ${ctx.user.name}`,
@@ -336,21 +227,17 @@ export const appRouter = router({
   // SUPPLIERS
   // ============================================
   suppliers: router({
-    list: protectedProcedure
-      .use(createPermissionMiddleware('suppliers', 'view'))
-      .query(async () => {
-        return await db.getAllSuppliers();
-      }),
+    list: protectedProcedure.query(async () => {
+      return await db.getAllSuppliers();
+    }),
     
     get: protectedProcedure
-      .use(createPermissionMiddleware('suppliers', 'view'))
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return await db.getSupplierById(input.id);
       }),
     
     create: protectedProcedure
-      .use(createPermissionMiddleware('suppliers', 'create'))
       .input(z.object({
         name: z.string(),
         contactPerson: z.string().optional(),
@@ -371,7 +258,6 @@ export const appRouter = router({
       }),
     
     update: protectedProcedure
-      .use(createPermissionMiddleware('suppliers', 'edit'))
       .input(z.object({
         id: z.number(),
         name: z.string().optional(),
@@ -396,21 +282,17 @@ export const appRouter = router({
   // CUSTOMERS
   // ============================================
   customers: router({
-    list: protectedProcedure
-      .use(createPermissionMiddleware('customers', 'view'))
-      .query(async () => {
-        return await db.getAllCustomers();
-      }),
+    list: protectedProcedure.query(async () => {
+      return await db.getAllCustomers();
+    }),
     
     get: protectedProcedure
-      .use(createPermissionMiddleware('customers', 'view'))
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return await db.getCustomerById(input.id);
       }),
     
     create: protectedProcedure
-      .use(createPermissionMiddleware('customers', 'create'))
       .input(z.object({
         name: z.string(),
         type: z.enum(["hospital", "clinic", "pharmacy", "other"]),
@@ -433,7 +315,6 @@ export const appRouter = router({
       }),
     
     update: protectedProcedure
-      .use(createPermissionMiddleware('customers', 'edit'))
       .input(z.object({
         id: z.number(),
         name: z.string().optional(),
@@ -490,7 +371,8 @@ export const appRouter = router({
         if (!product) return null;
         
         // Get inventory data for this product
-        const inventory = await db.getInventoryByProductId(input.id);
+        const inventoryList = await db.getInventoryByProduct(input.id);
+        const inventory = inventoryList && inventoryList.length > 0 ? inventoryList[0] : null;
         
         return {
           ...product,
@@ -563,48 +445,21 @@ export const appRouter = router({
   // INVENTORY
   // ============================================
   inventory: router({
-    list: protectedProcedure
-      .use(createPermissionMiddleware('inventory', 'view'))
-      .query(async () => {
-      const inventory = await db.getAllInventory();
-      const products = await db.getAllProducts();
-      const suppliers = await db.getAllSuppliers();
-      
-      // Join inventory with product details
-      return inventory.map(inv => {
-        const product = products.find(p => p.id === inv.productId);
-        const manufacturer = product?.manufacturerId ? suppliers.find(s => s.id === product.manufacturerId) : null;
-        
-        return {
-          ...inv,
-          name: product?.name || 'Unknown Product',
-          sku: product?.sku || '',
-          category: product?.category || null,
-          unit: product?.unit || null,
-          unitPrice: product?.unitPrice || null,
-          manufacturerId: product?.manufacturerId || null,
-          manufacturerName: manufacturer?.name || null,
-          currentStock: inv.quantity,
-          reorderLevel: inv.minStockLevel,
-        };
-      });
+    list: protectedProcedure.query(async () => {
+      return await db.getAllInventory();
     }),
     
-    lowStock: protectedProcedure
-      .use(createPermissionMiddleware('inventory', 'view'))
-      .query(async () => {
-        return await db.getLowStockItems();
-      }),
+    lowStock: protectedProcedure.query(async () => {
+      return await db.getLowStockItems();
+    }),
     
     byProduct: protectedProcedure
-      .use(createPermissionMiddleware('inventory', 'view'))
       .input(z.object({ productId: z.number() }))
       .query(async ({ input }) => {
-        return await db.getInventoryByProductId(input.productId);
+        return await db.getInventoryByProduct(input.productId);
       }),
     
     create: protectedProcedure
-      .use(createPermissionMiddleware('inventory', 'create'))
       .input(z.object({
         productId: z.number(),
         quantity: z.number(),
@@ -621,7 +476,6 @@ export const appRouter = router({
       }),
     
     update: protectedProcedure
-      .use(createPermissionMiddleware('inventory', 'edit'))
       .input(z.object({
         id: z.number(),
         quantity: z.number().optional(),
@@ -634,18 +488,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        const inventory = await db.getInventoryById(id);
-        if (!inventory) throw new TRPCError({ code: 'NOT_FOUND' });
-        
         await db.updateInventory(id, data);
-        
-        // Notification: Check for low stock after update
-        const updatedQty = data.quantity !== undefined ? data.quantity : inventory.quantity;
-        const minLevel = data.minStockLevel !== undefined ? data.minStockLevel : inventory.minStockLevel;
-        if (updatedQty <= minLevel) {
-          await notificationHelpers.notifyLowStock(id);
-        }
-        
         return { success: true };
       }),
   }),
@@ -717,20 +560,14 @@ export const appRouter = router({
   // TENDERS
   // ============================================
   tenders: router({
-    list: protectedProcedure
-      .use(createPermissionMiddleware('tenders', 'view'))
-      .query(async () => {
-        return await db.getAllTenders();
-      }),
+    list: protectedProcedure.query(async () => {
+      return await db.getAllTenders();
+    }),
     
     get: protectedProcedure
-      .use(createPermissionMiddleware('tenders', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input, ctx }) => {
+      .query(async ({ input }) => {
         const tender = await db.getTenderById(input.id);
-        if (!tender) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tender not found' });
-        await checkResourceAccess(ctx, tender, 'tender');
-        
         const items = await db.getTenderItems(input.id);
         const participants = await db.getTenderParticipants(input.id);
         
@@ -746,7 +583,6 @@ export const appRouter = router({
       }),
     
     create: protectedProcedure
-      .use(createPermissionMiddleware('tenders', 'create'))
       .input(z.object({
         title: z.string(),
         description: z.string().optional(),
@@ -788,14 +624,6 @@ export const appRouter = router({
             } as any);
           }
         }
-        
-        await logAudit({
-          userId: ctx.user.id,
-          action: 'create',
-          entityType: 'tender',
-          entityId: tenderId,
-          changes: { title: input.title, referenceNumber },
-        });
         
         return { success: true, tenderId, referenceNumber };
       }),
@@ -847,7 +675,6 @@ export const appRouter = router({
       }),
     
     update: protectedProcedure
-      .use(createPermissionMiddleware('tenders', 'edit'))
       .input(z.object({
         id: z.number(),
         title: z.string().optional(),
@@ -865,25 +692,17 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
         
-        const tender = await db.getTenderById(id);
-        if (!tender) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tender not found' });
-        await checkResourceAccess(ctx, tender, 'tender');
-        
         if (data.status === 'awarded' && data.awardedSupplierId) {
           (data as any).awardedAt = new Date();
           
-          await logAudit({
-            userId: ctx.user.id,
-            action: 'award',
-            entityType: 'tender',
-            entityId: id,
-            changes: { awardedSupplierId: data.awardedSupplierId, awardedValue: data.awardedValue },
-          });
-          
-          await notifyOwner({
-            title: 'Tender Awarded',
-            content: `Tender "${tender.title}" has been awarded by ${ctx.user.name}`,
-          });
+          // Notify owner of tender award
+          const tender = await db.getTenderById(id);
+          if (tender) {
+            await notifyOwner({
+              title: 'Tender Awarded',
+              content: `Tender "${tender.title}" has been awarded by ${ctx.user.name}`,
+            });
+          }
         }
         
         await db.updateTender(id, data);
@@ -927,26 +746,19 @@ export const appRouter = router({
   // INVOICES
   // ============================================
   invoices: router({
-    list: protectedProcedure
-      .use(createPermissionMiddleware('invoices', 'view'))
-      .query(async () => {
-        return await db.getAllInvoices();
-      }),
+    list: protectedProcedure.query(async () => {
+      return await db.getAllInvoices();
+    }),
     
     get: protectedProcedure
-      .use(createPermissionMiddleware('invoices', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input, ctx }) => {
+      .query(async ({ input }) => {
         const invoice = await db.getInvoiceById(input.id);
-        if (!invoice) throw new TRPCError({ code: 'NOT_FOUND', message: 'Invoice not found' });
-        await checkResourceAccess(ctx, invoice, 'invoice');
-        
         const items = await db.getInvoiceItems(input.id);
         return { invoice, items };
       }),
     
     create: protectedProcedure
-      .use(createPermissionMiddleware('invoices', 'create'))
       .input(z.object({
         customerId: z.number(),
         tenderId: z.number().optional(),
@@ -984,32 +796,18 @@ export const appRouter = router({
           } as any);
         }
         
-        await logAudit({
-          userId: ctx.user.id,
-          action: 'create',
-          entityType: 'invoice',
-          entityId: invoiceId,
-          changes: { invoiceNumber, totalAmount: input.totalAmount },
-        });
-        
         return { success: true, invoiceId, invoiceNumber };
       }),
     
     update: protectedProcedure
-      .use(createPermissionMiddleware('invoices', 'edit'))
       .input(z.object({
         id: z.number(),
         status: z.enum(["draft", "sent", "paid", "overdue", "cancelled"]).optional(),
         paidAmount: z.number().optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ input, ctx }) => {
+      .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        
-        const invoice = await db.getInvoiceById(id);
-        if (!invoice) throw new TRPCError({ code: 'NOT_FOUND', message: 'Invoice not found' });
-        await checkResourceAccess(ctx, invoice, 'invoice');
-        
         await db.updateInvoice(id, data);
         return { success: true };
       }),
@@ -1019,27 +817,17 @@ export const appRouter = router({
   // EXPENSES
   // ============================================
   expenses: router({
-    list: protectedProcedure
-      .use(createPermissionMiddleware('expenses', 'view'))
-      .query(async () => {
-        return await db.getAllExpenses();
-      }),
+    list: protectedProcedure.query(async () => {
+      return await db.getAllExpenses();
+    }),
     
     get: protectedProcedure
-      .use(createPermissionMiddleware('expenses', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input, ctx }) => {
-        const expense = await db.getExpenseById(input.id);
-        if (!expense) throw new TRPCError({ code: 'NOT_FOUND', message: 'Expense not found' });
-        
-        // IDOR Prevention: Check resource access
-        await checkResourceAccess(ctx, expense, 'expense');
-        
-        return expense;
+      .query(async ({ input }) => {
+        return await db.getExpenseById(input.id);
       }),
     
     create: protectedProcedure
-      .use(createPermissionMiddleware('expenses', 'create'))
       .input(z.object({
         title: z.string(),
         description: z.string().optional(),
@@ -1049,68 +837,36 @@ export const appRouter = router({
         tenderId: z.number().optional(),
         amount: z.number(),
         expenseDate: z.date().optional(),
-        receiptUrl: z.string().optional(),
         notes: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const expenseNumber = utils.generateExpenseNumber();
         
-        const result = await db.createExpense({
+        await db.createExpense({
           ...input,
           expenseNumber,
           createdBy: ctx.user.id,
         } as any);
         
-        const expenseId = Number(result.insertId);
-        
-        // Audit Log: Expense creation
-        await logAudit({
-          userId: ctx.user.id,
-          action: 'create',
-          entityType: 'expense',
-          entityId: expenseId,
-          changes: { title: input.title, amount: input.amount },
-        });
-        
-        return { success: true, expenseNumber, expenseId };
+        return { success: true, expenseNumber };
       }),
     
     update: protectedProcedure
-      .use(createPermissionMiddleware('expenses', 'edit'))
       .input(z.object({
         id: z.number(),
         title: z.string().optional(),
         description: z.string().optional(),
         amount: z.number().optional(),
         status: z.enum(["draft", "pending", "approved", "rejected", "paid"]).optional(),
-        receiptUrl: z.string().optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ input, ctx }) => {
+      .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        
-        // IDOR Prevention: Check resource access
-        const expense = await db.getExpenseById(id);
-        if (!expense) throw new TRPCError({ code: 'NOT_FOUND', message: 'Expense not found' });
-        await checkResourceAccess(ctx, expense, 'expense');
-        
-        // Audit Log: Track amount changes
-        if (data.amount && data.amount !== expense.amount) {
-          await logAudit({
-            userId: ctx.user.id,
-            action: 'update',
-            entityType: 'expense',
-            entityId: id,
-            changes: { amount: { from: expense.amount, to: data.amount } },
-          });
-        }
-        
         await db.updateExpense(id, data);
         return { success: true };
       }),
     
     approve: protectedProcedure
-      .use(createPermissionMiddleware('expenses', 'approve'))
       .input(z.object({
         id: z.number(),
         approved: z.boolean(),
@@ -1119,703 +875,29 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const expense = await db.getExpenseById(input.id);
         if (!expense) throw new TRPCError({ code: 'NOT_FOUND' });
-        if (expense.status !== 'pending') {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expense must be in pending status to approve/reject' });
-        }
-        
-        // Validate approval workflow (prevent self-approval)
-        await validateApproval(ctx, expense, 'expenses');
         
         await db.updateExpense(input.id, {
           status: input.approved ? "approved" : "rejected",
-          approvalStatus: input.approved ? "approved" : "rejected",
           approvedBy: ctx.user.id,
           approvedAt: new Date(),
           rejectionReason: input.rejectionReason,
         });
-        
-        // Audit Log: Expense approval/rejection
-        await logAudit({
-          userId: ctx.user.id,
-          action: input.approved ? 'approve' : 'reject',
-          entityType: 'expense',
-          entityId: input.id,
-          changes: {
-            status: { from: expense.status, to: input.approved ? 'approved' : 'rejected' },
-            reason: input.rejectionReason,
-          },
-        });
-        
-        // Notification: Notify submitter of approval/rejection
-        if (input.approved) {
-          await notificationHelpers.notifyExpenseApproved(input.id, expense.createdBy, ctx.user.name || 'Admin');
-        } else {
-          await notificationHelpers.notifyExpenseRejected(input.id, expense.createdBy, ctx.user.name || 'Admin', input.rejectionReason);
-        }
         
         // Update budget spent amount if approved
         if (input.approved && expense.budgetId) {
+          await db.updateBudgetSpent(expense.budgetId, expense.amount);
+          
+          // Check for budget overrun
           const budget = await db.getBudgetById(expense.budgetId);
-          if (budget) {
-            await db.updateBudget(expense.budgetId, { spentAmount: (budget.spentAmount || 0) + expense.amount });
-          
-            // Check for budget overrun
-            if (utils.isBudgetOverThreshold(budget.allocatedAmount, budget.spentAmount + expense.amount, 90)) {
-              await notifyOwner({
-                title: 'Budget Alert: 90% Threshold Reached',
-                content: `Budget "${budget.name}" has reached 90% of allocated amount`,
-              });
-            }
+          if (budget && utils.isBudgetOverThreshold(budget.allocatedAmount, budget.spentAmount + expense.amount, 90)) {
+            await notifyOwner({
+              title: 'Budget Alert: 90% Threshold Reached',
+              content: `Budget "${budget.name}" has reached 90% of allocated amount`,
+            });
           }
         }
         
         return { success: true };
-      }),
-    
-    uploadReceipt: protectedProcedure
-      .input(z.object({
-        file: z.string(), // base64 encoded image
-        filename: z.string(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        // Decode base64 image
-        const base64Data = input.file.split(',')[1] || input.file;
-        const buffer = Buffer.from(base64Data, 'base64');
-        
-        // Upload to S3
-        const fileKey = `receipts/${ctx.user.id}/${Date.now()}-${input.filename}`;
-        const { url } = await storagePut(fileKey, buffer, 'image/jpeg');
-        
-        // Perform OCR on the receipt using RapidOCR
-        const { performRapidOCR } = await import('./rapidocr');
-        const ocrResult = await performRapidOCR(base64Data);
-        
-        if (!ocrResult.success) {
-          throw new Error(ocrResult.error || 'OCR failed');
-        }
-        
-        // Extract expense data from OCR text
-        const extractedData = await extractExpenseData(ocrResult.text);
-        
-        return {
-          success: true,
-          receiptUrl: url,
-          extractedData,
-        };
-      }),
-    
-    extractRegion: protectedProcedure
-      .input(z.object({
-        receiptUrl: z.string(),
-        boundingBox: z.object({
-          x: z.number(),
-          y: z.number(),
-          width: z.number(),
-          height: z.number(),
-        }),
-        fieldType: z.enum(['title', 'amount', 'date', 'vendor', 'description']),
-      }))
-      .mutation(async ({ input }) => {
-        // Download image from S3
-        const response = await fetch(input.receiptUrl);
-        const buffer = await response.arrayBuffer();
-        const base64Data = Buffer.from(buffer).toString('base64');
-        
-        // Perform OCR on the specific region using RapidOCR
-        const { extractRegionText } = await import('./rapidocr');
-        const extractedText = await extractRegionText(base64Data, input.boundingBox);
-        
-        // Parse the extracted text based on field type
-        const extractedData = await extractExpenseData(extractedText);
-        
-        let value = null;
-        if (extractedData.success && extractedData.data) {
-          switch (input.fieldType) {
-            case 'title':
-              value = extractedData.data.title;
-              break;
-            case 'amount':
-              value = extractedData.data.amount;
-              break;
-            case 'date':
-              value = extractedData.data.expenseDate;
-              break;
-            case 'vendor':
-              value = extractedData.data.vendor;
-              break;
-            case 'description':
-              value = extractedData.data.description;
-              break;
-          }
-        }
-        
-        return {
-          success: true,
-          fieldType: input.fieldType,
-          value,
-          text: extractedText.substring(0, 200), // First 200 chars for preview
-        };
-      }),
-    
-    batchUploadReceipts: protectedProcedure
-      .input(z.object({
-        receipts: z.array(z.object({
-          file: z.string(), // base64 encoded image
-          filename: z.string(),
-        })),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const results = [];
-        
-        // Process each receipt
-        for (const receipt of input.receipts) {
-          try {
-            // Decode base64 image
-            const base64Data = receipt.file.split(',')[1] || receipt.file;
-            const buffer = Buffer.from(base64Data, 'base64');
-            
-            // Upload to S3
-            const fileKey = `receipts/${ctx.user.id}/${Date.now()}-${receipt.filename}`;
-            const { url } = await storagePut(fileKey, buffer, 'image/jpeg');
-            
-            // Perform OCR using RapidOCR
-            const { performRapidOCR } = await import('./rapidocr');
-            const ocrResult = await performRapidOCR(base64Data);
-            
-            if (!ocrResult.success) {
-              throw new Error(ocrResult.error || 'OCR failed');
-            }
-            
-            // Extract expense data
-            const extractedData = await extractExpenseData(ocrResult.text);
-            
-            // Auto-create draft expense if extraction successful
-            let expenseId: number | undefined = undefined;
-            let expenseNumber: string | undefined = undefined;
-            
-            if (extractedData.success && extractedData.data) {
-              const data = extractedData.data;
-              
-              // Only create if we have at least title and amount
-              if (data.title && data.amount) {
-                expenseNumber = await utils.generateExpenseNumber();
-                const createResult = await db.createExpense({
-                  expenseNumber,
-                  title: data.title,
-                  description: data.description || (data.vendor ? `Vendor: ${data.vendor}` : ''),
-                  amount: data.amount,
-                  expenseDate: data.expenseDate || new Date(),
-                  categoryId: data.categoryId,
-                  budgetId: data.budgetId,
-                  departmentId: data.departmentId,
-                  receiptUrl: url,
-                  status: 'draft',
-                  createdBy: ctx.user.id,
-                });
-                expenseId = createResult.insertId;
-              }
-            }
-            
-            results.push({
-              success: true,
-              filename: receipt.filename,
-              receiptUrl: url,
-              extractedData,
-              expenseId,
-              expenseNumber,
-            });
-          } catch (error: any) {
-            results.push({
-              success: false,
-              filename: receipt.filename,
-              error: error.message || 'Failed to process receipt',
-            });
-          }
-        }
-        
-        return {
-          success: true,
-          results,
-          totalProcessed: results.length,
-          successCount: results.filter(r => r.success).length,
-          errorCount: results.filter(r => !r.success).length,
-        };
-      }),
-    
-    bulkImport: protectedProcedure
-      .input(z.object({
-        expenses: z.array(z.object({
-          title: z.string(),
-          description: z.string().optional(),
-          categoryId: z.number(),
-          budgetId: z.number().optional(),
-          departmentId: z.number().optional(),
-          amount: z.number(),
-          expenseDate: z.string(), // ISO date string from CSV
-          notes: z.string().optional(),
-        })),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const results = {
-          success: [] as any[],
-          errors: [] as any[],
-          duplicates: [] as any[],
-        };
-
-        // Check for duplicates within the import batch
-        const seen = new Set<string>();
-        const allExpenses = await db.getAllExpenses();
-        
-        for (let i = 0; i < input.expenses.length; i++) {
-          const expense = input.expenses[i];
-          const key = `${expense.title}-${expense.amount}-${expense.expenseDate}`;
-          
-          try {
-            // Check for duplicate in batch
-            if (seen.has(key)) {
-              results.duplicates.push({
-                row: i + 1,
-                expense,
-                reason: 'Duplicate within import batch',
-              });
-              continue;
-            }
-            
-            // Check for duplicate in database (same title, amount, and date)
-            const isDuplicate = allExpenses.some(e => 
-              e.title === expense.title && 
-              e.amount === expense.amount && 
-              e.expenseDate && new Date(e.expenseDate).toISOString().split('T')[0] === expense.expenseDate
-            );
-            
-            if (isDuplicate) {
-              results.duplicates.push({
-                row: i + 1,
-                expense,
-                reason: 'Already exists in database',
-              });
-              continue;
-            }
-            
-            seen.add(key);
-            
-            // Create expense
-            const expenseNumber = utils.generateExpenseNumber();
-            await db.createExpense({
-              ...expense,
-              expenseNumber,
-              expenseDate: new Date(expense.expenseDate),
-              createdBy: ctx.user.id,
-            } as any);
-            
-            results.success.push({
-              row: i + 1,
-              expenseNumber,
-              title: expense.title,
-            });
-          } catch (error: any) {
-            results.errors.push({
-              row: i + 1,
-              expense,
-              error: error.message || 'Unknown error',
-            });
-          }
-        }
-        
-        return results;
-      }),
-    
-    // Analytics endpoints
-    analyticsByCategory: protectedProcedure
-      .input(z.object({
-        startDate: z.date().optional(),
-        endDate: z.date().optional(),
-      }))
-      .query(async ({ input }) => {
-        const expenses = await db.getAllExpenses();
-        const categories = await db.getAllBudgetCategories();
-        
-        // Filter by date range if provided
-        let filtered = expenses.filter(e => e.status === 'approved' || e.status === 'paid');
-        if (input.startDate) {
-          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) >= input.startDate!);
-        }
-        if (input.endDate) {
-          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) <= input.endDate!);
-        }
-        
-        // Group by category
-        const byCategory = new Map<number, { name: string; total: number; count: number }>();
-        for (const expense of filtered) {
-          if (!expense.categoryId) continue;
-          const existing = byCategory.get(expense.categoryId) || { name: '', total: 0, count: 0 };
-          const category = categories.find(c => c.id === expense.categoryId);
-          byCategory.set(expense.categoryId, {
-            name: category?.name || 'Unknown',
-            total: existing.total + expense.amount,
-            count: existing.count + 1,
-          });
-        }
-        
-        return Array.from(byCategory.entries()).map(([id, data]) => ({
-          categoryId: id,
-          categoryName: data.name,
-          totalAmount: data.total,
-          expenseCount: data.count,
-        }));
-      }),
-    
-    analyticsByDepartment: protectedProcedure
-      .input(z.object({
-        startDate: z.date().optional(),
-        endDate: z.date().optional(),
-      }))
-      .query(async ({ input }) => {
-        const expenses = await db.getAllExpenses();
-        const departments = await db.getAllDepartments();
-        
-        // Filter by date range and approved status
-        let filtered = expenses.filter(e => e.status === 'approved' || e.status === 'paid');
-        if (input.startDate) {
-          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) >= input.startDate!);
-        }
-        if (input.endDate) {
-          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) <= input.endDate!);
-        }
-        
-        // Group by department
-        const byDepartment = new Map<number, { name: string; total: number; count: number }>();
-        for (const expense of filtered) {
-          if (!expense.departmentId) continue;
-          const existing = byDepartment.get(expense.departmentId) || { name: '', total: 0, count: 0 };
-          const department = departments.find(d => d.id === expense.departmentId);
-          byDepartment.set(expense.departmentId, {
-            name: department?.name || 'Unknown',
-            total: existing.total + expense.amount,
-            count: existing.count + 1,
-          });
-        }
-        
-        return Array.from(byDepartment.entries()).map(([id, data]) => ({
-          departmentId: id,
-          departmentName: data.name,
-          totalAmount: data.total,
-          expenseCount: data.count,
-        }));
-      }),
-    
-    budgetVariance: protectedProcedure
-      .input(z.object({
-        startDate: z.date().optional(),
-        endDate: z.date().optional(),
-      }))
-      .query(async ({ input }) => {
-        const expenses = await db.getAllExpenses();
-        const budgets = await db.getAllBudgets();
-        
-        // Filter approved expenses by date range
-        let filtered = expenses.filter(e => e.status === 'approved' || e.status === 'paid');
-        if (input.startDate) {
-          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) >= input.startDate!);
-        }
-        if (input.endDate) {
-          filtered = filtered.filter(e => e.expenseDate && new Date(e.expenseDate) <= input.endDate!);
-        }
-        
-        // Calculate variance by budget
-        const spendingByBudget = new Map<number, number>();
-        for (const expense of filtered) {
-          if (!expense.budgetId) continue;
-          const current = spendingByBudget.get(expense.budgetId) || 0;
-          spendingByBudget.set(expense.budgetId, current + expense.amount);
-        }
-        
-        // Compare with budget allocations
-        return budgets.map(budget => {
-          const spent = spendingByBudget.get(budget.id) || 0;
-          const allocated = budget.allocatedAmount;
-          const variance = allocated - spent;
-          const utilizationPercent = allocated > 0 ? (spent / allocated) * 100 : 0;
-          
-          return {
-            budgetId: budget.id,
-            budgetName: budget.name,
-            allocated,
-            spent,
-            remaining: variance,
-            utilizationPercent,
-            status: utilizationPercent > 100 ? 'over' : utilizationPercent > 90 ? 'warning' : 'ok',
-          };
-        });
-      }),
-    
-    trendOverTime: protectedProcedure
-      .input(z.object({
-        startDate: z.date(),
-        endDate: z.date(),
-        groupBy: z.enum(['day', 'week', 'month']).default('month'),
-      }))
-      .query(async ({ input }) => {
-        const expenses = await db.getAllExpenses();
-        
-        // Filter approved expenses by date range
-        const filtered = expenses.filter(e => {
-          if (!e.expenseDate) return false;
-          const date = new Date(e.expenseDate);
-          return (e.status === 'approved' || e.status === 'paid') &&
-                 date >= input.startDate &&
-                 date <= input.endDate;
-        });
-        
-        // Group by time period
-        const byPeriod = new Map<string, { total: number; count: number }>();
-        for (const expense of filtered) {
-          if (!expense.expenseDate) continue;
-          const date = new Date(expense.expenseDate);
-          let periodKey: string;
-          
-          if (input.groupBy === 'day') {
-            periodKey = date.toISOString().split('T')[0];
-          } else if (input.groupBy === 'week') {
-            const weekStart = new Date(date);
-            weekStart.setDate(date.getDate() - date.getDay());
-            periodKey = weekStart.toISOString().split('T')[0];
-          } else { // month
-            periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          }
-          
-          const existing = byPeriod.get(periodKey) || { total: 0, count: 0 };
-          byPeriod.set(periodKey, {
-            total: existing.total + expense.amount,
-            count: existing.count + 1,
-          });
-        }
-        
-        return Array.from(byPeriod.entries())
-          .map(([period, data]) => ({
-            period,
-            totalAmount: data.total,
-            expenseCount: data.count,
-            averageAmount: data.count > 0 ? data.total / data.count : 0,
-          }))
-          .sort((a, b) => a.period.localeCompare(b.period));
-      }),
-  }),
-
-  // ============================================
-  // PURCHASE ORDERS
-  // ============================================
-  purchaseOrders: router({
-    list: protectedProcedure
-      .use(createPermissionMiddleware('purchaseOrders', 'view'))
-      .query(async () => {
-        return await db.getAllPurchaseOrders();
-      }),
-    
-    get: protectedProcedure
-      .use(createPermissionMiddleware('purchaseOrders', 'view'))
-      .input(z.object({ id: z.number() }))
-      .query(async ({ input, ctx }) => {
-        const po = await db.getPurchaseOrderById(input.id);
-        if (!po) throw new TRPCError({ code: 'NOT_FOUND', message: 'Purchase order not found' });
-        await checkResourceAccess(ctx, po, 'purchaseOrder');
-        
-        const items = await db.getPurchaseOrderItems(input.id);
-        const receipts = await db.getGoodsReceiptsByPO(input.id);
-        return { po, items, receipts };
-      }),
-    
-    create: protectedProcedure
-      .use(createPermissionMiddleware('purchaseOrders', 'create'))
-      .input(z.object({
-        supplierId: z.number(),
-        tenderId: z.number().optional(),
-        budgetId: z.number().optional(),
-        deliveryDate: z.date().optional(),
-        subtotal: z.number(),
-        taxAmount: z.number().optional(),
-        totalAmount: z.number(),
-        paymentTerms: z.string().optional(),
-        deliveryAddress: z.string().optional(),
-        notes: z.string().optional(),
-        items: z.array(z.object({
-          productId: z.number().optional(),
-          description: z.string(),
-          quantity: z.number(),
-          unitPrice: z.number(),
-          totalPrice: z.number(),
-          notes: z.string().optional(),
-        })),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const { items, ...poData } = input;
-        const poNumber = utils.generatePONumber();
-        
-        const result = await db.createPurchaseOrder({
-          ...poData,
-          poNumber,
-          taxAmount: poData.taxAmount || 0,
-          createdBy: ctx.user.id,
-        } as any);
-        
-        const poId = Number(result.insertId);
-        
-        for (const item of items) {
-          await db.createPurchaseOrderItem({
-            poId,
-            ...item,
-          } as any);
-        }
-        
-        await logAudit({
-          userId: ctx.user.id,
-          action: 'create',
-          entityType: 'purchaseOrder',
-          entityId: poId,
-          changes: { poNumber, totalAmount: input.totalAmount },
-        });
-        
-        return { success: true, poId, poNumber };
-      }),
-    
-    update: protectedProcedure
-      .use(createPermissionMiddleware('purchaseOrders', 'edit'))
-      .input(z.object({
-        id: z.number(),
-        status: z.enum(["draft", "submitted", "approved", "rejected", "completed", "cancelled"]).optional(),
-        deliveryDate: z.date().optional(),
-        notes: z.string().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const { id, ...data } = input;
-        
-        const po = await db.getPurchaseOrderById(id);
-        if (!po) throw new TRPCError({ code: 'NOT_FOUND', message: 'Purchase order not found' });
-        await checkResourceAccess(ctx, po, 'purchaseOrder');
-        
-        await db.updatePurchaseOrder(id, data);
-        return { success: true };
-      }),
-    
-    approve: protectedProcedure
-      .use(createPermissionMiddleware('purchaseOrders', 'approve'))
-      .input(z.object({
-        id: z.number(),
-        approved: z.boolean(),
-        rejectionReason: z.string().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const po = await db.getPurchaseOrderById(input.id);
-        if (!po) throw new TRPCError({ code: 'NOT_FOUND' });
-        
-        await validateApproval(ctx, po, 'purchaseOrders');
-        
-        await db.updatePurchaseOrder(input.id, {
-          status: input.approved ? "approved" : "rejected",
-          approvedBy: ctx.user.id,
-          approvedAt: new Date(),
-          rejectionReason: input.rejectionReason,
-        });
-        
-        await logAudit({
-          userId: ctx.user.id,
-          action: input.approved ? 'approve' : 'reject',
-          entityType: 'purchaseOrder',
-          entityId: input.id,
-          changes: { status: { from: po.status, to: input.approved ? 'approved' : 'rejected' } },
-        });
-        
-        // Notification: Send notification about approval status
-        // (Note: Approval notification would go to PO creator - not yet implemented in helpers)
-        
-        // Update budget spent amount if approved and linked to budget
-        if (input.approved && po.budgetId) {
-          const budget = await db.getBudgetById(po.budgetId);
-          if (budget) {
-            await db.updateBudget(po.budgetId, { spentAmount: (budget.spentAmount || 0) + po.totalAmount });
-          
-            // Check for budget overrun
-            if (utils.isBudgetOverThreshold(budget.allocatedAmount, budget.spentAmount + po.totalAmount, 90)) {
-              await notifyOwner({
-                title: 'Budget Alert: 90% Threshold Reached',
-                content: `Budget "${budget.name}" has reached 90% of allocated amount`,
-              });
-            }
-          }
-        }
-        
-        return { success: true };
-      }),
-    
-    receiveGoods: protectedProcedure
-      .input(z.object({
-        poId: z.number(),
-        items: z.array(z.object({
-          poItemId: z.number(),
-          quantityReceived: z.number(),
-          batchNumber: z.string().optional(),
-          expiryDate: z.date().optional(),
-          condition: z.enum(["good", "damaged", "defective"]).optional(),
-          notes: z.string().optional(),
-        })),
-        notes: z.string().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const { poId, items, notes } = input;
-        const receiptNumber = utils.generateGoodsReceiptNumber();
-        
-        // Create goods receipt
-        const receiptResult = await db.createGoodsReceipt({
-          poId,
-          receiptNumber,
-          receivedBy: ctx.user.id,
-          notes,
-        } as any);
-        
-        const receiptId = Number(receiptResult.insertId);
-        
-        // Create receipt items and update PO item received quantities
-        for (const item of items) {
-          await db.createGoodsReceiptItem({
-            receiptId,
-            ...item,
-            condition: item.condition || "good",
-          } as any);
-          
-          // Update PO item received quantity
-          const poItem = await db.getPurchaseOrderItems(poId);
-          const currentItem = poItem.find(i => i.id === item.poItemId);
-          if (currentItem) {
-            const newReceivedQty = currentItem.receivedQuantity + item.quantityReceived;
-            await db.updatePurchaseOrderItem(item.poItemId, {
-              receivedQuantity: newReceivedQty,
-            });
-            
-            // Update inventory if product is linked
-            if (currentItem.productId) {
-              const inventoryRecord = await db.getInventoryByProductId(currentItem.productId);
-              if (inventoryRecord) {
-                await db.updateInventory(currentItem.productId, {
-                  quantity: (inventoryRecord.quantity || 0) + item.quantityReceived,
-                  lastRestocked: new Date(),
-                });
-              }
-            }
-          }
-        }
-        
-        // Check if PO is fully received and update status
-        const allItems = await db.getPurchaseOrderItems(poId);
-        const fullyReceived = allItems.every(item => item.receivedQuantity >= item.quantity);
-        const partiallyReceived = allItems.some(item => item.receivedQuantity > 0);
-        
-        await db.updatePurchaseOrder(poId, {
-          receivedStatus: fullyReceived ? "fully_received" : (partiallyReceived ? "partially_received" : "not_received"),
-          receivedDate: fullyReceived ? new Date() : undefined,
-          status: fullyReceived ? "completed" : undefined,
-        });
-        
-        return { success: true, receiptId, receiptNumber };
       }),
   }),
 
@@ -1823,26 +905,19 @@ export const appRouter = router({
   // DELIVERIES
   // ============================================
   deliveries: router({
-    list: protectedProcedure
-      .use(createPermissionMiddleware('deliveries', 'view'))
-      .query(async () => {
-        return await db.getAllDeliveries();
-      }),
+    list: protectedProcedure.query(async () => {
+      return await db.getAllDeliveries();
+    }),
     
     get: protectedProcedure
-      .use(createPermissionMiddleware('deliveries', 'view'))
       .input(z.object({ id: z.number() }))
-      .query(async ({ input, ctx }) => {
+      .query(async ({ input }) => {
         const delivery = await db.getDeliveryById(input.id);
-        if (!delivery) throw new TRPCError({ code: 'NOT_FOUND', message: 'Delivery not found' });
-        await checkResourceAccess(ctx, delivery, 'delivery');
-        
         const items = await db.getDeliveryItems(input.id);
         return { delivery, items };
       }),
     
     create: protectedProcedure
-      .use(createPermissionMiddleware('deliveries', 'create'))
       .input(z.object({
         customerId: z.number(),
         tenderId: z.number().optional(),
@@ -1878,32 +953,18 @@ export const appRouter = router({
           } as any);
         }
         
-        await logAudit({
-          userId: ctx.user.id,
-          action: 'create',
-          entityType: 'delivery',
-          entityId: deliveryId,
-          changes: { deliveryNumber },
-        });
-        
         return { success: true, deliveryId, deliveryNumber };
       }),
     
     update: protectedProcedure
-      .use(createPermissionMiddleware('deliveries', 'edit'))
       .input(z.object({
         id: z.number(),
         status: z.enum(["planned", "in_transit", "delivered", "cancelled"]).optional(),
         deliveredDate: z.date().optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ input, ctx }) => {
+      .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        
-        const delivery = await db.getDeliveryById(id);
-        if (!delivery) throw new TRPCError({ code: 'NOT_FOUND', message: 'Delivery not found' });
-        await checkResourceAccess(ctx, delivery, 'delivery');
-        
         await db.updateDelivery(id, data);
         
         // Update inventory when delivered
@@ -1919,6 +980,155 @@ export const appRouter = router({
   }),
 
   // ============================================
+  // DOCUMENTS & AI EXTRACTION
+  // ============================================
+  documents: router({
+    folders: router({
+      list: protectedProcedure.query(async () => {
+        return await db.getAllDocumentFolders();
+      }),
+      
+      create: protectedProcedure
+        .input(z.object({
+          name: z.string(),
+          category: z.string(),
+          parentId: z.number().optional(),
+          requiredDocuments: z.string().optional(),
+          reminderEnabled: z.boolean().optional(),
+        }))
+        .mutation(async ({ input, ctx }) => {
+          await db.createDocumentFolder({
+            ...input,
+            createdBy: ctx.user.id,
+          } as any);
+          return { success: true };
+        }),
+    }),
+    
+    byEntity: protectedProcedure
+      .input(z.object({
+        entityType: z.string(),
+        entityId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        return await db.getDocumentsByEntity(input.entityType, input.entityId);
+      }),
+    
+    upload: protectedProcedure
+      .input(z.object({
+        entityType: z.string(),
+        entityId: z.number(),
+        folderId: z.number().optional(),
+        fileName: z.string(),
+        fileData: z.string(), // base64
+        mimeType: z.string(),
+        documentType: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Upload to S3
+        const buffer = Buffer.from(input.fileData, 'base64');
+        const fileKey = `documents/${input.entityType}/${input.entityId}/${Date.now()}-${input.fileName}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        
+        // Save document record
+        const result = await db.createDocument({
+          folderId: input.folderId,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          fileName: input.fileName,
+          fileKey,
+          fileUrl: url,
+          fileSize: buffer.length,
+          mimeType: input.mimeType,
+          documentType: input.documentType,
+          uploadedBy: ctx.user.id,
+        } as any);
+        
+        const documentId = Number(result.insertId);
+        
+        return { success: true, documentId, fileUrl: url };
+      }),
+    
+    extractData: protectedProcedure
+      .input(z.object({
+        documentId: z.number(),
+        extractionType: z.enum(["tender", "invoice", "expense"]),
+      }))
+      .mutation(async ({ input }) => {
+        const documents = await db.getDocumentsByEntity('', 0);
+        const document = documents.find(d => d.id === input.documentId);
+        
+        if (!document) throw new TRPCError({ code: 'NOT_FOUND' });
+        
+        // Update document status
+        await db.updateDocument(input.documentId, {
+          extractionStatus: 'processing',
+        });
+        
+        try {
+          // Perform OCR if needed
+          let documentText = '';
+          if (document.mimeType?.startsWith('image/') || document.mimeType === 'application/pdf') {
+            const ocrResult = await performOCR(document.fileUrl);
+            if (!ocrResult.success) {
+              throw new Error('OCR failed');
+            }
+            documentText = ocrResult.text;
+          }
+          
+          // Extract data based on type
+          let extractionResult;
+          switch (input.extractionType) {
+            case 'tender':
+              extractionResult = await extractTenderData(documentText, document.fileUrl);
+              break;
+            case 'invoice':
+              extractionResult = await extractInvoiceData(documentText);
+              break;
+            case 'expense':
+              extractionResult = await extractExpenseData(documentText);
+              break;
+          }
+          
+          if (!extractionResult.success) {
+            throw new Error('Extraction failed');
+          }
+          
+          // Save extraction result
+          await db.createExtractionResult({
+            documentId: input.documentId,
+            extractedData: JSON.stringify(extractionResult.data),
+            confidenceScores: JSON.stringify(extractionResult.confidence),
+            provider: extractionResult.provider,
+            ocrProvider: extractionResult.ocrProvider,
+          } as any);
+          
+          // Update document status
+          await db.updateDocument(input.documentId, {
+            extractionStatus: 'completed',
+          });
+          
+          return { 
+            success: true, 
+            data: extractionResult.data,
+            confidence: extractionResult.confidence,
+          };
+        } catch (error) {
+          await db.updateDocument(input.documentId, {
+            extractionStatus: 'failed',
+          });
+          throw error;
+        }
+      }),
+    
+    getExtraction: protectedProcedure
+      .input(z.object({ documentId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getExtractionResult(input.documentId);
+      }),
+  }),
+
+  // ============================================
   // ANALYTICS & FORECASTING
   // ============================================
   analytics: router({
@@ -1927,7 +1137,8 @@ export const appRouter = router({
       const tenders = await db.getAllTenders();
       const invoices = await db.getAllInvoices();
       const expenses = await db.getAllExpenses();
-      const lowStockItems = await db.getLowStockItems();
+      const lowStock = await db.getLowStockItems();
+      const anomalies = await db.getActiveAnomalies();
       
       return {
         budgets: {
@@ -1950,13 +1161,40 @@ export const appRouter = router({
           pending: expenses.filter(e => e.status === 'pending').length,
         },
         inventory: {
-          lowStock: lowStockItems.length,
+          lowStock: lowStock.length,
         },
-
+        anomalies: {
+          active: anomalies.length,
+          critical: anomalies.filter(a => a.severity === 'critical').length,
+        },
       };
     }),
     
-
+    forecasts: protectedProcedure.query(async () => {
+      return await db.getAllForecasts();
+    }),
+    
+    anomalies: protectedProcedure.query(async () => {
+      return await db.getAllAnomalies();
+    }),
+    
+    updateAnomaly: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(["new", "acknowledged", "investigating", "resolved", "false_positive"]),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { id, ...data } = input;
+        
+        if (data.status === 'resolved') {
+          (data as any).resolvedBy = ctx.user.id;
+          (data as any).resolvedAt = new Date();
+        }
+        
+        await db.updateAnomaly(id, data);
+        return { success: true };
+      }),
   }),
 
   // ============================================
@@ -1968,11 +1206,7 @@ export const appRouter = router({
     }),
     
     unread: protectedProcedure.query(async ({ ctx }) => {
-      return await db.getUserNotifications(ctx.user.id, true);
-    }),
-    
-    unreadCount: protectedProcedure.query(async ({ ctx }) => {
-      return await db.getUnreadNotificationCount(ctx.user.id);
+      return await db.getUnreadNotifications(ctx.user.id);
     }),
     
     markRead: protectedProcedure
@@ -2003,212 +1237,6 @@ export const appRouter = router({
   }),
 
   // ============================================
-  // TASKS
-  // ============================================
-  tasks: router({
-    list: protectedProcedure
-      .use(createPermissionMiddleware('tasks', 'view'))
-      .input(z.object({
-        assigneeId: z.number().optional(),
-        creatorId: z.number().optional(),
-        status: z.enum(["todo", "in_progress", "review", "done", "cancelled"]).optional(),
-        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
-        relatedModule: z.string().optional(),
-        relatedId: z.number().optional(),
-      }).optional())
-      .query(async ({ input }) => {
-        return await db.getAllTasks();
-      }),
-    
-    get: protectedProcedure
-      .use(createPermissionMiddleware('tasks', 'view'))
-      .input(z.object({ id: z.number() }))
-      .query(async ({ input, ctx }) => {
-        const task = await db.getTaskById(input.id);
-        if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
-        await checkResourceAccess(ctx, task, 'task');
-        return task;
-      }),
-    
-    create: protectedProcedure
-      .use(createPermissionMiddleware('tasks', 'create'))
-      .input(z.object({
-        title: z.string().min(1),
-        description: z.string().optional(),
-        assigneeId: z.number().optional(),
-        priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
-        status: z.enum(["todo", "in_progress", "review", "done", "cancelled"]).default("todo"),
-        dueDate: z.date().optional(),
-        relatedModule: z.string().optional(),
-        relatedId: z.number().optional(),
-        tags: z.string().optional(), // JSON array
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const result = await db.createTask({
-          ...input,
-          creatorId: ctx.user.id,
-        } as any);
-        
-        const taskId = Number(result.insertId);
-        await logAudit({
-          userId: ctx.user.id,
-          action: 'create',
-          entityType: 'task',
-          entityId: taskId,
-          changes: { title: input.title, assigneeId: input.assigneeId },
-        });
-        
-        // Notification: Notify assignee of new task
-        if (input.assigneeId && input.assigneeId !== ctx.user.id) {
-          await notificationHelpers.notifyTaskAssigned(taskId, input.assigneeId, ctx.user.name || 'Admin');
-        }
-        
-        return { taskId };
-      }),
-    
-    update: protectedProcedure
-      .use(createPermissionMiddleware('tasks', 'edit'))
-      .input(z.object({
-        id: z.number(),
-        title: z.string().min(1).optional(),
-        description: z.string().optional(),
-        assigneeId: z.number().optional(),
-        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
-        status: z.enum(["todo", "in_progress", "review", "done", "cancelled"]).optional(),
-        dueDate: z.date().optional(),
-        completedAt: z.date().optional(),
-        relatedModule: z.string().optional(),
-        relatedId: z.number().optional(),
-        tags: z.string().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const { id, ...updates } = input;
-        
-        const task = await db.getTaskById(id);
-        if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
-        await checkResourceAccess(ctx, task, 'task');
-        
-        // Auto-set completedAt when status changes to done
-        if (updates.status === "done" && !updates.completedAt) {
-          updates.completedAt = new Date();
-        }
-        
-        await db.updateTask(id, updates as any);
-        
-        // Notification: Notify on status change
-        if (updates.status && task.assigneeId && task.assigneeId !== ctx.user.id) {
-          await notificationHelpers.notifyTaskStatusChanged(id, task.assigneeId, updates.status, ctx.user.name || 'Admin');
-        }
-        
-        // Notification: Notify on reassignment
-        if (updates.assigneeId && updates.assigneeId !== task.assigneeId) {
-          await notificationHelpers.notifyTaskAssigned(id, updates.assigneeId, ctx.user.name || 'Admin');
-        }
-        
-        return { success: true };
-      }),
-    
-    delete: protectedProcedure
-      .use(createPermissionMiddleware('tasks', 'delete'))
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ input, ctx }) => {
-        const task = await db.getTaskById(input.id);
-        if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
-        await checkResourceAccess(ctx, task, 'task');
-        
-        await logAudit({
-          userId: ctx.user.id,
-          action: 'delete',
-          entityType: 'task',
-          entityId: input.id,
-          changes: { title: task.title },
-        });
-        
-        await db.deleteTask(input.id);
-        return { success: true };
-      }),
-    
-    // Task comments
-    comments: router({
-      list: protectedProcedure
-        .input(z.object({ taskId: z.number() }))
-        .query(async ({ input }) => {
-          return await db.getTaskComments(input.taskId);
-        }),
-      
-      create: protectedProcedure
-        .input(z.object({
-          taskId: z.number(),
-          comment: z.string().min(1),
-        }))
-        .mutation(async ({ input, ctx }) => {
-          const result = await db.createTaskComment({
-            ...input,
-            userId: ctx.user.id,
-          } as any);
-          return { commentId: result.insertId };
-        }),
-      
-      delete: protectedProcedure
-        .input(z.object({ id: z.number() }))
-        .mutation(async ({ input }) => {
-          await db.deleteTaskComment(input.id);
-          return { success: true };
-        }),
-    }),
-  }),
-
-  // ============================================
-  // WIDGET PREFERENCES
-  // ============================================
-  widgets: router({    list: protectedProcedure
-      .query(async ({ ctx }) => {
-        return await db.getUserWidgetPreferences(ctx.user.id);
-      }),
-    
-    create: protectedProcedure
-      .input(z.object({
-        widgetType: z.string(),
-        position: z.string(), // JSON string
-        settings: z.string().optional(),
-        isVisible: z.boolean().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const result = await db.createWidgetPreference({
-          ...input,
-          userId: ctx.user.id,
-        });
-        return { widgetId: result.insertId };
-      }),
-    
-    update: protectedProcedure
-      .input(z.object({
-        id: z.number(),
-        position: z.string().optional(),
-        settings: z.string().optional(),
-        isVisible: z.boolean().optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const { id, ...updates } = input;
-        await db.updateWidgetPreference(id, updates);
-        return { success: true };
-      }),
-    
-    delete: protectedProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
-        await db.deleteWidgetPreference(input.id);
-        return { success: true };
-      }),
-    
-    reset: protectedProcedure
-      .mutation(async ({ ctx }) => {
-        await db.resetUserWidgets(ctx.user.id);
-        return { success: true };
-      }),
-  }),
-
-  // ============================================
   // SETTINGS
   // ============================================
   settings: router({
@@ -2219,7 +1247,7 @@ export const appRouter = router({
     get: adminProcedure
       .input(z.object({ key: z.string() }))
       .query(async ({ input }) => {
-        return await db.getSettingByKey(input.key);
+        return await db.getSetting(input.key);
       }),
     
     update: adminProcedure
