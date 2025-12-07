@@ -117,3 +117,40 @@
 - [x] Loading states during upload and processing
 - [x] Tests for receipt URL storage (2 passing tests)
 - [x] OCR tests skipped (require external services, tested manually)
+
+### Bulk Expense Import (COMPLETE ✅)
+- [x] Create CSV import endpoint in backend (bulkImport mutation)
+- [x] Add CSV parsing and validation logic (frontend)
+- [x] Implement duplicate detection (batch + database)
+- [x] Create BulkImportExpenses page with full UI
+- [x] Add CSV file upload UI with template download
+- [x] Show validation results and errors (parse errors, import results)
+- [x] Allow user to review and confirm import (preview table)
+- [x] Add import button to Expenses page header
+- [x] Added route /expenses/bulk-import
+- [x] Write tests for bulk import (5 tests passing)
+
+### Expense Approval Dashboard (COMPLETE ✅)
+- [x] Create ExpenseApprovalDashboard page
+- [x] Show pending expenses grouped by department
+- [x] Add batch selection functionality (checkboxes)
+- [x] Implement batch approve/reject actions with dialogs
+- [x] Show approval statistics (4 stat cards)
+- [x] Add filters (search, department filter)
+- [x] Add to Dashboard quick actions
+- [x] Added route /expenses/approvals
+- [x] Rejection reason required for batch reject
+- [x] Real-time stats update on selection
+- [x] Write tests for approval dashboard (5 tests passing)
+
+### OCR Confirmation Step (COMPLETE ✅)
+- [x] Add confirmation dialog after OCR extraction
+- [x] Show extracted vs current field values (side-by-side)
+- [x] Allow field-by-field acceptance/rejection (checkboxes)
+- [x] Add "Select All" and "Deselect All" buttons
+- [x] Highlight confidence scores for each field (badges)
+- [x] Update CreateExpense to use confirmation flow
+- [x] Pre-select all fields with data by default
+- [x] Show current values for comparison
+- [x] Apply only selected fields on confirmation
+- [x] Toast notification showing applied field count

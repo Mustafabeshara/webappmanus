@@ -33,6 +33,8 @@ import PurchaseOrderDetails from "./pages/PurchaseOrderDetails";
 import Expenses from "./pages/Expenses";
 import CreateExpense from "./pages/CreateExpense";
 import ExpenseDetails from "./pages/ExpenseDetails";
+import BulkImportExpenses from "./pages/BulkImportExpenses";
+import ExpenseApprovalDashboard from "./pages/ExpenseApprovalDashboard";
 
 function Router() {
   return (
@@ -242,6 +244,22 @@ function Router() {
       </Route>
       
       {/* Expenses - specific routes BEFORE dynamic routes */}
+      <Route path={"/expenses/approvals"}>
+        {() => (
+          <DashboardLayout>
+            <ExpenseApprovalDashboard />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/expenses/bulk-import"}>
+        {() => (
+          <DashboardLayout>
+            <BulkImportExpenses />
+          </DashboardLayout>
+        )}
+      </Route>
+      
       <Route path={"/expenses/create"}>
         {() => (
           <DashboardLayout>

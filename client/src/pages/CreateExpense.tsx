@@ -14,8 +14,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, AlertTriangle, Upload, Loader2 } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Upload, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 
 export default function CreateExpense() {
   const [, setLocation] = useLocation();
@@ -34,6 +44,9 @@ export default function CreateExpense() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
+  const [showOcrConfirmation, setShowOcrConfirmation] = useState(false);
+  const [extractedData, setExtractedData] = useState<any>(null);
+  const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
 
   const { data: budgetCategories = [] } = trpc.budgetCategories.list.useQuery();
   const { data: budgets = [] } = trpc.budgets.list.useQuery();
@@ -46,14 +59,18 @@ export default function CreateExpense() {
       setIsUploading(false);
       toast.success("Receipt uploaded and processed");
       
-      // Auto-populate fields from OCR extraction
+      // Show confirmation dialog instead of auto-populating
       if (data.extractedData?.success && data.extractedData.data) {
+        setExtractedData(data.extractedData);
+        // Pre-select all fields with data
+        const fieldsWithData = new Set<string>();
         const extracted = data.extractedData.data;
-        if (extracted.title) setTitle(extracted.title);
-        if (extracted.amount) setAmount((extracted.amount / 100).toString());
-        if (extracted.expenseDate) setExpenseDate(new Date(extracted.expenseDate).toISOString().split("T")[0]);
-        if (extracted.vendor) setDescription(`Vendor: ${extracted.vendor}`);
-        if (extracted.description && !description) setDescription(extracted.description);
+        if (extracted.title) fieldsWithData.add('title');
+        if (extracted.amount) fieldsWithData.add('amount');
+        if (extracted.expenseDate) fieldsWithData.add('expenseDate');
+        if (extracted.vendor || extracted.description) fieldsWithData.add('description');
+        setSelectedFields(fieldsWithData);
+        setShowOcrConfirmation(true);
       }
     },
     onError: (error) => {
@@ -116,6 +133,43 @@ export default function CreateExpense() {
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
+  };
+
+  const handleConfirmOcr = () => {
+    if (!extractedData?.data) return;
+    
+    const extracted = extractedData.data;
+    
+    // Apply selected fields
+    if (selectedFields.has('title') && extracted.title) {
+      setTitle(extracted.title);
+    }
+    if (selectedFields.has('amount') && extracted.amount) {
+      setAmount((extracted.amount / 100).toString());
+    }
+    if (selectedFields.has('expenseDate') && extracted.expenseDate) {
+      setExpenseDate(new Date(extracted.expenseDate).toISOString().split("T")[0]);
+    }
+    if (selectedFields.has('description')) {
+      if (extracted.vendor) {
+        setDescription(`Vendor: ${extracted.vendor}`);
+      } else if (extracted.description) {
+        setDescription(extracted.description);
+      }
+    }
+    
+    setShowOcrConfirmation(false);
+    toast.success(`Applied ${selectedFields.size} field(s) from OCR`);
+  };
+  
+  const toggleField = (field: string) => {
+    const newSelected = new Set(selectedFields);
+    if (newSelected.has(field)) {
+      newSelected.delete(field);
+    } else {
+      newSelected.add(field);
+    }
+    setSelectedFields(newSelected);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -414,6 +468,170 @@ export default function CreateExpense() {
           </Button>
         </div>
       </form>
+
+      {/* OCR Confirmation Dialog */}
+      <Dialog open={showOcrConfirmation} onOpenChange={setShowOcrConfirmation}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Review Extracted Data</DialogTitle>
+            <DialogDescription>
+              Select which fields you want to apply from the receipt. Uncheck any fields that look incorrect.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {extractedData?.data && (
+              <div className="space-y-3">
+                {/* Title */}
+                {extractedData.data.title && (
+                  <div className="flex items-start gap-3 p-3 border rounded-lg">
+                    <Checkbox
+                      checked={selectedFields.has('title')}
+                      onCheckedChange={() => toggleField('title')}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="font-semibold">Title</Label>
+                        {extractedData.confidence?.title && (
+                          <Badge variant="outline" className="text-xs">
+                            {Math.round(extractedData.confidence.title * 100)}% confidence
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm">{extractedData.data.title}</p>
+                      {title && title !== extractedData.data.title && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Current: {title}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Amount */}
+                {extractedData.data.amount && (
+                  <div className="flex items-start gap-3 p-3 border rounded-lg">
+                    <Checkbox
+                      checked={selectedFields.has('amount')}
+                      onCheckedChange={() => toggleField('amount')}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="font-semibold">Amount</Label>
+                        {extractedData.confidence?.amount && (
+                          <Badge variant="outline" className="text-xs">
+                            {Math.round(extractedData.confidence.amount * 100)}% confidence
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm">${(extractedData.data.amount / 100).toFixed(2)}</p>
+                      {amount && parseFloat(amount) !== extractedData.data.amount / 100 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Current: ${amount}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Date */}
+                {extractedData.data.expenseDate && (
+                  <div className="flex items-start gap-3 p-3 border rounded-lg">
+                    <Checkbox
+                      checked={selectedFields.has('expenseDate')}
+                      onCheckedChange={() => toggleField('expenseDate')}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="font-semibold">Expense Date</Label>
+                        {extractedData.confidence?.expenseDate && (
+                          <Badge variant="outline" className="text-xs">
+                            {Math.round(extractedData.confidence.expenseDate * 100)}% confidence
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm">
+                        {new Date(extractedData.data.expenseDate).toLocaleDateString()}
+                      </p>
+                      {expenseDate && expenseDate !== new Date(extractedData.data.expenseDate).toISOString().split('T')[0] && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Current: {new Date(expenseDate).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Vendor/Description */}
+                {(extractedData.data.vendor || extractedData.data.description) && (
+                  <div className="flex items-start gap-3 p-3 border rounded-lg">
+                    <Checkbox
+                      checked={selectedFields.has('description')}
+                      onCheckedChange={() => toggleField('description')}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="font-semibold">Description</Label>
+                        {extractedData.confidence?.vendor && (
+                          <Badge variant="outline" className="text-xs">
+                            {Math.round(extractedData.confidence.vendor * 100)}% confidence
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm">
+                        {extractedData.data.vendor ? `Vendor: ${extractedData.data.vendor}` : extractedData.data.description}
+                      </p>
+                      {description && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Current: {description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedFields(new Set());
+              }}
+            >
+              Deselect All
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const allFields = new Set<string>();
+                if (extractedData?.data.title) allFields.add('title');
+                if (extractedData?.data.amount) allFields.add('amount');
+                if (extractedData?.data.expenseDate) allFields.add('expenseDate');
+                if (extractedData?.data.vendor || extractedData?.data.description) allFields.add('description');
+                setSelectedFields(allFields);
+              }}
+            >
+              Select All
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowOcrConfirmation(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmOcr} disabled={selectedFields.size === 0}>
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+              Apply Selected ({selectedFields.size})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

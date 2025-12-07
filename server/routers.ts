@@ -931,6 +931,89 @@ export const appRouter = router({
           extractedData,
         };
       }),
+    
+    bulkImport: protectedProcedure
+      .input(z.object({
+        expenses: z.array(z.object({
+          title: z.string(),
+          description: z.string().optional(),
+          categoryId: z.number(),
+          budgetId: z.number().optional(),
+          departmentId: z.number().optional(),
+          amount: z.number(),
+          expenseDate: z.string(), // ISO date string from CSV
+          notes: z.string().optional(),
+        })),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const results = {
+          success: [] as any[],
+          errors: [] as any[],
+          duplicates: [] as any[],
+        };
+
+        // Check for duplicates within the import batch
+        const seen = new Set<string>();
+        const allExpenses = await db.getAllExpenses();
+        
+        for (let i = 0; i < input.expenses.length; i++) {
+          const expense = input.expenses[i];
+          const key = `${expense.title}-${expense.amount}-${expense.expenseDate}`;
+          
+          try {
+            // Check for duplicate in batch
+            if (seen.has(key)) {
+              results.duplicates.push({
+                row: i + 1,
+                expense,
+                reason: 'Duplicate within import batch',
+              });
+              continue;
+            }
+            
+            // Check for duplicate in database (same title, amount, and date)
+            const isDuplicate = allExpenses.some(e => 
+              e.title === expense.title && 
+              e.amount === expense.amount && 
+              new Date(e.expenseDate).toISOString().split('T')[0] === expense.expenseDate
+            );
+            
+            if (isDuplicate) {
+              results.duplicates.push({
+                row: i + 1,
+                expense,
+                reason: 'Already exists in database',
+              });
+              continue;
+            }
+            
+            seen.add(key);
+            
+            // Create expense
+            const expenseNumber = utils.generateExpenseNumber();
+            await db.createExpense({
+              ...expense,
+              expenseNumber,
+              expenseDate: new Date(expense.expenseDate),
+              createdBy: ctx.user.id,
+            } as any);
+            
+            results.success.push({
+              row: i + 1,
+              expenseNumber,
+              title: expense.title,
+            });
+          } catch (error: any) {
+            results.errors.push({
+              row: i + 1,
+              expense,
+              error: error.message || 'Unknown error',
+            });
+          }
+        }
+        
+        return results;
+      }),
   }),
 
   // ============================================

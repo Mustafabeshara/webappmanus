@@ -11,7 +11,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  ArrowRight
+  ArrowRight,
+  ClipboardCheck
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -238,6 +239,12 @@ export default function Dashboard() {
               <Button variant="outline" className="w-full justify-start">
                 <DollarSign className="h-4 w-4 mr-2" />
                 New Expense
+              </Button>
+            </Link>
+            <Link href="/expenses/approvals">
+              <Button variant="outline" className="w-full justify-start">
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                Approve Expenses
               </Button>
             </Link>
             <Link href="/templates">
