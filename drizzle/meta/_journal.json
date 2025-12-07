@@ -36,6 +36,13 @@
       "when": 1765131510789,
       "tag": "0004_good_quasar",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1765134224038,
+      "tag": "0005_tough_darkhawk",
+      "breakpoints": true
     }
   ]
 }

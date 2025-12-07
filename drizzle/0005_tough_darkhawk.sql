@@ -1,0 +1,1 @@
+ALTER TABLE `tenders` ADD `isParticipating` boolean DEFAULT false NOT NULL;

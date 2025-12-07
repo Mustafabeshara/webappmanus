@@ -13,7 +13,7 @@ interface FileUploadProps {
   disabled?: boolean;
 }
 
-export default function FileUpload({
+export function FileUpload({
   onUpload,
   accept = "*/*",
   multiple = true,

@@ -21,7 +21,7 @@ interface FileViewerProps {
   title?: string;
 }
 
-export default function FileViewer({
+export function FileViewer({
   files,
   onDelete,
   showDelete = false,
