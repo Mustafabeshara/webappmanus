@@ -331,4 +331,31 @@
 - [x] Add download button for each file
 - [ ] Add pagination for large file lists
 - [ ] Test file management dashboard with sample files
-- [ ] Create final checkpoint
+- [x] Create final checkpoint
+
+
+## FILE VERSIONING SYSTEM
+- [x] Design file versioning database schema (add version number, parent file ID, is_current flag)
+- [x] Update files table schema with versioning fields
+- [x] Run database migration to add versioning columns
+- [x] Create file history query procedure (get all versions of a file)
+- [x] Update uploadToS3 procedure to support versioning (increment version on replace)
+- [x] Add file replacement UI in FileViewer component
+- [x] Create file history dialog showing all versions with timestamps
+- [x] Add rollback functionality to restore previous version as current
+- [x] Update File Manager to show version count badge
+- [ ] Test file versioning with multiple uploads
+- [ ] Test rollback functionality
+
+## BULK OPERATIONS IN FILE MANAGER
+- [x] Add checkbox column to File Manager table
+- [x] Add "Select All" checkbox in table header
+- [x] Track selected files in component state
+- [x] Add bulk action toolbar (appears when files selected)
+- [x] Implement bulk download (zip multiple files)
+- [x] Implement bulk delete with confirmation dialog
+- [x] Add selected count indicator
+- [x] Add "Clear Selection" button
+- [ ] Test bulk download with multiple files
+- [ ] Test bulk delete with multiple files
+- [ ] Save final checkpoint

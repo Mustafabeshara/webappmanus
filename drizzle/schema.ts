@@ -600,7 +600,13 @@ export const files = mysqlTable("files", {
   entityId: int("entityId").notNull(),
   category: varchar("category", { length: 100 }), // registration, catalog, submission for tenders
   uploadedBy: int("uploadedBy").notNull(),
+  // Versioning fields
+  version: int("version").default(1).notNull(), // Version number (1, 2, 3, ...)
+  parentFileId: int("parentFileId"), // ID of the original file (null for first version)
+  isCurrent: boolean("isCurrent").default(true).notNull(), // Only one version should be current
+  replacedAt: timestamp("replacedAt"), // When this version was replaced by a newer one
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  uploadedAt: timestamp("uploadedAt").defaultNow().notNull(), // Alias for clarity in version history
 });
 
 // Type exports

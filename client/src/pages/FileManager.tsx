@@ -8,8 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Download, Eye, Trash2, Search, File, Image as ImageIcon, FileText, Filter } from "lucide-react";
+import { Download, Eye, Trash2, Search, File, Image as ImageIcon, FileText, Filter, History, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { FileHistoryDialog } from "@/components/FileHistoryDialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function FileManager() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -17,6 +19,8 @@ export default function FileManager() {
   const [fileTypeFilter, setFileTypeFilter] = useState<string>("all");
   const [previewFile, setPreviewFile] = useState<any | null>(null);
   const [imageZoom, setImageZoom] = useState(100);
+  const [historyFileId, setHistoryFileId] = useState<number | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<Set<number>>(new Set());
   
   // Get all files from database
   const { data: allFiles = [], refetch } = trpc.files.getAll.useQuery();
@@ -118,6 +122,64 @@ export default function FileManager() {
     if (confirm("Are you sure you want to delete this file?")) {
       deleteMutation.mutate({ id: fileId });
     }
+  };
+
+  const toggleFileSelection = (fileId: number) => {
+    const newSelection = new Set(selectedFiles);
+    if (newSelection.has(fileId)) {
+      newSelection.delete(fileId);
+    } else {
+      newSelection.add(fileId);
+    }
+    setSelectedFiles(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFiles.size === filteredFiles.length) {
+      setSelectedFiles(new Set());
+    } else {
+      setSelectedFiles(new Set(filteredFiles.map((f: any) => f.id)));
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedFiles.size === 0) {
+      toast.error("No files selected");
+      return;
+    }
+    
+    toast.info(`Downloading ${selectedFiles.size} file(s)...`);
+    
+    for (const fileId of selectedFiles) {
+      const file = allFiles.find((f: any) => f.id === fileId);
+      if (file) {
+        await handleDownload(file);
+        // Add small delay between downloads to avoid overwhelming the browser
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    toast.success(`Downloaded ${selectedFiles.size} file(s)`);
+    setSelectedFiles(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedFiles.size === 0) {
+      toast.error("No files selected");
+      return;
+    }
+    
+    if (!confirm(`Are you sure you want to delete ${selectedFiles.size} file(s)? This action cannot be undone.`)) {
+      return;
+    }
+    
+    toast.info(`Deleting ${selectedFiles.size} file(s)...`);
+    
+    for (const fileId of selectedFiles) {
+      deleteMutation.mutate({ id: fileId });
+    }
+    
+    setSelectedFiles(new Set());
   };
   
   const closePreview = () => {
@@ -225,6 +287,47 @@ export default function FileManager() {
         </CardContent>
       </Card>
       
+      {/* Bulk Actions Toolbar */}
+      {selectedFiles.size > 0 && (
+        <Card className="bg-primary/10 border-primary">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-medium">
+                  {selectedFiles.size} file(s) selected
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedFiles(new Set())}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Clear Selection
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBulkDownload}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download All
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete All
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Files Table */}
       <Card>
         <CardHeader>
@@ -234,6 +337,12 @@ export default function FileManager() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selectedFiles.size === filteredFiles.length && filteredFiles.length > 0}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>File Name</TableHead>
                 <TableHead>Entity</TableHead>
@@ -246,13 +355,19 @@ export default function FileManager() {
             <TableBody>
               {filteredFiles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     No files found
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredFiles.map((file: any) => (
                   <TableRow key={file.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedFiles.has(file.id)}
+                        onCheckedChange={() => toggleFileSelection(file.id)}
+                      />
+                    </TableCell>
                     <TableCell>{getFileIcon(file.mimeType)}</TableCell>
                     <TableCell className="font-medium max-w-xs truncate">
                       {file.fileName}
@@ -282,6 +397,14 @@ export default function FileManager() {
                           title="Download file"
                         >
                           <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setHistoryFileId(file.id)}
+                          title="View version history"
+                        >
+                          <History className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -338,6 +461,13 @@ export default function FileManager() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* File History Dialog */}
+      <FileHistoryDialog
+        fileId={historyFileId}
+        onClose={() => setHistoryFileId(null)}
+        onRollback={() => refetch()}
+      />
     </div>
   );
 }

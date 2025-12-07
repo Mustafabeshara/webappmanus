@@ -1490,6 +1490,101 @@ export const appRouter = router({
         await db.deleteFile(input.id);
         return { success: true };
       }),
+
+    getAll: protectedProcedure.query(async () => {
+      return await db.getAllFiles();
+    }),
+
+    getHistory: protectedProcedure
+      .input(z.object({ fileId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getFileHistory(input.fileId);
+      }),
+
+    replaceFile: protectedProcedure
+      .input(z.object({
+        originalFileId: z.number(),
+        fileName: z.string(),
+        fileData: z.string(), // base64 encoded
+        mimeType: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Get the original file to inherit entity info
+        const originalFile = await db.getFileById(input.originalFileId);
+        if (!originalFile) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Original file not found' });
+        }
+
+        // Check if user owns the file or is admin
+        if (originalFile.uploadedBy !== ctx.user.id && ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized to replace this file' });
+        }
+
+        // Convert base64 to buffer
+        const buffer = Buffer.from(input.fileData, 'base64');
+        const fileSize = buffer.length;
+        
+        // Generate unique file key
+        const timestamp = Date.now();
+        const randomSuffix = Math.random().toString(36).substring(7);
+        const fileKey = `${originalFile.entityType}/${originalFile.entityId}/${timestamp}-${randomSuffix}-${input.fileName}`;
+        
+        // Upload to S3
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        
+        // Get the parent file ID (if original is already a version, use its parent)
+        const parentFileId = originalFile.parentFileId || originalFile.id;
+        
+        // Get the next version number
+        const history = await db.getFileHistory(parentFileId);
+        const nextVersion = history.length + 1;
+        
+        // Mark the current file as replaced
+        await db.markFileAsReplaced(input.originalFileId);
+        
+        // Create new version
+        const newFile = await db.createFileVersion({
+          fileName: input.fileName,
+          fileKey,
+          fileUrl: url,
+          fileSize,
+          mimeType: input.mimeType,
+          entityType: originalFile.entityType,
+          entityId: originalFile.entityId,
+          category: originalFile.category,
+          uploadedBy: ctx.user.id,
+          version: nextVersion,
+          parentFileId,
+          isCurrent: true,
+        });
+        
+        return newFile;
+      }),
+
+    rollbackToVersion: protectedProcedure
+      .input(z.object({ versionId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const versionFile = await db.getFileById(input.versionId);
+        if (!versionFile) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Version not found' });
+        }
+
+        // Check if user owns the file or is admin
+        if (versionFile.uploadedBy !== ctx.user.id && ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized to rollback this file' });
+        }
+
+        // Get parent file ID
+        const parentFileId = versionFile.parentFileId || versionFile.id;
+        
+        // Mark all versions as not current
+        await db.markAllVersionsAsNotCurrent(parentFileId);
+        
+        // Mark this version as current
+        await db.markFileAsCurrent(input.versionId);
+        
+        return { success: true };
+      }),
   }),
 });
 

@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Download, Eye, Trash2, File, Image as ImageIcon, FileText, ZoomIn, ZoomOut, X } from "lucide-react";
+import { Download, Eye, Trash2, File, Image as ImageIcon, FileText, ZoomIn, ZoomOut, X, History, Upload, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -21,6 +21,9 @@ interface FileViewerProps {
   onDelete?: (fileId: number) => Promise<void>;
   showDelete?: boolean;
   title?: string;
+  showVersioning?: boolean;
+  onViewHistory?: (fileId: number) => void;
+  onReplaceFile?: (fileId: number) => void;
 }
 
 export function FileViewer({
@@ -28,9 +31,14 @@ export function FileViewer({
   onDelete,
   showDelete = false,
   title = "Attached Files",
+  showVersioning = false,
+  onViewHistory,
+  onReplaceFile,
 }: FileViewerProps) {
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const [imageZoom, setImageZoom] = useState(100);
+  const [historyFile, setHistoryFile] = useState<FileItem | null>(null);
+  const [replaceFile, setReplaceFile] = useState<FileItem | null>(null);
 
   const getFileIcon = (mimeType: string) => {
     if (mimeType.startsWith("image/")) return <ImageIcon className="h-5 w-5" />;
@@ -163,6 +171,26 @@ export function FileViewer({
                   >
                     <Download className="h-4 w-4" />
                   </Button>
+                  {showVersioning && onViewHistory && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onViewHistory(file.id)}
+                      title="View version history"
+                    >
+                      <History className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {showVersioning && onReplaceFile && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onReplaceFile(file.id)}
+                      title="Replace file (new version)"
+                    >
+                      <Upload className="h-4 w-4" />
+                    </Button>
+                  )}
                   {showDelete && onDelete && (
                     <Button
                       variant="ghost"

@@ -978,6 +978,75 @@ export async function deleteFile(id: number) {
   await db.delete(files).where(eq(files.id, id));
 }
 
+export async function getAllFiles() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  // Only return current versions
+  const result = await db.select().from(files)
+    .where(eq(files.isCurrent, true))
+    .orderBy(desc(files.uploadedAt));
+  return result;
+}
+
+export async function getFileHistory(fileId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  // Get the parent file ID (in case fileId is already a version)
+  const file = await getFileById(fileId);
+  if (!file) return [];
+  
+  const parentId = file.parentFileId || file.id;
+  
+  // Get all versions including the parent
+  const result = await db.select().from(files)
+    .where(or(
+      eq(files.id, parentId),
+      eq(files.parentFileId, parentId)
+    ))
+    .orderBy(desc(files.version));
+  return result;
+}
+
+export async function createFileVersion(file: typeof files.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(files).values(file);
+  return { id: Number(result.insertId), ...file };
+}
+
+export async function markFileAsReplaced(fileId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(files)
+    .set({ isCurrent: false, replacedAt: new Date() })
+    .where(eq(files.id, fileId));
+}
+
+export async function markAllVersionsAsNotCurrent(parentFileId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(files)
+    .set({ isCurrent: false })
+    .where(or(
+      eq(files.id, parentFileId),
+      eq(files.parentFileId, parentFileId)
+    ));
+}
+
+export async function markFileAsCurrent(fileId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(files)
+    .set({ isCurrent: true, replacedAt: null })
+    .where(eq(files.id, fileId));
+}
+
 
 // ============================================
 // PURCHASE ORDERS

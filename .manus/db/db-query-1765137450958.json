@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE files \nADD COLUMN version INT NOT NULL DEFAULT 1,\nADD COLUMN parentFileId INT NULL,\nADD COLUMN isCurrent BOOLEAN NOT NULL DEFAULT TRUE,\nADD COLUMN replacedAt TIMESTAMP NULL,\nADD COLUMN uploadedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user i7FUhNGQxjduCiw.3c99e327379d --database mQ5aqYpP74zBSbqXk7AHKK --execute ALTER TABLE files \nADD COLUMN version INT NOT NULL DEFAULT 1,\nADD COLUMN parentFileId INT NULL,\nADD COLUMN isCurrent BOOLEAN NOT NULL DEFAULT TRUE,\nADD COLUMN replacedAt TIMESTAMP NULL,\nADD COLUMN uploadedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 3214
+}
