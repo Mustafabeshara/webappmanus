@@ -258,3 +258,26 @@
 - [x] Add drill-down capability via clickable stat cards linking to modules
 - [x] Write tests for all analytics endpoints (9 tests passing)
 - [ ] Add export dashboard report functionality (optional enhancement)
+
+### Task Management Module (IN PROGRESS)
+- [x] Design tasks and task_comments database schema
+- [x] Add tasks table with fields (title, description, assignee, priority, status, due date, related module/ID)
+- [x] Add task_comments table for collaboration
+- [x] Create database migration for tasks tables (0005_next_daredevil.sql)
+- [x] Build task CRUD operations in db.ts
+- [x] Create tasks tRPC router with all endpoints (list, get, create, update, delete)
+- [x] Add task assignment and reassignment (assigneeId field)
+- [x] Add task status workflow (todo/in_progress/review/done/cancelled)
+- [x] Add priority levels (low/medium/high/urgent)
+- [x] Add task comments router (list, create, delete)
+- [x] Auto-set completedAt when status changes to done
+- [x] Create Tasks list page with filters and search
+- [x] Create CreateTask page with module linking
+- [x] Create TaskDetails page with comments
+- [x] Add task comments functionality (create, list in TaskDetails)
+- [x] Add status update workflow in TaskDetails
+- [x] Add Tasks to navigation menu with CheckSquare icon
+- [x] Add Tasks routes to App.tsx (create before :id)
+- [ ] Add task quick actions to Dashboard
+- [ ] Add task notifications for assignments and updates
+- [x] Write tests for tasks module (4 tests passing)

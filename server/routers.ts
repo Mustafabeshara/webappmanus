@@ -1912,6 +1912,112 @@ export const appRouter = router({
   }),
 
   // ============================================
+  // TASKS
+  // ============================================
+  tasks: router({
+    list: protectedProcedure
+      .input(z.object({
+        assigneeId: z.number().optional(),
+        creatorId: z.number().optional(),
+        status: z.enum(["todo", "in_progress", "review", "done", "cancelled"]).optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+        relatedModule: z.string().optional(),
+        relatedId: z.number().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        return await db.getAllTasks(input || {});
+      }),
+    
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getTaskById(input.id);
+      }),
+    
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+        assigneeId: z.number().optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+        status: z.enum(["todo", "in_progress", "review", "done", "cancelled"]).default("todo"),
+        dueDate: z.date().optional(),
+        relatedModule: z.string().optional(),
+        relatedId: z.number().optional(),
+        tags: z.string().optional(), // JSON array
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const result = await db.createTask({
+          ...input,
+          creatorId: ctx.user.id,
+        } as any);
+        return { taskId: result.insertId };
+      }),
+    
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().min(1).optional(),
+        description: z.string().optional(),
+        assigneeId: z.number().optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+        status: z.enum(["todo", "in_progress", "review", "done", "cancelled"]).optional(),
+        dueDate: z.date().optional(),
+        completedAt: z.date().optional(),
+        relatedModule: z.string().optional(),
+        relatedId: z.number().optional(),
+        tags: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...updates } = input;
+        
+        // Auto-set completedAt when status changes to done
+        if (updates.status === "done" && !updates.completedAt) {
+          updates.completedAt = new Date();
+        }
+        
+        await db.updateTask(id, updates as any);
+        return { success: true };
+      }),
+    
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteTask(input.id);
+        return { success: true };
+      }),
+    
+    // Task comments
+    comments: router({
+      list: protectedProcedure
+        .input(z.object({ taskId: z.number() }))
+        .query(async ({ input }) => {
+          return await db.getTaskComments(input.taskId);
+        }),
+      
+      create: protectedProcedure
+        .input(z.object({
+          taskId: z.number(),
+          comment: z.string().min(1),
+        }))
+        .mutation(async ({ input, ctx }) => {
+          const result = await db.createTaskComment({
+            ...input,
+            userId: ctx.user.id,
+          } as any);
+          return { commentId: result.insertId };
+        }),
+      
+      delete: protectedProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          await db.deleteTaskComment(input.id);
+          return { success: true };
+        }),
+    }),
+  }),
+
+  // ============================================
   // SETTINGS
   // ============================================
   settings: router({

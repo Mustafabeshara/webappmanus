@@ -40,6 +40,9 @@ import ExpenseAnalytics from "./pages/ExpenseAnalytics";
 import Deliveries from "./pages/Deliveries";
 import CreateDelivery from "./pages/CreateDelivery";
 import DeliveryDetails from "./pages/DeliveryDetails";
+import Tasks from "./pages/Tasks";
+import CreateTask from "./pages/CreateTask";
+import TaskDetails from "./pages/TaskDetails";
 
 function Router() {
   return (
@@ -321,8 +324,7 @@ function Router() {
           </DashboardLayout>
         )}
       </Route>
-      
-      <Route path={"/deliveries"}>
+          <Route path={"/deliveries"}>
         {() => (
           <DashboardLayout>
             <Deliveries />
@@ -330,7 +332,32 @@ function Router() {
         )}
       </Route>
       
-      {/* Fallback routes */}
+      {/* Task routes */}
+      <Route path={"/tasks/create"}>
+        {() => (
+          <DashboardLayout>
+            <CreateTask />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/tasks/:id"}>
+        {() => (
+          <DashboardLayout>
+            <TaskDetails />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      <Route path={"/tasks"}>
+        {() => (
+          <DashboardLayout>
+            <Tasks />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* Fallback */}
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

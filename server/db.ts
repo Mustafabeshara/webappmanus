@@ -34,7 +34,9 @@ import {
   anomalies,
   notifications,
   auditLogs,
-  settings
+  settings,
+  tasks,
+  taskComments
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1017,4 +1019,87 @@ export async function upsertSetting(setting: typeof settings.$inferInsert) {
   } else {
     await db.insert(settings).values(setting);
   }
+}
+
+// ============================================
+// TASKS
+// ============================================
+
+export async function createTask(task: typeof tasks.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(tasks).values(task);
+  return { insertId: Number((result as any).insertId) };
+}
+
+export async function getTaskById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getAllTasks(filters?: {
+  assigneeId?: number;
+  creatorId?: number;
+  status?: string;
+  priority?: string;
+  relatedModule?: string;
+  relatedId?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  let query = db.select().from(tasks);
+  const conditions = [];
+  
+  if (filters?.assigneeId) conditions.push(eq(tasks.assigneeId, filters.assigneeId));
+  if (filters?.creatorId) conditions.push(eq(tasks.creatorId, filters.creatorId));
+  if (filters?.status) conditions.push(eq(tasks.status, filters.status as any));
+  if (filters?.priority) conditions.push(eq(tasks.priority, filters.priority as any));
+  if (filters?.relatedModule) conditions.push(eq(tasks.relatedModule, filters.relatedModule));
+  if (filters?.relatedId) conditions.push(eq(tasks.relatedId, filters.relatedId));
+  
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+  
+  return query.orderBy(desc(tasks.createdAt));
+}
+
+export async function updateTask(id: number, updates: Partial<typeof tasks.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(tasks).set(updates).where(eq(tasks.id, id));
+}
+
+export async function deleteTask(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(tasks).where(eq(tasks.id, id));
+}
+
+// ============================================
+// TASK COMMENTS
+// ============================================
+
+export async function createTaskComment(comment: typeof taskComments.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(taskComments).values(comment);
+  return { insertId: Number((result as any).insertId) };
+}
+
+export async function getTaskComments(taskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(taskComments)
+    .where(eq(taskComments.taskId, taskId))
+    .orderBy(asc(taskComments.createdAt));
+}
+
+export async function deleteTaskComment(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(taskComments).where(eq(taskComments.id, id));
 }

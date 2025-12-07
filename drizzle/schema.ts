@@ -601,6 +601,39 @@ export const settings = mysqlTable("settings", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+/**
+ * Tasks for project and work management
+ */
+export const tasks = mysqlTable("tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  assigneeId: int("assigneeId"), // user ID
+  creatorId: int("creatorId").notNull(), // user who created the task
+  priority: mysqlEnum("priority", ["low", "medium", "high", "urgent"]).default("medium").notNull(),
+  status: mysqlEnum("status", ["todo", "in_progress", "review", "done", "cancelled"]).default("todo").notNull(),
+  dueDate: timestamp("dueDate"),
+  completedAt: timestamp("completedAt"),
+  // Link to other modules
+  relatedModule: varchar("relatedModule", { length: 50 }), // tender, budget, invoice, po, expense, delivery
+  relatedId: int("relatedId"), // ID of the related entity
+  tags: text("tags"), // JSON array of tags
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Comments on tasks for collaboration
+ */
+export const taskComments = mysqlTable("task_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  userId: int("userId").notNull(),
+  comment: text("comment").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -629,3 +662,5 @@ export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
 export type PurchaseOrderItem = typeof purchaseOrderItems.$inferSelect;
 export type GoodsReceipt = typeof goodsReceipts.$inferSelect;
 export type GoodsReceiptItem = typeof goodsReceiptItems.$inferSelect;
+export type Task = typeof tasks.$inferSelect;
+export type TaskComment = typeof taskComments.$inferSelect;
