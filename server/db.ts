@@ -28,6 +28,7 @@ import {
   extractionResults,
   forecasts,
   anomalies,
+  files,
   notifications,
   auditLogs,
   settings
@@ -928,4 +929,48 @@ export async function upsertSetting(setting: typeof settings.$inferInsert) {
   } else {
     await db.insert(settings).values(setting);
   }
+}
+
+
+// ============================================
+// FILES
+// ============================================
+
+export async function createFile(file: typeof files.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(files).values(file);
+  return { id: Number(result.insertId), ...file };
+}
+
+export async function getFileById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db.select().from(files).where(eq(files.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getFilesByEntity(entityType: string, entityId: number, category?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  let query = db.select().from(files).where(and(
+    eq(files.entityType, entityType),
+    eq(files.entityId, entityId)
+  )) as any;
+  
+  if (category) {
+    query = query.where(eq(files.category, category));
+  }
+  
+  return query.orderBy(desc(files.createdAt));
+}
+
+export async function deleteFile(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(files).where(eq(files.id, id));
 }

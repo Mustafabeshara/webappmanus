@@ -155,3 +155,52 @@
 - [x] Test navigation from sidebar
 - [x] Verify all CRUD operations work (Expenses and Deliveries tested successfully)
 - [x] Create final checkpoint
+
+
+## UNIVERSAL FILE UPLOAD SYSTEM
+- [x] Create FileUpload component with drag-and-drop support
+- [x] Create FileViewer component for viewing uploaded files
+- [ ] Add S3 upload utility functions (client-side) - using storagePut from server
+- [x] Add S3 upload tRPC procedures (server-side)
+- [x] Add file metadata table to database
+- [ ] Integrate file upload into Expenses module
+- [ ] Integrate file upload into Deliveries module
+- [ ] Integrate file upload into Inventory module
+- [ ] Test file upload and viewing functionality
+
+## PURCHASE ORDERS MODULE COMPLETION
+- [ ] Create purchase_orders table schema
+- [ ] Create purchase_order_items table schema
+- [ ] Add getAllPurchaseOrders query helper
+- [ ] Add createPurchaseOrder mutation helper
+- [ ] Add updatePurchaseOrder mutation helper
+- [ ] Add tRPC procedures for purchase orders
+- [ ] Replace PurchaseOrders.tsx placeholder with full CRUD page
+- [ ] Test purchase order creation and management
+
+## TASKS MODULE COMPLETION
+- [ ] Create tasks table schema
+- [ ] Add getAllTasks query helper
+- [ ] Add createTask mutation helper
+- [ ] Add updateTask mutation helper
+- [ ] Add tRPC procedures for tasks
+- [ ] Replace Tasks.tsx placeholder with full CRUD page
+- [ ] Add task assignment functionality
+- [ ] Test task creation and assignment
+
+## TENDER MODULE RESTRUCTURE
+- [ ] Add "isOurTender" field to tenders table
+- [ ] Create tender_documents table for file management
+- [ ] Add document categories (registration, catalog, submission)
+- [ ] Update Tenders.tsx with two tabs (Our Tenders / All Tenders)
+- [ ] Add document upload section to tender details page
+- [ ] Add document folder view with categories
+- [ ] Add document download and preview functionality
+- [ ] Test tender document management
+
+## FINAL TESTING
+- [ ] Test all file uploads across modules
+- [ ] Test Purchase Orders CRUD operations
+- [ ] Test Tasks CRUD operations
+- [ ] Test Tender document management
+- [ ] Create final checkpoint

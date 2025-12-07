@@ -1265,6 +1265,55 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // Files router for universal file management
+  files: router({
+    upload: protectedProcedure
+      .input(z.object({
+        fileName: z.string(),
+        fileKey: z.string(),
+        fileUrl: z.string(),
+        fileSize: z.number(),
+        mimeType: z.string(),
+        entityType: z.string(),
+        entityId: z.number(),
+        category: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const file = await db.createFile({
+          ...input,
+          uploadedBy: ctx.user.id,
+        });
+        return file;
+      }),
+
+    getByEntity: protectedProcedure
+      .input(z.object({
+        entityType: z.string(),
+        entityId: z.number(),
+        category: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        return await db.getFilesByEntity(input.entityType, input.entityId, input.category);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const file = await db.getFileById(input.id);
+        if (!file) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'File not found' });
+        }
+        
+        // Check if user owns the file or is admin
+        if (file.uploadedBy !== ctx.user.id && ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized to delete this file' });
+        }
+        
+        await db.deleteFile(input.id);
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

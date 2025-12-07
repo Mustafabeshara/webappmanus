@@ -527,6 +527,23 @@ export const settings = mysqlTable("settings", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+/**
+ * Universal file storage table for all modules
+ */
+export const files = mysqlTable("files", {
+  id: int("id").autoincrement().primaryKey(),
+  fileName: varchar("fileName", { length: 255 }).notNull(),
+  fileKey: varchar("fileKey", { length: 500 }).notNull(), // S3 key
+  fileUrl: varchar("fileUrl", { length: 1000 }).notNull(), // S3 URL
+  fileSize: int("fileSize").notNull(), // in bytes
+  mimeType: varchar("mimeType", { length: 100 }).notNull(),
+  entityType: varchar("entityType", { length: 50 }).notNull(), // expenses, tenders, deliveries, etc.
+  entityId: int("entityId").notNull(),
+  category: varchar("category", { length: 100 }), // registration, catalog, submission for tenders
+  uploadedBy: int("uploadedBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -551,3 +568,5 @@ export type Forecast = typeof forecasts.$inferSelect;
 export type Anomaly = typeof anomalies.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type File = typeof files.$inferSelect;
+export type InsertFile = typeof files.$inferInsert;
