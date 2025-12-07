@@ -254,7 +254,13 @@
 - [ ] Test toggling between Our Tenders and All Tenders tabs (pending server restart)
 
 ## FILE ATTACHMENTS FOR MODULES
-- [ ] Add file upload to Expenses module for receipts (in progress)
-- [ ] Add file upload to Deliveries module for proof-of-delivery
-- [ ] Test file attachments in both modules
-- [ ] Create final checkpoint
+- [x] Add receipt upload field to Expenses create form
+- [x] Integrate FileUpload component with Expenses
+- [ ] Add proof-of-delivery upload to Deliveries module (foundation ready, needs UI integration)
+- [ ] Integrate FileUpload component with Deliveries
+- [ ] Add inline PDF preview to FileViewer (future enhancement)
+- [ ] Add inline image preview to FileViewer (future enhancement)
+- [ ] Test tender document upload with sample files (requires server restart to resolve type errors)
+- [ ] Verify S3 storage and file download
+- [ ] Test file attachments in Expenses
+- [x] Create final checkpoint

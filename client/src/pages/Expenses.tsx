@@ -29,8 +29,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, CheckCircle, XCircle, Clock, DollarSign } from "lucide-react";
+import { Plus, FileText, CheckCircle, XCircle, Clock, DollarSign, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { FileUpload } from "@/components/FileUpload";
 
 type ExpenseStatus = "draft" | "pending" | "approved" | "rejected" | "paid";
 
@@ -81,6 +82,15 @@ export default function Expenses() {
     amount: "",
     notes: "",
   });
+  
+  const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
+  
+  const uploadToS3Mutation = trpc.files.uploadToS3.useMutation();
+  
+  const handleReceiptUpload = async (files: File[]) => {
+    setReceiptFiles(files);
+    toast.success(`${files.length} receipt(s) ready to upload`);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -394,6 +404,20 @@ export default function Expenses() {
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Additional notes"
                 />
+              </div>
+              <div className="grid gap-2">
+                <Label>Receipt Upload</Label>
+                <FileUpload
+                  onUpload={handleReceiptUpload}
+                  accept="image/*,application/pdf"
+                  maxSize={5 * 1024 * 1024}
+                  multiple
+                />
+                {receiptFiles.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {receiptFiles.length} file(s) selected
+                  </p>
+                )}
               </div>
             </div>
             <DialogFooter>
