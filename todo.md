@@ -204,3 +204,12 @@
 - [ ] Test Tasks CRUD operations
 - [ ] Test Tender document management
 - [ ] Create final checkpoint
+
+
+## BUG FIX - Expenses Table Query Error (Recurring) ✅
+- [x] Check actual expenses table structure in database
+- [x] Compare with schema.ts expenses table definition
+- [x] Identify missing or extra columns causing query failure (receiptUrl already exists)
+- [x] Fix schema to match database OR update database to match schema (server restart resolved)
+- [x] Test dashboard loading (working correctly)
+- [x] Verify expenses queries work correctly

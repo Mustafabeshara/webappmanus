@@ -1,0 +1,32 @@
+{
+  "query": "SELECT * FROM expenses LIMIT 1",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user i7FUhNGQxjduCiw.3c99e327379d --database mQ5aqYpP74zBSbqXk7AHKK --execute SELECT * FROM expenses LIMIT 1",
+  "rows": [
+    {
+      "id": "1",
+      "expenseNumber": "EXP-202512-3X9SYM",
+      "title": "Office Supplies Purchase",
+      "description": "Monthly office supplies for the team",
+      "categoryId": "2",
+      "budgetId": "30002",
+      "departmentId": "1",
+      "tenderId": "NULL",
+      "amount": "15000",
+      "expenseDate": "2025-01-15 00:00:00",
+      "status": "draft",
+      "approvedBy": "NULL",
+      "approvedAt": "NULL",
+      "rejectionReason": "NULL",
+      "notes": "Purchased from Office Depot",
+      "createdBy": "1",
+      "createdAt": "2025-12-07 11:58:55",
+      "updatedAt": "2025-12-07 11:58:55",
+      "receiptUrl": "NULL",
+      "approvalStatus": "pending"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\texpenseNumber\ttitle\tdescription\tcategoryId\tbudgetId\tdepartmentId\ttenderId\tamount\texpenseDate\tstatus\tapprovedBy\tapprovedAt\trejectionReason\tnotes\tcreatedBy\tcreatedAt\tupdatedAt\treceiptUrl\tapprovalStatus\n1\tEXP-202512-3X9SYM\tOffice Supplies Purchase\tMonthly office supplies for the team\t2\t30002\t1\tNULL\t15000\t2025-01-15 00:00:00\tdraft\tNULL\tNULL\tNULL\tPurchased from Office Depot\t1\t2025-12-07 11:58:55\t2025-12-07 11:58:55\tNULL\tpending\n",
+  "stderr": "",
+  "execution_time_ms": 1622
+}
