@@ -842,13 +842,13 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const expenseNumber = utils.generateExpenseNumber();
         
-        await db.createExpense({
+        const result = await db.createExpense({
           ...input,
           expenseNumber,
           createdBy: ctx.user.id,
         } as any);
         
-        return { success: true, expenseNumber };
+        return { success: true, expenseNumber, expenseId: Number(result.insertId) };
       }),
     
     update: protectedProcedure
@@ -875,6 +875,9 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const expense = await db.getExpenseById(input.id);
         if (!expense) throw new TRPCError({ code: 'NOT_FOUND' });
+        if (expense.status !== 'pending') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expense must be in pending status to approve/reject' });
+        }
         
         await db.updateExpense(input.id, {
           status: input.approved ? "approved" : "rejected",

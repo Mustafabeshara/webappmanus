@@ -92,3 +92,15 @@
 - Building complete features only - no placeholders
 - Saving checkpoint after Phase 4 completion
 
+
+### Expenses Module (COMPLETE ✅)
+- [x] Verified expenses schema and database helpers
+- [x] Verified and enhanced expenses tRPC router
+- [x] Created Expenses list page with search/filter and statistics
+- [x] Created CreateExpense page with budget validation and warnings
+- [x] Created ExpenseDetails page with approval workflow
+- [x] Added Expenses to navigation menu with Receipt icon
+- [x] Added Expenses routes to App.tsx (create before :id)
+- [x] Wrote comprehensive tests for Expenses module (10 tests)
+- [x] All tests passing (100%)
+- [x] Updated todo.md with completed items
