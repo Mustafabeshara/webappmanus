@@ -27,6 +27,7 @@ import PurchaseOrders from "./pages/PurchaseOrders";
 import Tasks from "./pages/Tasks";
 import Users from "./pages/Users";
 import AuditLogs from "./pages/AuditLogs";
+import FileManager from "./pages/FileManager";
 
 function Router() {
   return (
@@ -35,6 +36,14 @@ function Router() {
       <Route path={"/"} component={Home} />
       
       {/* Dashboard routes */}
+      <Route path={"/files"}>
+        {() => (
+          <DashboardLayout>
+            <FileManager />
+          </DashboardLayout>
+        )}
+      </Route>
+      
       <Route path={"/dashboard"}>
         {() => (
           <DashboardLayout>

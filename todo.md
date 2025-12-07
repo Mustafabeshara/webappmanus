@@ -277,3 +277,58 @@
 - [ ] Test tender document upload
 - [ ] Verify S3 storage and file retrieval
 - [ ] Create final checkpoint
+
+
+## API KEYS CONFIGURATION
+- [ ] Request Anthropic API key from user
+- [ ] Request Groq API key from user
+- [ ] Request Gemini API key from user
+- [ ] Configure API keys in environment variables
+- [ ] Test LLM integration with new API keys
+
+## FILE VIEWER INLINE PREVIEW ENHANCEMENT
+- [x] Update FileViewer component to detect file types (PDF, images)
+- [x] Add inline PDF preview using iframe or PDF.js
+- [x] Add inline image preview using img tags
+- [x] Add preview modal for better viewing experience
+- [x] Add zoom controls for images
+- [ ] Test PDF preview with sample files
+- [ ] Test image preview with sample files
+
+## EXTEND FILE ATTACHMENTS TO OTHER MODULES
+### Purchase Orders
+- [x] Add file upload field to Purchase Orders create form
+- [x] Support contract documents, invoices, and supporting files
+- [x] Upload files to S3 with entityType="purchase_order", category="contract"
+- [ ] Display uploaded files in PO details page using FileViewer
+- [ ] Test PO file attachments
+
+### Tasks
+- [x] Add file upload field to Tasks create/edit form
+- [x] Support supporting documents and attachments
+- [x] Upload files to S3 with entityType="task", category="attachment"
+- [ ] Display uploaded files in Task details page using FileViewer
+- [ ] Test Task file attachments
+
+### Invoices
+- [ ] Add file upload field to Invoices create form
+- [ ] Support signed copies and payment receipts
+- [ ] Upload files to S3 with entityType="invoice", category="signed_copy"
+- [ ] Display uploaded files in Invoice details page using FileViewer
+- [ ] Test Invoice file attachments
+
+## FILE MANAGEMENT DASHBOARD
+- [x] Create new FileManager page component
+- [x] Add route to App.tsx (/files)
+- [x] Add to navigation sidebar
+- [x] Create file list table with columns (name, type, size, entity, uploaded date, user)
+- [x] Add search functionality (by filename)
+- [x] Add filter by entity type (expense, delivery, tender, PO, task, invoice)
+- [x] Add filter by file type (image, PDF, document)
+- [ ] Add filter by date range
+- [ ] Add bulk delete functionality
+- [x] Add file preview on row click
+- [x] Add download button for each file
+- [ ] Add pagination for large file lists
+- [ ] Test file management dashboard with sample files
+- [ ] Create final checkpoint

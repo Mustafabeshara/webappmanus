@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,20 +11,26 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { FileUpload } from "@/components/FileUpload";
 
 export default function PurchaseOrders() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [createdPOId, setCreatedPOId] = useState<number | null>(null);
   
   const { data: purchaseOrders = [], refetch } = trpc.purchaseOrders.getAll.useQuery();
   const { data: suppliers = [] } = trpc.suppliers.getAll.useQuery();
   const { data: departments = [] } = trpc.departments.getAll.useQuery();
   
   const createMutation = trpc.purchaseOrders.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setCreatedPOId(data.id);
       toast.success("Purchase order created successfully");
-      setIsCreateOpen(false);
-      refetch();
+      setTimeout(() => {
+        setIsCreateOpen(false);
+        setCreatedPOId(null);
+        refetch();
+      }, 1000);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -75,6 +81,7 @@ export default function PurchaseOrders() {
               departments={departments}
               onSubmit={(data: any) => createMutation.mutate(data)}
               isLoading={createMutation.isPending}
+              createdPOId={createdPOId}
             />
           </DialogContent>
         </Dialog>
@@ -234,7 +241,8 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function CreatePOForm({ suppliers, departments, onSubmit, isLoading }: any) {
+function CreatePOForm({ suppliers, departments, onSubmit, isLoading, createdPOId }: any) {
+  const uploadToS3Mutation = trpc.files.uploadToS3.useMutation();
   const [formData, setFormData] = useState({
     poNumber: `PO-${Date.now()}`,
     supplierId: "",
@@ -250,6 +258,8 @@ function CreatePOForm({ suppliers, departments, onSubmit, isLoading }: any) {
   const [items, setItems] = useState([
     { description: "", quantity: 1, unitPrice: 0, totalPrice: 0 },
   ]);
+  
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   
   const addItem = () => {
     setItems([...items, { description: "", quantity: 1, unitPrice: 0, totalPrice: 0 }]);
@@ -273,10 +283,10 @@ function CreatePOForm({ suppliers, departments, onSubmit, isLoading }: any) {
     setFormData({ ...formData, totalAmount: subtotal });
   };
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    onSubmit({
+    const poData = {
       ...formData,
       supplierId: parseInt(formData.supplierId),
       departmentId: formData.departmentId ? parseInt(formData.departmentId) : undefined,
@@ -288,8 +298,42 @@ function CreatePOForm({ suppliers, departments, onSubmit, isLoading }: any) {
         unitPrice: Math.round(item.unitPrice * 100),
         totalPrice: Math.round(item.totalPrice * 100),
       })),
-    });
+    };
+    
+    // Call onSubmit to create PO
+    onSubmit(poData);
   };
+  
+  // Upload files when createdPOId is available
+  useEffect(() => {
+    if (createdPOId && attachedFiles.length > 0) {
+      (async () => {
+      for (const file of attachedFiles) {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        await new Promise((resolve, reject) => {
+          reader.onloadend = async () => {
+            try {
+              const base64 = reader.result as string;
+              await uploadToS3Mutation.mutateAsync({
+                fileName: file.name,
+                fileData: base64,
+                mimeType: file.type,
+                entityType: 'purchase_order',
+                entityId: createdPOId,
+                category: 'contract',
+              });
+              resolve(true);
+            } catch (error) {
+              reject(error);
+            }
+          };
+        });
+      }
+      toast.success(`${attachedFiles.length} file(s) uploaded successfully`);
+      })();
+    }
+  }, [createdPOId, attachedFiles]);
   
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -398,6 +442,19 @@ function CreatePOForm({ suppliers, departments, onSubmit, isLoading }: any) {
           value={formData.notes}
           onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           rows={3}
+        />
+      </div>
+      
+      <div>
+        <Label>Contract Documents</Label>
+        <p className="text-sm text-muted-foreground mb-2">
+          Upload contracts, invoices, or supporting documents
+        </p>
+        <FileUpload
+          onFilesSelected={setAttachedFiles}
+          maxFiles={10}
+          maxSizeMB={10}
+          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
         />
       </div>
       

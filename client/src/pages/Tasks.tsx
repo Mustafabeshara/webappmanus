@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,11 +11,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { FileUpload } from "@/components/FileUpload";
 
 export default function Tasks() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [view, setView] = useState<"all" | "my">("all");
+  const [createdTaskId, setCreatedTaskId] = useState<number | null>(null);
   
   const { data: allTasks = [], refetch } = trpc.tasks.getAll.useQuery();
   const { data: myTasks = [], refetch: refetchMy } = trpc.tasks.getMyTasks.useQuery();
@@ -24,11 +26,15 @@ export default function Tasks() {
   const tasks = view === "all" ? allTasks : myTasks;
   
   const createMutation = trpc.tasks.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setCreatedTaskId(data.id);
       toast.success("Task created successfully");
-      setIsCreateOpen(false);
-      refetch();
-      refetchMy();
+      setTimeout(() => {
+        setIsCreateOpen(false);
+        setCreatedTaskId(null);
+        refetch();
+        refetchMy();
+      }, 1000);
     },
     onError: (error: any) => toast.error(error.message),
   });
@@ -90,6 +96,7 @@ export default function Tasks() {
                 users={users}
                 onSubmit={(data: any) => createMutation.mutate(data)}
                 isLoading={createMutation.isPending}
+                createdTaskId={createdTaskId}
               />
             </DialogContent>
           </Dialog>
@@ -276,7 +283,8 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
-function CreateTaskForm({ users, onSubmit, isLoading }: any) {
+function CreateTaskForm({ users, onSubmit, isLoading, createdTaskId }: any) {
+  const uploadToS3Mutation = trpc.files.uploadToS3.useMutation();
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -284,6 +292,8 @@ function CreateTaskForm({ users, onSubmit, isLoading }: any) {
     assignedTo: "",
     dueDate: "",
   });
+  
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -293,6 +303,37 @@ function CreateTaskForm({ users, onSubmit, isLoading }: any) {
       assignedTo: formData.assignedTo ? parseInt(formData.assignedTo) : undefined,
     });
   };
+  
+  // Upload files when createdTaskId is available
+  useEffect(() => {
+    if (createdTaskId && attachedFiles.length > 0) {
+      (async () => {
+      for (const file of attachedFiles) {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        await new Promise((resolve, reject) => {
+          reader.onloadend = async () => {
+            try {
+              const base64 = reader.result as string;
+              await uploadToS3Mutation.mutateAsync({
+                fileName: file.name,
+                fileData: base64,
+                mimeType: file.type,
+                entityType: 'task',
+                entityId: createdTaskId,
+                category: 'attachment',
+              });
+              resolve(true);
+            } catch (error) {
+              reject(error);
+            }
+          };
+        });
+      }
+      toast.success(`${attachedFiles.length} file(s) uploaded successfully`);
+      })();
+    }
+  }, [createdTaskId, attachedFiles]);
   
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -351,6 +392,19 @@ function CreateTaskForm({ users, onSubmit, isLoading }: any) {
           type="date"
           value={formData.dueDate}
           onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+        />
+      </div>
+      
+      <div>
+        <Label>Attachments</Label>
+        <p className="text-sm text-muted-foreground mb-2">
+          Upload supporting documents or files
+        </p>
+        <FileUpload
+          onFilesSelected={setAttachedFiles}
+          maxFiles={5}
+          maxSizeMB={10}
+          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.csv"
         />
       </div>
       
