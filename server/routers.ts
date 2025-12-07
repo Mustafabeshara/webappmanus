@@ -8,6 +8,7 @@ import * as db from "./db";
 import * as utils from "./utils";
 import { storagePut } from "./storage";
 import { performOCR, extractTenderData, extractInvoiceData, extractExpenseData, generateForecast, detectAnomalies, analyzeTenderWinRate } from "./aiService";
+import * as dashboardAnalytics from "./dashboardAnalytics";
 import { notifyOwner } from "./_core/notification";
 
 // Admin-only procedure
@@ -38,6 +39,68 @@ async function checkPermission(userId: number, module: string, action: 'view' | 
 
 export const appRouter = router({
   system: systemRouter,
+  
+  // ============================================
+  // DASHBOARD ANALYTICS
+  // ============================================
+  dashboard: router({
+    tenderAnalytics: protectedProcedure
+      .input(z.object({
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }))
+      .query(async ({ input }) => {
+        return await dashboardAnalytics.getTenderAnalytics(input.startDate, input.endDate);
+      }),
+    
+    budgetAnalytics: protectedProcedure
+      .input(z.object({
+        fiscalYear: z.number().optional(),
+      }))
+      .query(async ({ input }) => {
+        return await dashboardAnalytics.getBudgetAnalytics(input.fiscalYear);
+      }),
+    
+    invoiceAnalytics: protectedProcedure
+      .input(z.object({
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }))
+      .query(async ({ input }) => {
+        return await dashboardAnalytics.getInvoiceAnalytics(input.startDate, input.endDate);
+      }),
+    
+    purchaseOrderAnalytics: protectedProcedure
+      .input(z.object({
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }))
+      .query(async ({ input }) => {
+        return await dashboardAnalytics.getPurchaseOrderAnalytics(input.startDate, input.endDate);
+      }),
+    
+    inventoryAnalytics: protectedProcedure
+      .query(async () => {
+        return await dashboardAnalytics.getInventoryAnalytics();
+      }),
+    
+    deliveryAnalytics: protectedProcedure
+      .input(z.object({
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }))
+      .query(async ({ input }) => {
+        return await dashboardAnalytics.getDeliveryAnalytics(input.startDate, input.endDate);
+      }),
+    
+    recentActivity: protectedProcedure
+      .input(z.object({
+        limit: z.number().default(10),
+      }))
+      .query(async ({ input }) => {
+        return await dashboardAnalytics.getRecentActivity(input.limit);
+      }),
+  }),
   
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
