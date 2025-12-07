@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, decimal } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, decimal, date } from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
 
 /**
@@ -528,6 +528,64 @@ export const settings = mysqlTable("settings", {
 });
 
 /**
+ * Purchase Orders for tracking supplier orders
+ */
+export const purchaseOrders = mysqlTable("purchase_orders", {
+  id: int("id").autoincrement().primaryKey(),
+  poNumber: varchar("poNumber", { length: 50 }).notNull().unique(),
+  supplierId: int("supplierId").notNull(),
+  departmentId: int("departmentId"),
+  status: mysqlEnum("status", ["draft", "pending", "approved", "ordered", "partially_received", "received", "cancelled"]).default("draft").notNull(),
+  orderDate: date("orderDate").notNull(),
+  expectedDeliveryDate: date("expectedDeliveryDate"),
+  actualDeliveryDate: date("actualDeliveryDate"),
+  totalAmount: int("totalAmount").notNull(), // in cents
+  taxAmount: int("taxAmount").default(0).notNull(),
+  shippingCost: int("shippingCost").default(0).notNull(),
+  notes: text("notes"),
+  approvedBy: int("approvedBy"),
+  approvedAt: timestamp("approvedAt"),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Purchase Order line items
+ */
+export const purchaseOrderItems = mysqlTable("purchase_order_items", {
+  id: int("id").autoincrement().primaryKey(),
+  purchaseOrderId: int("purchaseOrderId").notNull(),
+  productId: int("productId"),
+  description: varchar("description", { length: 500 }).notNull(),
+  quantity: int("quantity").notNull(),
+  unitPrice: int("unitPrice").notNull(), // in cents
+  totalPrice: int("totalPrice").notNull(), // in cents
+  receivedQuantity: int("receivedQuantity").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/**
+ * Tasks for project and work management
+ */
+export const tasks = mysqlTable("tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  status: mysqlEnum("status", ["todo", "in_progress", "review", "completed", "cancelled"]).default("todo").notNull(),
+  priority: mysqlEnum("priority", ["low", "medium", "high", "urgent"]).default("medium").notNull(),
+  assignedTo: int("assignedTo"),
+  departmentId: int("departmentId"),
+  relatedEntityType: varchar("relatedEntityType", { length: 50 }), // tender, expense, delivery, etc.
+  relatedEntityId: int("relatedEntityId"),
+  dueDate: date("dueDate"),
+  completedAt: timestamp("completedAt"),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
  * Universal file storage table for all modules
  */
 export const files = mysqlTable("files", {
@@ -570,3 +628,9 @@ export type Notification = typeof notifications.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type File = typeof files.$inferSelect;
 export type InsertFile = typeof files.$inferInsert;
+export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
+export type InsertPurchaseOrder = typeof purchaseOrders.$inferInsert;
+export type PurchaseOrderItem = typeof purchaseOrderItems.$inferSelect;
+export type InsertPurchaseOrderItem = typeof purchaseOrderItems.$inferInsert;
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = typeof tasks.$inferInsert;

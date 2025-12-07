@@ -169,23 +169,23 @@
 - [ ] Test file upload and viewing functionality
 
 ## PURCHASE ORDERS MODULE COMPLETION
-- [ ] Create purchase_orders table schema
-- [ ] Create purchase_order_items table schema
-- [ ] Add getAllPurchaseOrders query helper
-- [ ] Add createPurchaseOrder mutation helper
-- [ ] Add updatePurchaseOrder mutation helper
-- [ ] Add tRPC procedures for purchase orders
-- [ ] Replace PurchaseOrders.tsx placeholder with full CRUD page
+- [x] Create purchase_orders table schema
+- [x] Create purchase_order_items table schema
+- [x] Add getAllPurchaseOrders query helper
+- [x] Add createPurchaseOrder mutation helper
+- [x] Add updatePurchaseOrder mutation helper
+- [x] Add tRPC procedures for purchase orders
+- [x] Replace PurchaseOrders.tsx placeholder with full CRUD page
 - [ ] Test purchase order creation and management
 
 ## TASKS MODULE COMPLETION
-- [ ] Create tasks table schema
-- [ ] Add getAllTasks query helper
-- [ ] Add createTask mutation helper
-- [ ] Add updateTask mutation helper
-- [ ] Add tRPC procedures for tasks
-- [ ] Replace Tasks.tsx placeholder with full CRUD page
-- [ ] Add task assignment functionality
+- [x] Create tasks table schema
+- [x] Add getAllTasks query helper
+- [x] Add createTask mutation helper
+- [x] Add updateTask mutation helper
+- [x] Add tRPC procedures for tasks
+- [x] Replace Tasks.tsx placeholder with full CRUD page
+- [x] Add task assignment functionality
 - [ ] Test task creation and assignment
 
 ## TENDER MODULE RESTRUCTURE

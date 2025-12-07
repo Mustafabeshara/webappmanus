@@ -1266,6 +1266,135 @@ export const appRouter = router({
       }),
   }),
 
+  // Purchase Orders router
+  purchaseOrders: router({
+    getAll: protectedProcedure.query(async () => {
+      return await db.getAllPurchaseOrders();
+    }),
+
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const po = await db.getPurchaseOrderById(input.id);
+        if (!po) throw new TRPCError({ code: 'NOT_FOUND' });
+        const items = await db.getPurchaseOrderItems(input.id);
+        return { ...po, items };
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        poNumber: z.string(),
+        supplierId: z.number(),
+        departmentId: z.number().optional(),
+        orderDate: z.string(),
+        expectedDeliveryDate: z.string().optional(),
+        totalAmount: z.number(),
+        taxAmount: z.number().optional(),
+        shippingCost: z.number().optional(),
+        notes: z.string().optional(),
+        items: z.array(z.object({
+          productId: z.number().optional(),
+          description: z.string(),
+          quantity: z.number(),
+          unitPrice: z.number(),
+          totalPrice: z.number(),
+        })),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { items, ...poData } = input;
+        return await db.createPurchaseOrder(
+          { ...poData, createdBy: ctx.user.id } as any,
+          items as any
+        );
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(["draft", "pending", "approved", "ordered", "partially_received", "received", "cancelled"]).optional(),
+        actualDeliveryDate: z.string().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await db.updatePurchaseOrder(id, data as any);
+        return { success: true };
+      }),
+
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deletePurchaseOrder(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // Tasks router
+  tasks: router({
+    getAll: protectedProcedure.query(async () => {
+      return await db.getAllTasks();
+    }),
+
+    getMyTasks: protectedProcedure.query(async ({ ctx }) => {
+      return await db.getTasksByAssignee(ctx.user.id);
+    }),
+
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const task = await db.getTaskById(input.id);
+        if (!task) throw new TRPCError({ code: 'NOT_FOUND' });
+        return task;
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string(),
+        description: z.string().optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+        assignedTo: z.number().optional(),
+        departmentId: z.number().optional(),
+        relatedEntityType: z.string().optional(),
+        relatedEntityId: z.number().optional(),
+        dueDate: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return await db.createTask({ ...input, createdBy: ctx.user.id } as any);
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        status: z.enum(["todo", "in_progress", "review", "completed", "cancelled"]).optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+        assignedTo: z.number().optional(),
+        dueDate: z.string().optional(),
+        completedAt: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await db.updateTask(id, data as any);
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const task = await db.getTaskById(input.id);
+        if (!task) throw new TRPCError({ code: 'NOT_FOUND' });
+        
+        // Only creator or admin can delete
+        if (task.createdBy !== ctx.user.id && ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+        
+        await db.deleteTask(input.id);
+        return { success: true };
+      }),
+  }),
+
   // Files router for universal file management
   files: router({
     upload: protectedProcedure

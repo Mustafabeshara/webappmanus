@@ -29,6 +29,9 @@ import {
   forecasts,
   anomalies,
   files,
+  purchaseOrders,
+  purchaseOrderItems,
+  tasks,
   notifications,
   auditLogs,
   settings
@@ -973,4 +976,105 @@ export async function deleteFile(id: number) {
   if (!db) throw new Error("Database not available");
   
   await db.delete(files).where(eq(files.id, id));
+}
+
+
+// ============================================
+// PURCHASE ORDERS
+// ============================================
+
+export async function getAllPurchaseOrders() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(purchaseOrders).orderBy(desc(purchaseOrders.createdAt));
+}
+
+export async function getPurchaseOrderById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db.select().from(purchaseOrders).where(eq(purchaseOrders.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getPurchaseOrderItems(purchaseOrderId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(purchaseOrderItems).where(eq(purchaseOrderItems.purchaseOrderId, purchaseOrderId));
+}
+
+export async function createPurchaseOrder(po: typeof purchaseOrders.$inferInsert, items: typeof purchaseOrderItems.$inferInsert[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(purchaseOrders).values(po);
+  const poId = Number(result.insertId);
+  
+  if (items.length > 0) {
+    const itemsWithPoId = items.map(item => ({ ...item, purchaseOrderId: poId }));
+    await db.insert(purchaseOrderItems).values(itemsWithPoId);
+  }
+  
+  return { id: poId, ...po };
+}
+
+export async function updatePurchaseOrder(id: number, po: Partial<typeof purchaseOrders.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(purchaseOrders).set(po).where(eq(purchaseOrders.id, id));
+}
+
+export async function deletePurchaseOrder(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(purchaseOrderItems).where(eq(purchaseOrderItems.purchaseOrderId, id));
+  await db.delete(purchaseOrders).where(eq(purchaseOrders.id, id));
+}
+
+// ============================================
+// TASKS
+// ============================================
+
+export async function getAllTasks() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(tasks).orderBy(desc(tasks.createdAt));
+}
+
+export async function getTaskById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const result = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getTasksByAssignee(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(tasks).where(eq(tasks.assignedTo, userId)).orderBy(desc(tasks.createdAt));
+}
+
+export async function createTask(task: typeof tasks.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(tasks).values(task);
+  return { id: Number(result.insertId), ...task };
+}
+
+export async function updateTask(id: number, task: Partial<typeof tasks.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(tasks).set(task).where(eq(tasks.id, id));
+}
+
+export async function deleteTask(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(tasks).where(eq(tasks.id, id));
 }
