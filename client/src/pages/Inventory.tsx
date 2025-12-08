@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { Plus, Search, Eye, Edit, AlertTriangle, Package } from "lucide-react";
 import { Link } from "wouter";
+import { InventoryOptimization } from "@/components/InventoryOptimization";
+import { ExportButton } from "@/components/ExportButton";
 
 export default function Inventory() {
   const { user } = useAuth();
@@ -81,13 +83,19 @@ export default function Inventory() {
             Manage products and track stock levels
           </p>
         </div>
-        <Link href="/inventory/create">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Product
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <ExportButton module="inventory" />
+          <Link href="/inventory/create">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Product
+            </Button>
+          </Link>
+        </div>
       </div>
+
+      {/* AI Inventory Optimization */}
+      <InventoryOptimization />
 
       <Card>
         <CardHeader>

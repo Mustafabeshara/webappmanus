@@ -32,6 +32,8 @@ import {
 import { Plus, FileText, CheckCircle, XCircle, Clock, DollarSign, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { FileUpload } from "@/components/FileUpload";
+import { ExpenseAnalysis } from "@/components/ExpenseAnalysis";
+import { ExportButton } from "@/components/ExportButton";
 
 type ExpenseStatus = "draft" | "pending" | "approved" | "rejected" | "paid";
 
@@ -181,11 +183,17 @@ export default function Expenses() {
             Manage and track all company expenses
           </p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Expense
-        </Button>
+        <div className="flex gap-2">
+          <ExportButton module="expenses" />
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Expense
+          </Button>
+        </div>
       </div>
+
+      {/* AI Expense Analysis */}
+      <ExpenseAnalysis />
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">

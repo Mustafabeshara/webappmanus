@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { StatCard, StatCardGrid } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   FileText,
   DollarSign,
@@ -17,12 +18,14 @@ import {
   ArrowRight,
   Plus,
   Bell,
-  LayoutGrid
+  LayoutGrid,
+  Brain,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useEffect, useRef } from "react";
 import { showNotificationToast, Notification } from "@/lib/toastNotifications";
 import { soundNotifications } from "@/lib/soundNotifications";
+import BusinessInsights from "@/components/BusinessInsights";
 
 function DashboardSkeleton() {
   return (
@@ -131,6 +134,23 @@ export default function Dashboard() {
         }
       />
 
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <LayoutGrid className="h-4 w-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="ai-insights" className="flex items-center gap-2">
+            <Brain className="h-4 w-4" />
+            AI Business Insights
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ai-insights">
+          <BusinessInsights />
+        </TabsContent>
+
+        <TabsContent value="overview">
       {/* Critical Alerts */}
       {hasAlerts && (
         <div className="space-y-3">
@@ -317,6 +337,8 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

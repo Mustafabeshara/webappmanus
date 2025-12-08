@@ -8,8 +8,10 @@ import * as db from "./db";
 import * as utils from "./utils";
 import { storagePut, storageGet } from "./storage";
 import { performOCR, extractTenderData, extractInvoiceData, extractExpenseData, generateForecast, detectAnomalies, analyzeTenderWinRate } from "./aiService";
+import { analyzeInventory, isAIConfigured, getAvailableProviders, generateBudgetForecast, analyzeExpenses } from "./ai";
 import { notifyOwner } from "./_core/notification";
 import * as ocrService from "./ocr";
+import { generateExport, EXPORT_CONFIGS } from "./export";
 
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -207,21 +209,69 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const budget = await db.getBudgetById(input.id);
         if (!budget) throw new TRPCError({ code: 'NOT_FOUND' });
-        
+
         await db.updateBudget(input.id, {
           approvalStatus: input.approved ? "approved" : "rejected",
           approvedBy: ctx.user.id,
           approvedAt: new Date(),
         });
-        
+
         // Notify owner of budget approval/rejection
         await notifyOwner({
           title: `Budget ${input.approved ? 'Approved' : 'Rejected'}`,
           content: `Budget "${budget.name}" has been ${input.approved ? 'approved' : 'rejected'} by ${ctx.user.name}`,
         });
-        
+
         return { success: true };
       }),
+
+    // AI-powered budget forecasting
+    forecast: protectedProcedure
+      .input(z.object({
+        timeframeDays: z.number().default(90),
+      }))
+      .mutation(async ({ input }) => {
+        // Get all budgets
+        const budgets = await db.getAllBudgets();
+
+        // Get all expenses for trend analysis
+        const expenses = await db.getAllExpenses();
+
+        // Transform data for the AI forecasting service
+        const budgetData = budgets.map(b => ({
+          id: b.id,
+          name: b.name,
+          fiscalYear: b.fiscalYear,
+          allocatedAmount: b.allocatedAmount,
+          spentAmount: b.spentAmount,
+          departmentId: b.departmentId,
+          status: b.status,
+        }));
+
+        const expenseData = expenses.map(e => ({
+          id: e.id,
+          amount: e.amount,
+          date: e.expenseDate || e.createdAt || new Date(),
+          category: e.title || null,
+          vendorName: null,
+        }));
+
+        // Generate forecast
+        const forecast = await generateBudgetForecast(
+          budgetData,
+          expenseData,
+          input.timeframeDays
+        );
+
+        return { forecast };
+      }),
+
+    getAIStatus: protectedProcedure.query(async () => {
+      return {
+        configured: isAIConfigured(),
+        providers: getAvailableProviders(),
+      };
+    }),
   }),
 
   // ============================================
@@ -277,6 +327,128 @@ export const appRouter = router({
         await db.updateSupplier(id, data);
         return { success: true };
       }),
+
+    // AI-powered vendor scoring and analysis
+    aiAnalysis: protectedProcedure.query(async () => {
+      // Get all suppliers with their performance data
+      const suppliers = await db.getAllSuppliers();
+      const tenders = await db.getAllTenders();
+      const deliveries = await db.getAllDeliveries();
+
+      // Calculate vendor scores and insights
+      const vendorAnalysis = suppliers.map(supplier => {
+        // Count tender participations
+        const supplierTenders = tenders.filter(t => t.supplierId === supplier.id);
+        const wonTenders = supplierTenders.filter(t => t.status === 'awarded');
+        const winRate = supplierTenders.length > 0
+          ? (wonTenders.length / supplierTenders.length) * 100
+          : 0;
+
+        // Calculate delivery performance
+        const supplierDeliveries = deliveries.filter(d => d.supplierId === supplier.id);
+        const onTimeDeliveries = supplierDeliveries.filter(d => {
+          if (!d.expectedDate || !d.actualDate) return true;
+          return new Date(d.actualDate) <= new Date(d.expectedDate);
+        });
+        const onTimeRate = supplierDeliveries.length > 0
+          ? (onTimeDeliveries.length / supplierDeliveries.length) * 100
+          : 100;
+
+        // Calculate overall score (weighted)
+        const qualityScore = supplier.rating || 3;
+        const complianceScore = supplier.complianceStatus === 'compliant' ? 5 :
+                               supplier.complianceStatus === 'pending' ? 3 : 1;
+
+        const overallScore = (
+          (qualityScore * 0.3) +
+          ((winRate / 20) * 0.2) +
+          ((onTimeRate / 20) * 0.3) +
+          (complianceScore * 0.2)
+        );
+
+        // Determine risk level
+        let riskLevel: 'low' | 'medium' | 'high' = 'low';
+        if (overallScore < 3) riskLevel = 'high';
+        else if (overallScore < 4) riskLevel = 'medium';
+
+        return {
+          supplierId: supplier.id,
+          supplierName: supplier.name,
+          supplierCode: supplier.code,
+          metrics: {
+            winRate: Math.round(winRate * 10) / 10,
+            onTimeRate: Math.round(onTimeRate * 10) / 10,
+            qualityScore: qualityScore,
+            complianceScore: complianceScore,
+            totalTenders: supplierTenders.length,
+            wonTenders: wonTenders.length,
+            totalDeliveries: supplierDeliveries.length,
+          },
+          overallScore: Math.round(overallScore * 10) / 10,
+          riskLevel,
+          complianceStatus: supplier.complianceStatus || 'pending',
+          isActive: supplier.isActive,
+        };
+      });
+
+      // Sort by overall score descending
+      vendorAnalysis.sort((a, b) => b.overallScore - a.overallScore);
+
+      // Generate AI insights
+      const topPerformers = vendorAnalysis.filter(v => v.overallScore >= 4).slice(0, 5);
+      const atRisk = vendorAnalysis.filter(v => v.riskLevel === 'high');
+      const needsReview = vendorAnalysis.filter(v => v.complianceStatus === 'pending');
+
+      const insights = [];
+
+      if (topPerformers.length > 0) {
+        insights.push({
+          type: 'success' as const,
+          title: 'Top Performing Vendors',
+          message: `${topPerformers.length} vendors have excellent performance scores. Consider them for priority contracts.`,
+          vendors: topPerformers.map(v => v.supplierName),
+        });
+      }
+
+      if (atRisk.length > 0) {
+        insights.push({
+          type: 'warning' as const,
+          title: 'High Risk Vendors',
+          message: `${atRisk.length} vendor(s) require immediate attention due to poor performance metrics.`,
+          vendors: atRisk.map(v => v.supplierName),
+        });
+      }
+
+      if (needsReview.length > 0) {
+        insights.push({
+          type: 'info' as const,
+          title: 'Compliance Review Needed',
+          message: `${needsReview.length} vendor(s) have pending compliance status and need verification.`,
+          vendors: needsReview.map(v => v.supplierName),
+        });
+      }
+
+      // Calculate industry benchmarks
+      const avgWinRate = vendorAnalysis.reduce((sum, v) => sum + v.metrics.winRate, 0) / (vendorAnalysis.length || 1);
+      const avgOnTimeRate = vendorAnalysis.reduce((sum, v) => sum + v.metrics.onTimeRate, 0) / (vendorAnalysis.length || 1);
+
+      return {
+        vendors: vendorAnalysis,
+        insights,
+        benchmarks: {
+          avgWinRate: Math.round(avgWinRate * 10) / 10,
+          avgOnTimeRate: Math.round(avgOnTimeRate * 10) / 10,
+          totalVendors: vendorAnalysis.length,
+          activeVendors: vendorAnalysis.filter(v => v.isActive).length,
+          compliantVendors: vendorAnalysis.filter(v => v.complianceStatus === 'compliant').length,
+        },
+        recommendations: [
+          { action: 'Review high-risk vendors quarterly', priority: 'high' },
+          { action: 'Complete compliance verification for pending vendors', priority: 'medium' },
+          { action: 'Consider expanding partnerships with top performers', priority: 'low' },
+        ],
+      };
+    }),
   }),
 
   // ============================================
@@ -492,6 +664,45 @@ export const appRouter = router({
         await db.updateInventory(id, data);
         return { success: true };
       }),
+
+    // AI-powered inventory optimization
+    optimize: protectedProcedure.mutation(async () => {
+      // Get all inventory with product details
+      const inventoryItems = await db.getAllInventory();
+      const products = await db.getAllProducts();
+
+      // Create a product lookup map
+      const productMap = new Map(products.map(p => [p.id, p]));
+
+      // Transform inventory data for AI analysis
+      const itemsForAnalysis = inventoryItems.map(inv => {
+        const product = productMap.get(inv.productId);
+        return {
+          id: inv.id,
+          productId: inv.productId,
+          productName: product?.name || `Product #${inv.productId}`,
+          productSku: product?.sku || `SKU-${inv.productId}`,
+          category: product?.category || undefined,
+          quantity: inv.quantity,
+          minStockLevel: inv.minStockLevel || 10,
+          maxStockLevel: inv.maxStockLevel || undefined,
+          unitPrice: product?.price || undefined,
+          expiryDate: inv.expiryDate || null,
+          location: inv.location || undefined,
+          lastRestocked: inv.updatedAt || null,
+        };
+      });
+
+      const analysis = await analyzeInventory(itemsForAnalysis);
+      return { analysis };
+    }),
+
+    getAIStatus: protectedProcedure.query(async () => {
+      return {
+        configured: isAIConfigured(),
+        providers: getAvailableProviders(),
+      };
+    }),
   }),
 
   // ============================================
@@ -771,6 +982,56 @@ export const appRouter = router({
         await db.updateTender(input.id, { isParticipating: input.isParticipating });
         return { success: true };
       }),
+
+    // AI Analysis Endpoints
+    analyze: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { analyzeTender: analyzeAI } = await import('./ai/tender-analysis');
+
+        const tender = await db.getTenderById(input.id);
+        if (!tender) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tender not found' });
+
+        const items = await db.getTenderItems(input.id);
+        const departments = await db.getAllDepartments();
+        const department = tender.departmentId ? departments.find(d => d.id === tender.departmentId) : null;
+
+        // Get historical data
+        const allTenders = await db.getAllTenders();
+        const deptTenders = tender.departmentId
+          ? allTenders.filter(t => t.departmentId === tender.departmentId && (t.status === 'awarded' || t.status === 'closed'))
+          : [];
+        const wonTenders = deptTenders.filter(t => t.status === 'awarded');
+        const historicalWinRate = deptTenders.length > 0
+          ? (wonTenders.length / deptTenders.length) * 100
+          : 50;
+
+        const result = await analyzeAI({
+          id: tender.id,
+          title: tender.title,
+          description: tender.description,
+          status: tender.status,
+          category: null, // Add if available
+          department: department?.name || null,
+          estimatedValue: tender.estimatedValue?.toString() || null,
+          submissionDeadline: tender.submissionDeadline,
+          items: items.map(i => ({
+            description: i.description,
+            quantity: i.quantity,
+            unit: i.unit || 'piece',
+            estimatedPrice: Number(i.estimatedPrice) || undefined,
+          })),
+          historicalWinRate,
+          totalSimilarTenders: deptTenders.length,
+        });
+
+        return result;
+      }),
+
+    getAIStatus: publicProcedure.query(async () => {
+      const { getAIStatus } = await import('./ai/service');
+      return getAIStatus();
+    }),
   }),
 
   // ============================================
@@ -842,6 +1103,164 @@ export const appRouter = router({
         await db.updateInvoice(id, data);
         return { success: true };
       }),
+
+    // AI-powered invoice analytics and insights
+    aiAnalysis: protectedProcedure.query(async () => {
+      const invoices = await db.getAllInvoices();
+      const customers = await db.getAllCustomers();
+      const tenders = await db.getAllTenders();
+      const deliveries = await db.getAllDeliveries();
+
+      const customerMap = new Map(customers.map(c => [c.id, c]));
+      const now = new Date();
+
+      // Invoice status breakdown
+      const statusCounts = {
+        draft: 0,
+        sent: 0,
+        paid: 0,
+        overdue: 0,
+        cancelled: 0,
+      };
+
+      let totalOutstanding = 0;
+      let totalPaid = 0;
+      let totalOverdue = 0;
+      const overdueInvoices: any[] = [];
+      const upcomingDue: any[] = [];
+      const customerPaymentHistory: Record<number, { paid: number; total: number; avgDays: number[] }> = {};
+
+      for (const inv of invoices) {
+        // Count by status
+        statusCounts[inv.status as keyof typeof statusCounts]++;
+
+        // Calculate amounts
+        if (inv.status === 'paid') {
+          totalPaid += inv.totalAmount;
+        } else if (inv.status !== 'cancelled') {
+          const outstanding = inv.totalAmount - (inv.paidAmount || 0);
+          totalOutstanding += outstanding;
+
+          // Check if overdue
+          const dueDate = new Date(inv.dueDate);
+          if (dueDate < now && inv.status !== 'paid') {
+            totalOverdue += outstanding;
+            overdueInvoices.push({
+              id: inv.id,
+              invoiceNumber: inv.invoiceNumber,
+              customerName: customerMap.get(inv.customerId)?.name || `Customer #${inv.customerId}`,
+              amount: inv.totalAmount,
+              dueDate: inv.dueDate,
+              daysOverdue: Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)),
+            });
+          }
+
+          // Check upcoming due (next 14 days)
+          const daysUntilDue = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysUntilDue > 0 && daysUntilDue <= 14) {
+            upcomingDue.push({
+              id: inv.id,
+              invoiceNumber: inv.invoiceNumber,
+              customerName: customerMap.get(inv.customerId)?.name || `Customer #${inv.customerId}`,
+              amount: outstanding,
+              dueDate: inv.dueDate,
+              daysUntilDue,
+            });
+          }
+        }
+
+        // Track customer payment patterns
+        if (!customerPaymentHistory[inv.customerId]) {
+          customerPaymentHistory[inv.customerId] = { paid: 0, total: 0, avgDays: [] };
+        }
+        customerPaymentHistory[inv.customerId].total++;
+        if (inv.status === 'paid') {
+          customerPaymentHistory[inv.customerId].paid++;
+        }
+      }
+
+      // Calculate customer reliability scores
+      const customerScores = Object.entries(customerPaymentHistory).map(([customerId, data]) => {
+        const paymentRate = data.total > 0 ? (data.paid / data.total) * 100 : 0;
+        return {
+          customerId: Number(customerId),
+          customerName: customerMap.get(Number(customerId))?.name || `Customer #${customerId}`,
+          totalInvoices: data.total,
+          paidInvoices: data.paid,
+          paymentRate: Math.round(paymentRate),
+          riskLevel: paymentRate >= 90 ? 'low' : paymentRate >= 70 ? 'medium' : 'high',
+        };
+      });
+
+      // Generate AI insights
+      const insights: Array<{ type: 'warning' | 'info' | 'success'; message: string }> = [];
+
+      if (overdueInvoices.length > 0) {
+        insights.push({
+          type: 'warning',
+          message: `${overdueInvoices.length} invoice(s) are overdue totaling SAR ${(totalOverdue / 100).toLocaleString()}. Follow up immediately.`,
+        });
+      }
+
+      if (upcomingDue.length > 0) {
+        insights.push({
+          type: 'info',
+          message: `${upcomingDue.length} invoice(s) due within 14 days. Send payment reminders.`,
+        });
+      }
+
+      const highRiskCustomers = customerScores.filter(c => c.riskLevel === 'high');
+      if (highRiskCustomers.length > 0) {
+        insights.push({
+          type: 'warning',
+          message: `${highRiskCustomers.length} customer(s) have low payment rates (<70%). Consider requiring advance payment.`,
+        });
+      }
+
+      const collectionRate = invoices.length > 0
+        ? (statusCounts.paid / invoices.length) * 100
+        : 0;
+
+      if (collectionRate >= 80) {
+        insights.push({
+          type: 'success',
+          message: `Excellent collection rate of ${Math.round(collectionRate)}%. Keep up the good work!`,
+        });
+      }
+
+      // Invoice-tender matching opportunities
+      const unmatchedTenders = tenders.filter(t =>
+        t.status === 'awarded' && !invoices.some(inv => inv.tenderId === t.id)
+      );
+
+      if (unmatchedTenders.length > 0) {
+        insights.push({
+          type: 'info',
+          message: `${unmatchedTenders.length} awarded tender(s) without invoices. Consider generating invoices.`,
+        });
+      }
+
+      return {
+        summary: {
+          totalInvoices: invoices.length,
+          totalOutstanding: totalOutstanding / 100,
+          totalPaid: totalPaid / 100,
+          totalOverdue: totalOverdue / 100,
+          collectionRate: Math.round(collectionRate),
+        },
+        statusBreakdown: statusCounts,
+        overdueInvoices: overdueInvoices.sort((a, b) => b.daysOverdue - a.daysOverdue).slice(0, 10),
+        upcomingDue: upcomingDue.sort((a, b) => a.daysUntilDue - b.daysUntilDue).slice(0, 10),
+        customerScores: customerScores.sort((a, b) => a.paymentRate - b.paymentRate).slice(0, 10),
+        unmatchedTenders: unmatchedTenders.slice(0, 5).map(t => ({
+          id: t.id,
+          tenderNumber: t.tenderNumber,
+          title: t.title,
+          awardedValue: t.awardedValue,
+        })),
+        insights,
+      };
+    }),
   }),
 
   // ============================================
@@ -930,6 +1349,45 @@ export const appRouter = router({
         
         return { success: true };
       }),
+
+    // AI-powered expense analysis
+    analyze: protectedProcedure.mutation(async () => {
+      // Get all expenses
+      const expenses = await db.getAllExpenses();
+
+      // Get budget categories for category suggestions
+      const budgetCategories = await db.getAllBudgetCategories();
+      const categoryNames = budgetCategories.map(c => c.name);
+
+      // Transform expenses for AI analysis
+      const expenseData = expenses.map(e => ({
+        id: e.id,
+        title: e.title,
+        description: e.description || null,
+        amount: e.amount,
+        category: null, // We'll derive this from categoryId
+        categoryId: e.categoryId,
+        departmentId: e.departmentId,
+        vendorName: null,
+        expenseDate: e.expenseDate || e.createdAt || new Date(),
+        status: e.status,
+      }));
+
+      // Run AI analysis
+      const analysis = await analyzeExpenses(expenseData, categoryNames.length > 0 ? categoryNames : [
+        'Office Supplies', 'Travel', 'Software', 'Equipment', 'Marketing',
+        'Professional Services', 'Utilities', 'Maintenance', 'Training', 'Medical'
+      ]);
+
+      return { analysis };
+    }),
+
+    getAIStatus: protectedProcedure.query(async () => {
+      return {
+        configured: isAIConfigured(),
+        providers: getAvailableProviders(),
+      };
+    }),
   }),
 
   // ============================================
@@ -1008,6 +1466,226 @@ export const appRouter = router({
         
         return { success: true };
       }),
+
+    // AI-powered delivery analytics and predictions
+    aiAnalysis: protectedProcedure.query(async () => {
+      const deliveries = await db.getAllDeliveries();
+      const customers = await db.getAllCustomers();
+      const suppliers = await db.getAllSuppliers();
+
+      const customerMap = new Map(customers.map(c => [c.id, c]));
+      const now = new Date();
+
+      // Status breakdown
+      const statusCounts = {
+        planned: 0,
+        in_transit: 0,
+        delivered: 0,
+        cancelled: 0,
+      };
+
+      // Track deliveries by customer and performance
+      const customerDeliveryHistory: Record<number, {
+        totalDeliveries: number;
+        onTimeDeliveries: number;
+        lateDeliveries: number;
+        cancelledDeliveries: number;
+      }> = {};
+
+      const overdueDeliveries: Array<{
+        id: number;
+        deliveryNumber: string;
+        customerName: string;
+        scheduledDate: string;
+        daysOverdue: number;
+        status: string;
+      }> = [];
+
+      const upcomingDeliveries: Array<{
+        id: number;
+        deliveryNumber: string;
+        customerName: string;
+        scheduledDate: string;
+        daysUntil: number;
+        status: string;
+      }> = [];
+
+      // Track delivery times for predictions
+      const deliveryTimes: number[] = [];
+      let totalDeliveries = 0;
+      let onTimeCount = 0;
+      let lateCount = 0;
+
+      for (const delivery of deliveries) {
+        statusCounts[delivery.status as keyof typeof statusCounts]++;
+
+        // Customer tracking
+        if (!customerDeliveryHistory[delivery.customerId]) {
+          customerDeliveryHistory[delivery.customerId] = {
+            totalDeliveries: 0,
+            onTimeDeliveries: 0,
+            lateDeliveries: 0,
+            cancelledDeliveries: 0,
+          };
+        }
+        customerDeliveryHistory[delivery.customerId].totalDeliveries++;
+
+        if (delivery.status === 'cancelled') {
+          customerDeliveryHistory[delivery.customerId].cancelledDeliveries++;
+        } else if (delivery.status === 'delivered' && delivery.deliveredDate) {
+          const scheduled = new Date(delivery.scheduledDate);
+          const actual = new Date(delivery.deliveredDate);
+          const daysDiff = Math.floor((actual.getTime() - scheduled.getTime()) / (1000 * 60 * 60 * 24));
+
+          deliveryTimes.push(daysDiff);
+          totalDeliveries++;
+
+          if (daysDiff <= 0) {
+            onTimeCount++;
+            customerDeliveryHistory[delivery.customerId].onTimeDeliveries++;
+          } else {
+            lateCount++;
+            customerDeliveryHistory[delivery.customerId].lateDeliveries++;
+          }
+        }
+
+        // Check for overdue planned/in-transit deliveries
+        if ((delivery.status === 'planned' || delivery.status === 'in_transit') && delivery.scheduledDate) {
+          const scheduled = new Date(delivery.scheduledDate);
+          const daysDiff = Math.floor((now.getTime() - scheduled.getTime()) / (1000 * 60 * 60 * 24));
+          const customer = customerMap.get(delivery.customerId);
+
+          if (daysDiff > 0) {
+            overdueDeliveries.push({
+              id: delivery.id,
+              deliveryNumber: delivery.deliveryNumber,
+              customerName: customer?.name || `Customer #${delivery.customerId}`,
+              scheduledDate: delivery.scheduledDate.toString(),
+              daysOverdue: daysDiff,
+              status: delivery.status,
+            });
+          } else if (daysDiff >= -7) {
+            // Due within 7 days
+            upcomingDeliveries.push({
+              id: delivery.id,
+              deliveryNumber: delivery.deliveryNumber,
+              customerName: customer?.name || `Customer #${delivery.customerId}`,
+              scheduledDate: delivery.scheduledDate.toString(),
+              daysUntil: Math.abs(daysDiff),
+              status: delivery.status,
+            });
+          }
+        }
+      }
+
+      // Sort by urgency
+      overdueDeliveries.sort((a, b) => b.daysOverdue - a.daysOverdue);
+      upcomingDeliveries.sort((a, b) => a.daysUntil - b.daysUntil);
+
+      // Customer delivery reliability scores
+      const customerScores = Object.entries(customerDeliveryHistory)
+        .filter(([_, history]) => history.totalDeliveries > 0)
+        .map(([customerId, history]) => {
+          const customer = customerMap.get(Number(customerId));
+          const successRate = Math.round(
+            ((history.onTimeDeliveries) / (history.totalDeliveries - history.cancelledDeliveries || 1)) * 100
+          );
+
+          return {
+            customerId: Number(customerId),
+            customerName: customer?.name || `Customer #${customerId}`,
+            totalDeliveries: history.totalDeliveries,
+            onTimeDeliveries: history.onTimeDeliveries,
+            lateDeliveries: history.lateDeliveries,
+            cancelledDeliveries: history.cancelledDeliveries,
+            successRate: isNaN(successRate) ? 0 : successRate,
+          };
+        })
+        .sort((a, b) => b.totalDeliveries - a.totalDeliveries);
+
+      // Calculate on-time delivery rate
+      const onTimeRate = totalDeliveries > 0
+        ? Math.round((onTimeCount / totalDeliveries) * 100)
+        : 100;
+
+      // Average delivery variance
+      const avgDeliveryVariance = deliveryTimes.length > 0
+        ? (deliveryTimes.reduce((a, b) => a + b, 0) / deliveryTimes.length).toFixed(1)
+        : '0';
+
+      // Generate AI insights
+      const insights: Array<{ type: 'warning' | 'info' | 'success'; message: string }> = [];
+
+      if (overdueDeliveries.length > 0) {
+        insights.push({
+          type: 'warning',
+          message: `${overdueDeliveries.length} deliveries are overdue and require immediate attention. The oldest is ${overdueDeliveries[0]?.daysOverdue} days late.`,
+        });
+      }
+
+      if (onTimeRate < 80) {
+        insights.push({
+          type: 'warning',
+          message: `On-time delivery rate is ${onTimeRate}%, which is below the target of 80%. Consider reviewing logistics processes.`,
+        });
+      } else if (onTimeRate >= 95) {
+        insights.push({
+          type: 'success',
+          message: `Excellent delivery performance! ${onTimeRate}% on-time delivery rate.`,
+        });
+      }
+
+      const highRiskCustomers = customerScores.filter(c => c.successRate < 70 && c.totalDeliveries >= 3);
+      if (highRiskCustomers.length > 0) {
+        insights.push({
+          type: 'info',
+          message: `${highRiskCustomers.length} customers have delivery success rates below 70%. Consider investigating delivery challenges.`,
+        });
+      }
+
+      if (upcomingDeliveries.length > 5) {
+        insights.push({
+          type: 'info',
+          message: `${upcomingDeliveries.length} deliveries scheduled within the next 7 days. Plan logistics accordingly.`,
+        });
+      }
+
+      if (statusCounts.in_transit > 10) {
+        insights.push({
+          type: 'info',
+          message: `${statusCounts.in_transit} deliveries currently in transit. Monitor for potential delays.`,
+        });
+      }
+
+      if (deliveries.length === 0) {
+        insights.push({
+          type: 'info',
+          message: 'No delivery history available yet. Start creating deliveries to track performance.',
+        });
+      } else if (onTimeRate >= 90) {
+        insights.push({
+          type: 'success',
+          message: `Strong delivery performance with ${totalDeliveries} completed deliveries and ${onTimeRate}% on-time rate.`,
+        });
+      }
+
+      return {
+        summary: {
+          totalDeliveries: deliveries.length,
+          completedDeliveries: statusCounts.delivered,
+          inTransit: statusCounts.in_transit,
+          planned: statusCounts.planned,
+          cancelled: statusCounts.cancelled,
+          onTimeRate,
+          avgDeliveryVariance: `${avgDeliveryVariance} days`,
+        },
+        statusBreakdown: statusCounts,
+        overdueDeliveries: overdueDeliveries.slice(0, 10),
+        upcomingDeliveries: upcomingDeliveries.slice(0, 10),
+        customerScores: customerScores.slice(0, 10),
+        insights,
+      };
+    }),
   }),
 
   // ============================================
@@ -1431,15 +2109,296 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
-        
+
         if (data.status === 'resolved') {
           (data as any).resolvedBy = ctx.user.id;
           (data as any).resolvedAt = new Date();
         }
-        
+
         await db.updateAnomaly(id, data);
         return { success: true };
       }),
+
+    // AI-powered comprehensive business insights
+    aiInsights: protectedProcedure.query(async () => {
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+      const [tenders, budgets, invoices, expenses, deliveries, customers, products, suppliers] = await Promise.all([
+        db.getAllTenders(),
+        db.getAllBudgets(),
+        db.getAllInvoices(),
+        db.getAllExpenses(),
+        db.getAllDeliveries(),
+        db.getAllCustomers(),
+        db.getAllProducts(),
+        db.getAllSuppliers(),
+      ]);
+
+      // Financial metrics
+      const totalRevenue = invoices
+        .filter(i => i.status === 'paid')
+        .reduce((sum, i) => sum + i.totalAmount, 0);
+      const totalExpenses = expenses
+        .filter(e => e.status === 'approved')
+        .reduce((sum, e) => sum + e.amount, 0);
+      const pendingRevenue = invoices
+        .filter(i => i.status !== 'paid' && i.status !== 'cancelled')
+        .reduce((sum, i) => sum + (i.totalAmount - (i.paidAmount || 0)), 0);
+      const overdueRevenue = invoices
+        .filter(i => i.status === 'overdue')
+        .reduce((sum, i) => sum + (i.totalAmount - (i.paidAmount || 0)), 0);
+
+      // Tender performance
+      const recentTenders = tenders.filter(t => new Date(t.createdAt) >= thirtyDaysAgo);
+      const awardedTenders = tenders.filter(t => t.status === 'awarded');
+      const totalTenderValue = awardedTenders.reduce((sum, t) => sum + (t.awardedValue || t.estimatedValue || 0), 0);
+      const avgTenderValue = awardedTenders.length > 0
+        ? Math.round(totalTenderValue / awardedTenders.length)
+        : 0;
+      const tenderWinRate = tenders.length > 0
+        ? Math.round((awardedTenders.length / tenders.filter(t => t.status !== 'draft' && t.status !== 'open').length) * 100) || 0
+        : 0;
+
+      // Delivery performance
+      const completedDeliveries = deliveries.filter(d => d.status === 'delivered');
+      const onTimeDeliveries = completedDeliveries.filter(d => {
+        if (!d.deliveredDate || !d.scheduledDate) return false;
+        return new Date(d.deliveredDate) <= new Date(d.scheduledDate);
+      });
+      const onTimeRate = completedDeliveries.length > 0
+        ? Math.round((onTimeDeliveries.length / completedDeliveries.length) * 100)
+        : 100;
+
+      // Budget health
+      const activeBudgets = budgets.filter(b => b.status === 'active');
+      const overBudgetCount = activeBudgets.filter(b => b.spentAmount > b.allocatedAmount).length;
+      const totalBudgetAllocated = activeBudgets.reduce((sum, b) => sum + b.allocatedAmount, 0);
+      const totalBudgetSpent = activeBudgets.reduce((sum, b) => sum + b.spentAmount, 0);
+      const budgetUtilization = totalBudgetAllocated > 0
+        ? Math.round((totalBudgetSpent / totalBudgetAllocated) * 100)
+        : 0;
+
+      // Inventory health
+      const lowStockItems = products.filter(p => p.quantity <= (p.minStockLevel || 10));
+      const outOfStockItems = products.filter(p => p.quantity === 0);
+      const inventoryValue = products.reduce((sum, p) => sum + (p.quantity * (p.unitPrice || 0)), 0);
+
+      // Customer insights
+      const activeCustomers = customers.filter(c => {
+        const hasRecentInvoice = invoices.some(i =>
+          i.customerId === c.id && new Date(i.createdAt) >= thirtyDaysAgo
+        );
+        const hasRecentDelivery = deliveries.some(d =>
+          d.customerId === c.id && new Date(d.createdAt) >= thirtyDaysAgo
+        );
+        return hasRecentInvoice || hasRecentDelivery;
+      });
+
+      // Supplier performance
+      const activeSuppliers = suppliers.filter(s => s.status === 'active');
+      const avgSupplierRating = activeSuppliers.length > 0
+        ? Math.round(activeSuppliers.reduce((sum, s) => sum + (s.performanceScore || 0), 0) / activeSuppliers.length)
+        : 0;
+
+      // Generate AI insights
+      const insights: { type: 'success' | 'warning' | 'info' | 'critical'; category: string; message: string; priority: number }[] = [];
+
+      // Financial insights
+      if (overdueRevenue > 0) {
+        insights.push({
+          type: overdueRevenue > totalRevenue * 0.2 ? 'critical' : 'warning',
+          category: 'Finance',
+          message: `SAR ${(overdueRevenue / 100).toLocaleString()} in overdue invoices requiring immediate follow-up`,
+          priority: overdueRevenue > totalRevenue * 0.2 ? 1 : 2,
+        });
+      }
+      if (pendingRevenue > totalRevenue * 0.5) {
+        insights.push({
+          type: 'info',
+          category: 'Finance',
+          message: `SAR ${(pendingRevenue / 100).toLocaleString()} in pending revenue - consider sending payment reminders`,
+          priority: 3,
+        });
+      }
+      if (totalRevenue > totalExpenses * 1.5) {
+        insights.push({
+          type: 'success',
+          category: 'Finance',
+          message: 'Strong revenue-to-expense ratio indicates healthy financial position',
+          priority: 5,
+        });
+      }
+
+      // Tender insights
+      if (tenderWinRate >= 50) {
+        insights.push({
+          type: 'success',
+          category: 'Tenders',
+          message: `${tenderWinRate}% tender win rate - excellent competitive positioning`,
+          priority: 4,
+        });
+      } else if (tenderWinRate < 25 && tenders.length > 5) {
+        insights.push({
+          type: 'warning',
+          category: 'Tenders',
+          message: `Low tender win rate (${tenderWinRate}%) - review pricing strategy and proposal quality`,
+          priority: 2,
+        });
+      }
+      if (recentTenders.length === 0) {
+        insights.push({
+          type: 'info',
+          category: 'Tenders',
+          message: 'No new tenders in the last 30 days - consider expanding market outreach',
+          priority: 3,
+        });
+      }
+
+      // Delivery insights
+      if (onTimeRate < 80) {
+        insights.push({
+          type: 'warning',
+          category: 'Deliveries',
+          message: `On-time delivery rate at ${onTimeRate}% - review logistics processes`,
+          priority: 2,
+        });
+      } else if (onTimeRate >= 95) {
+        insights.push({
+          type: 'success',
+          category: 'Deliveries',
+          message: `Excellent on-time delivery rate of ${onTimeRate}%`,
+          priority: 5,
+        });
+      }
+
+      // Budget insights
+      if (overBudgetCount > 0) {
+        insights.push({
+          type: 'critical',
+          category: 'Budget',
+          message: `${overBudgetCount} budget(s) exceeded allocated amount - immediate review needed`,
+          priority: 1,
+        });
+      }
+      if (budgetUtilization > 90) {
+        insights.push({
+          type: 'warning',
+          category: 'Budget',
+          message: `Budget utilization at ${budgetUtilization}% - consider reallocation or additional funding`,
+          priority: 2,
+        });
+      }
+
+      // Inventory insights
+      if (outOfStockItems.length > 0) {
+        insights.push({
+          type: 'critical',
+          category: 'Inventory',
+          message: `${outOfStockItems.length} product(s) out of stock - urgent replenishment needed`,
+          priority: 1,
+        });
+      } else if (lowStockItems.length > 0) {
+        insights.push({
+          type: 'warning',
+          category: 'Inventory',
+          message: `${lowStockItems.length} product(s) running low on stock`,
+          priority: 2,
+        });
+      }
+
+      // Customer insights
+      if (activeCustomers.length < customers.length * 0.5 && customers.length > 5) {
+        insights.push({
+          type: 'info',
+          category: 'Customers',
+          message: 'Less than 50% of customers active in last 30 days - consider re-engagement campaigns',
+          priority: 3,
+        });
+      }
+
+      // Sort insights by priority
+      insights.sort((a, b) => a.priority - b.priority);
+
+      // Monthly trend data (last 6 months)
+      const monthlyTrends = [];
+      for (let i = 5; i >= 0; i--) {
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+
+        const monthRevenue = invoices
+          .filter(inv => {
+            const d = new Date(inv.paidAt || inv.createdAt);
+            return d >= monthStart && d <= monthEnd && inv.status === 'paid';
+          })
+          .reduce((sum, inv) => sum + inv.totalAmount, 0);
+
+        const monthExpenses = expenses
+          .filter(exp => {
+            const d = new Date(exp.approvedAt || exp.createdAt);
+            return d >= monthStart && d <= monthEnd && exp.status === 'approved';
+          })
+          .reduce((sum, exp) => sum + exp.amount, 0);
+
+        const monthTenders = tenders
+          .filter(t => {
+            const d = new Date(t.createdAt);
+            return d >= monthStart && d <= monthEnd;
+          }).length;
+
+        monthlyTrends.push({
+          month: monthStart.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+          revenue: Math.round(monthRevenue / 100),
+          expenses: Math.round(monthExpenses / 100),
+          tenders: monthTenders,
+        });
+      }
+
+      return {
+        summary: {
+          totalRevenue: Math.round(totalRevenue / 100),
+          totalExpenses: Math.round(totalExpenses / 100),
+          netProfit: Math.round((totalRevenue - totalExpenses) / 100),
+          pendingRevenue: Math.round(pendingRevenue / 100),
+          overdueRevenue: Math.round(overdueRevenue / 100),
+          inventoryValue: Math.round(inventoryValue / 100),
+        },
+        metrics: {
+          tenderWinRate,
+          avgTenderValue: Math.round(avgTenderValue / 100),
+          onTimeDeliveryRate: onTimeRate,
+          budgetUtilization,
+          activeCustomers: activeCustomers.length,
+          totalCustomers: customers.length,
+          avgSupplierRating,
+          activeSuppliers: activeSuppliers.length,
+        },
+        alerts: {
+          overBudgetCount,
+          lowStockCount: lowStockItems.length,
+          outOfStockCount: outOfStockItems.length,
+          overdueInvoices: invoices.filter(i => i.status === 'overdue').length,
+          pendingDeliveries: deliveries.filter(d => d.status === 'planned' || d.status === 'in_transit').length,
+        },
+        insights: insights.slice(0, 8),
+        trends: monthlyTrends,
+        topCustomers: customers
+          .map(c => {
+            const customerRevenue = invoices
+              .filter(i => i.customerId === c.id && i.status === 'paid')
+              .reduce((sum, i) => sum + i.totalAmount, 0);
+            return {
+              id: c.id,
+              name: c.name,
+              revenue: Math.round(customerRevenue / 100),
+              invoiceCount: invoices.filter(i => i.customerId === c.id).length,
+            };
+          })
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, 5),
+      };
+    }),
   }),
 
   // ============================================
@@ -1465,6 +2424,285 @@ export const appRouter = router({
       await db.markAllNotificationsRead(ctx.user.id);
       return { success: true };
     }),
+
+    // AI-powered notification analysis and smart features
+    aiAnalysis: protectedProcedure.query(async ({ ctx }) => {
+      const [
+        allNotifications,
+        unreadNotifications,
+        tenders,
+        invoices,
+        deliveries,
+        products,
+        budgets,
+      ] = await Promise.all([
+        db.getUserNotifications(ctx.user.id),
+        db.getUnreadNotifications(ctx.user.id),
+        db.getAllTenders(),
+        db.getAllInvoices(),
+        db.getAllDeliveries(),
+        db.getAllProducts(),
+        db.getAllBudgets(),
+      ]);
+
+      // Summary statistics
+      const summary = {
+        totalNotifications: allNotifications.length,
+        unreadCount: unreadNotifications.length,
+        urgentCount: unreadNotifications.filter(n => n.priority === 'urgent').length,
+        highPriorityCount: unreadNotifications.filter(n => n.priority === 'high').length,
+        readRate: allNotifications.length > 0
+          ? Math.round(((allNotifications.length - unreadNotifications.length) / allNotifications.length) * 100)
+          : 100,
+      };
+
+      // Group notifications by type
+      const byType: Record<string, number> = {};
+      for (const notification of allNotifications) {
+        byType[notification.type] = (byType[notification.type] || 0) + 1;
+      }
+
+      // Group by category
+      const byCategory: Record<string, number> = {};
+      for (const notification of allNotifications) {
+        const category = notification.category || 'general';
+        byCategory[category] = (byCategory[category] || 0) + 1;
+      }
+
+      // Smart alerts - proactive notifications based on business state
+      const smartAlerts: Array<{ type: 'critical' | 'warning' | 'info'; category: string; message: string; actionUrl?: string }> = [];
+
+      // Check for tender deadlines
+      const upcomingTenderDeadlines = tenders.filter(t => {
+        if (t.status !== 'open' || !t.deadline) return false;
+        const daysUntil = Math.ceil((new Date(t.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        return daysUntil >= 0 && daysUntil <= 3;
+      });
+      if (upcomingTenderDeadlines.length > 0) {
+        smartAlerts.push({
+          type: 'critical',
+          category: 'Tender Deadline',
+          message: `${upcomingTenderDeadlines.length} tender(s) have deadlines within the next 3 days. Review and submit before they expire.`,
+          actionUrl: '/tenders',
+        });
+      }
+
+      // Check for overdue invoices
+      const overdueInvoices = invoices.filter(inv => {
+        if (inv.status === 'paid') return false;
+        if (!inv.dueDate) return false;
+        return new Date(inv.dueDate) < new Date();
+      });
+      if (overdueInvoices.length > 0) {
+        const totalOverdue = overdueInvoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
+        smartAlerts.push({
+          type: 'critical',
+          category: 'Cash Flow Alert',
+          message: `${overdueInvoices.length} overdue invoice(s) totaling SAR ${totalOverdue.toLocaleString()}. Follow up to improve cash flow.`,
+          actionUrl: '/invoices',
+        });
+      }
+
+      // Check for late deliveries
+      const lateDeliveries = deliveries.filter(d => {
+        if (d.status === 'delivered' || d.status === 'cancelled') return false;
+        if (!d.expectedDate) return false;
+        return new Date(d.expectedDate) < new Date();
+      });
+      if (lateDeliveries.length > 0) {
+        smartAlerts.push({
+          type: 'warning',
+          category: 'Delivery Delay',
+          message: `${lateDeliveries.length} delivery(ies) are past their expected date. Contact suppliers/logistics to resolve delays.`,
+          actionUrl: '/deliveries',
+        });
+      }
+
+      // Check for low stock items
+      const lowStockProducts = products.filter(p =>
+        Number(p.quantity || 0) <= Number(p.reorderLevel || 0) && Number(p.quantity || 0) > 0
+      );
+      if (lowStockProducts.length > 0) {
+        smartAlerts.push({
+          type: 'warning',
+          category: 'Inventory Alert',
+          message: `${lowStockProducts.length} product(s) are running low on stock. Consider placing purchase orders.`,
+          actionUrl: '/inventory',
+        });
+      }
+
+      // Check for out of stock items
+      const outOfStockProducts = products.filter(p => Number(p.quantity || 0) === 0);
+      if (outOfStockProducts.length > 0) {
+        smartAlerts.push({
+          type: 'critical',
+          category: 'Inventory Critical',
+          message: `${outOfStockProducts.length} product(s) are completely out of stock! Immediate action required.`,
+          actionUrl: '/inventory',
+        });
+      }
+
+      // Check for over-budget items
+      const overBudgets = budgets.filter(b => Number(b.spent || 0) > Number(b.amount || 0));
+      if (overBudgets.length > 0) {
+        smartAlerts.push({
+          type: 'critical',
+          category: 'Budget Alert',
+          message: `${overBudgets.length} budget(s) have exceeded their allocated amount. Review spending immediately.`,
+          actionUrl: '/budgets',
+        });
+      }
+
+      // Check for budgets near limit (>90%)
+      const nearLimitBudgets = budgets.filter(b => {
+        const utilization = (Number(b.spent || 0) / Number(b.amount || 1)) * 100;
+        return utilization >= 90 && utilization <= 100;
+      });
+      if (nearLimitBudgets.length > 0) {
+        smartAlerts.push({
+          type: 'warning',
+          category: 'Budget Warning',
+          message: `${nearLimitBudgets.length} budget(s) are at 90%+ utilization. Monitor spending closely.`,
+          actionUrl: '/budgets',
+        });
+      }
+
+      // AI Insights
+      const insights: Array<{ type: 'info' | 'warning' | 'success'; message: string }> = [];
+
+      // Notification engagement analysis
+      if (summary.readRate < 50) {
+        insights.push({
+          type: 'warning',
+          message: `Your notification read rate is ${summary.readRate}%. Consider reviewing and clearing notifications regularly for better workflow management.`,
+        });
+      } else if (summary.readRate >= 80) {
+        insights.push({
+          type: 'success',
+          message: `Great job! You maintain an ${summary.readRate}% notification read rate, showing excellent engagement with system alerts.`,
+        });
+      }
+
+      // Unread notification backlog
+      if (summary.unreadCount > 20) {
+        insights.push({
+          type: 'warning',
+          message: `You have ${summary.unreadCount} unread notifications. Consider using filters or bulk actions to manage your notification backlog.`,
+        });
+      }
+
+      // Urgent notifications
+      if (summary.urgentCount > 0) {
+        insights.push({
+          type: 'warning',
+          message: `${summary.urgentCount} urgent notification(s) require immediate attention. Address these first.`,
+        });
+      }
+
+      // Most common notification type
+      const topType = Object.entries(byType).sort((a, b) => b[1] - a[1])[0];
+      if (topType) {
+        insights.push({
+          type: 'info',
+          message: `Your most frequent notification type is "${topType[0]}" (${topType[1]} notifications). This indicates where most system activity is occurring.`,
+        });
+      }
+
+      // Recent notification trends (last 24h vs previous)
+      const now = Date.now();
+      const dayAgo = now - 24 * 60 * 60 * 1000;
+      const twoDaysAgo = now - 48 * 60 * 60 * 1000;
+
+      const last24h = allNotifications.filter(n => new Date(n.createdAt).getTime() > dayAgo).length;
+      const previous24h = allNotifications.filter(n => {
+        const ts = new Date(n.createdAt).getTime();
+        return ts > twoDaysAgo && ts <= dayAgo;
+      }).length;
+
+      if (last24h > previous24h * 1.5 && previous24h > 0) {
+        insights.push({
+          type: 'info',
+          message: `Notification volume increased ${Math.round(((last24h - previous24h) / previous24h) * 100)}% in the last 24 hours. Higher activity detected.`,
+        });
+      }
+
+      // Prioritized notifications (smart sorting)
+      const prioritizedNotifications = [...unreadNotifications].sort((a, b) => {
+        // Priority score: urgent=4, high=3, normal=2, low=1
+        const priorityScore: Record<string, number> = { urgent: 4, high: 3, normal: 2, low: 1 };
+        const scoreA = priorityScore[a.priority] || 2;
+        const scoreB = priorityScore[b.priority] || 2;
+
+        if (scoreA !== scoreB) return scoreB - scoreA;
+
+        // Then by recency
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }).slice(0, 10);
+
+      // Notification velocity (average per day over last 7 days)
+      const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+      const lastWeekNotifications = allNotifications.filter(n => new Date(n.createdAt).getTime() > weekAgo);
+      const avgPerDay = Math.round(lastWeekNotifications.length / 7);
+
+      return {
+        summary,
+        byType,
+        byCategory,
+        smartAlerts,
+        insights,
+        prioritizedNotifications,
+        metrics: {
+          avgNotificationsPerDay: avgPerDay,
+          last24hCount: last24h,
+          previous24hCount: previous24h,
+          weeklyTotal: lastWeekNotifications.length,
+        },
+      };
+    }),
+
+    // Get notification preferences/settings analysis
+    preferences: protectedProcedure.query(async ({ ctx }) => {
+      const notifications = await db.getUserNotifications(ctx.user.id);
+
+      // Analyze notification patterns to suggest preferences
+      const typeFrequency: Record<string, number> = {};
+      const categoryFrequency: Record<string, number> = {};
+      const readRateByType: Record<string, { read: number; total: number }> = {};
+
+      for (const n of notifications) {
+        typeFrequency[n.type] = (typeFrequency[n.type] || 0) + 1;
+
+        const cat = n.category || 'general';
+        categoryFrequency[cat] = (categoryFrequency[cat] || 0) + 1;
+
+        if (!readRateByType[n.type]) {
+          readRateByType[n.type] = { read: 0, total: 0 };
+        }
+        readRateByType[n.type].total++;
+        if (n.isRead) readRateByType[n.type].read++;
+      }
+
+      // Calculate engagement scores
+      const engagementScores = Object.entries(readRateByType).map(([type, stats]) => ({
+        type,
+        readRate: Math.round((stats.read / stats.total) * 100),
+        count: stats.total,
+        suggestion: stats.read / stats.total < 0.3
+          ? 'Consider muting or consolidating these notifications'
+          : stats.read / stats.total > 0.8
+          ? 'High engagement - keep these enabled'
+          : 'Normal engagement',
+      }));
+
+      return {
+        typeFrequency,
+        categoryFrequency,
+        engagementScores: engagementScores.sort((a, b) => b.count - a.count),
+        recommendations: engagementScores
+          .filter(e => e.readRate < 30)
+          .map(e => `Consider reducing "${e.type}" notifications (only ${e.readRate}% read rate)`),
+      };
+    }),
   }),
 
   // ============================================
@@ -1474,10 +2712,78 @@ export const appRouter = router({
     list: adminProcedure
       .input(z.object({
         entityType: z.string().optional(),
-        entityId: z.number().optional(),
+        action: z.string().optional(),
+        userId: z.number().optional(),
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        return await db.getAuditLogs(input);
+      }),
+
+    forEntity: protectedProcedure
+      .input(z.object({
+        entityType: z.string(),
+        entityId: z.number(),
+        limit: z.number().optional(),
       }))
       .query(async ({ input }) => {
-        return await db.getAuditLogs(input.entityType, input.entityId);
+        return await db.getAuditLogsForEntity(input.entityType, input.entityId, input.limit);
+      }),
+
+    forUser: protectedProcedure
+      .input(z.object({
+        userId: z.number(),
+        limit: z.number().optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        // Users can only view their own activity unless admin
+        if (input.userId !== ctx.user.id && ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Can only view your own activity' });
+        }
+        return await db.getAuditLogsByUser(input.userId, input.limit);
+      }),
+
+    myActivity: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional(),
+      }).optional())
+      .query(async ({ input, ctx }) => {
+        return await db.getAuditLogsByUser(ctx.user.id, input?.limit);
+      }),
+
+    stats: adminProcedure
+      .input(z.object({
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        const logs = await db.getAuditLogs({
+          startDate: input?.startDate,
+          endDate: input?.endDate,
+          limit: 10000,
+        });
+
+        const stats = {
+          totalActions: logs.length,
+          actionBreakdown: {} as Record<string, number>,
+          entityBreakdown: {} as Record<string, number>,
+          userBreakdown: {} as Record<number, number>,
+          recentActivity: logs.slice(0, 10),
+        };
+
+        for (const log of logs) {
+          // Action breakdown
+          stats.actionBreakdown[log.action] = (stats.actionBreakdown[log.action] || 0) + 1;
+          // Entity breakdown
+          stats.entityBreakdown[log.entityType] = (stats.entityBreakdown[log.entityType] || 0) + 1;
+          // User breakdown
+          stats.userBreakdown[log.userId] = (stats.userBreakdown[log.userId] || 0) + 1;
+        }
+
+        return stats;
       }),
   }),
 
@@ -1819,6 +3125,171 @@ export const appRouter = router({
         await db.markFileAsCurrent(input.versionId);
         
         return { success: true };
+      }),
+  }),
+
+  // ============================================
+  // EXPORT
+  // ============================================
+  export: router({
+    tenders: protectedProcedure
+      .input(z.object({
+        format: z.enum(['csv', 'excel', 'pdf']),
+      }))
+      .mutation(async ({ input }) => {
+        const tenders = await db.getAllTenders();
+        const result = generateExport({
+          format: input.format,
+          filename: `tenders_${new Date().toISOString().split('T')[0]}`,
+          title: 'Tender Report',
+          columns: EXPORT_CONFIGS.tenders.columns,
+          data: tenders,
+        });
+        return result;
+      }),
+
+    budgets: protectedProcedure
+      .input(z.object({
+        format: z.enum(['csv', 'excel', 'pdf']),
+      }))
+      .mutation(async ({ input }) => {
+        const budgets = await db.getAllBudgets();
+        const dataWithRemaining = budgets.map(b => ({
+          ...b,
+          remaining: b.allocatedAmount - b.spentAmount,
+        }));
+        const result = generateExport({
+          format: input.format,
+          filename: `budgets_${new Date().toISOString().split('T')[0]}`,
+          title: 'Budget Report',
+          columns: EXPORT_CONFIGS.budgets.columns,
+          data: dataWithRemaining,
+        });
+        return result;
+      }),
+
+    expenses: protectedProcedure
+      .input(z.object({
+        format: z.enum(['csv', 'excel', 'pdf']),
+      }))
+      .mutation(async ({ input }) => {
+        const expenses = await db.getAllExpenses();
+        const result = generateExport({
+          format: input.format,
+          filename: `expenses_${new Date().toISOString().split('T')[0]}`,
+          title: 'Expense Report',
+          columns: EXPORT_CONFIGS.expenses.columns,
+          data: expenses,
+        });
+        return result;
+      }),
+
+    inventory: protectedProcedure
+      .input(z.object({
+        format: z.enum(['csv', 'excel', 'pdf']),
+      }))
+      .mutation(async ({ input }) => {
+        const inventory = await db.getAllInventory();
+        const products = await db.getAllProducts();
+        const productMap = new Map(products.map(p => [p.id, p]));
+
+        const dataWithProducts = inventory.map(inv => {
+          const product = productMap.get(inv.productId);
+          return {
+            ...inv,
+            productName: product?.name || `Product #${inv.productId}`,
+            sku: product?.sku || `SKU-${inv.productId}`,
+          };
+        });
+
+        const result = generateExport({
+          format: input.format,
+          filename: `inventory_${new Date().toISOString().split('T')[0]}`,
+          title: 'Inventory Report',
+          columns: EXPORT_CONFIGS.inventory.columns,
+          data: dataWithProducts,
+        });
+        return result;
+      }),
+
+    invoices: protectedProcedure
+      .input(z.object({
+        format: z.enum(['csv', 'excel', 'pdf']),
+      }))
+      .mutation(async ({ input }) => {
+        const invoices = await db.getAllInvoices();
+        const customers = await db.getAllCustomers();
+        const customerMap = new Map(customers.map(c => [c.id, c]));
+
+        const dataWithCustomers = invoices.map(inv => ({
+          ...inv,
+          customerName: customerMap.get(inv.customerId)?.name || `Customer #${inv.customerId}`,
+        }));
+
+        const result = generateExport({
+          format: input.format,
+          filename: `invoices_${new Date().toISOString().split('T')[0]}`,
+          title: 'Invoice Report',
+          columns: EXPORT_CONFIGS.invoices.columns,
+          data: dataWithCustomers,
+        });
+        return result;
+      }),
+
+    suppliers: protectedProcedure
+      .input(z.object({
+        format: z.enum(['csv', 'excel', 'pdf']),
+      }))
+      .mutation(async ({ input }) => {
+        const suppliers = await db.getAllSuppliers();
+        const result = generateExport({
+          format: input.format,
+          filename: `suppliers_${new Date().toISOString().split('T')[0]}`,
+          title: 'Supplier Report',
+          columns: EXPORT_CONFIGS.suppliers.columns,
+          data: suppliers,
+        });
+        return result;
+      }),
+
+    customers: protectedProcedure
+      .input(z.object({
+        format: z.enum(['csv', 'excel', 'pdf']),
+      }))
+      .mutation(async ({ input }) => {
+        const customers = await db.getAllCustomers();
+        const result = generateExport({
+          format: input.format,
+          filename: `customers_${new Date().toISOString().split('T')[0]}`,
+          title: 'Customer Report',
+          columns: EXPORT_CONFIGS.customers.columns,
+          data: customers,
+        });
+        return result;
+      }),
+
+    // Generic export for any data
+    custom: protectedProcedure
+      .input(z.object({
+        format: z.enum(['csv', 'excel', 'pdf']),
+        filename: z.string(),
+        title: z.string().optional(),
+        columns: z.array(z.object({
+          key: z.string(),
+          label: z.string(),
+          format: z.enum(['currency', 'date', 'number', 'percent', 'boolean']).optional(),
+        })),
+        data: z.array(z.record(z.any())),
+      }))
+      .mutation(async ({ input }) => {
+        const result = generateExport({
+          format: input.format,
+          filename: input.filename,
+          title: input.title,
+          columns: input.columns,
+          data: input.data,
+        });
+        return result;
       }),
   }),
 });

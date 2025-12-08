@@ -910,20 +910,69 @@ export async function createAuditLog(log: typeof auditLogs.$inferInsert) {
   return { insertId: result.insertId };
 }
 
-export async function getAuditLogs(entityType?: string, entityId?: number) {
+export async function getAuditLogs(filters?: {
+  entityType?: string;
+  action?: string;
+  userId?: number;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+  offset?: number;
+}) {
   const db = await getDb();
   if (!db) return [];
-  
+
+  const conditions: any[] = [];
+
+  if (filters?.entityType) {
+    conditions.push(eq(auditLogs.entityType, filters.entityType));
+  }
+  if (filters?.action) {
+    conditions.push(eq(auditLogs.action, filters.action));
+  }
+  if (filters?.userId) {
+    conditions.push(eq(auditLogs.userId, filters.userId));
+  }
+  if (filters?.startDate) {
+    conditions.push(gte(auditLogs.createdAt, filters.startDate));
+  }
+  if (filters?.endDate) {
+    conditions.push(lte(auditLogs.createdAt, filters.endDate));
+  }
+
   let query = db.select().from(auditLogs);
-  
-  if (entityType && entityId) {
-    query = query.where(and(
+
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+
+  return query
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(filters?.limit || 100)
+    .offset(filters?.offset || 0);
+}
+
+export async function getAuditLogsForEntity(entityType: string, entityId: number, limit: number = 50) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db.select().from(auditLogs)
+    .where(and(
       eq(auditLogs.entityType, entityType),
       eq(auditLogs.entityId, entityId)
-    )) as any;
-  }
-  
-  return query.orderBy(desc(auditLogs.createdAt)).limit(100);
+    ))
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(limit);
+}
+
+export async function getAuditLogsByUser(userId: number, limit: number = 100) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db.select().from(auditLogs)
+    .where(eq(auditLogs.userId, userId))
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(limit);
 }
 
 // ============================================

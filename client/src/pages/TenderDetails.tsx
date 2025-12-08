@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { Loader2, ArrowLeft, Plus, Edit, Users } from "lucide-react";
+import { TenderAnalysis } from "@/components/TenderAnalysis";
 import { useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
@@ -215,6 +216,9 @@ export default function TenderDetails() {
             )}
           </CardContent>
         </Card>
+
+        {/* AI Analysis */}
+        <TenderAnalysis tenderId={tenderId} tenderTitle={tender.title} />
 
         {/* Tender Items */}
         <Card>

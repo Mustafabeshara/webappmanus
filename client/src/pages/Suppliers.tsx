@@ -11,10 +11,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { Building2, Eye, Pencil, Plus, Search } from "lucide-react";
+import { Building2, Eye, Pencil, Plus, Search, Brain, List } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
+import VendorScoring from "@/components/VendorScoring";
 
 export default function Suppliers() {
   const { user } = useAuth();
@@ -53,6 +55,23 @@ export default function Suppliers() {
         </Link>
       </div>
 
+      <Tabs defaultValue="list" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="list" className="flex items-center gap-2">
+            <List className="h-4 w-4" />
+            Supplier List
+          </TabsTrigger>
+          <TabsTrigger value="ai-analysis" className="flex items-center gap-2">
+            <Brain className="h-4 w-4" />
+            AI Vendor Analysis
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ai-analysis">
+          <VendorScoring />
+        </TabsContent>
+
+        <TabsContent value="list">
       <Card>
         <CardHeader>
           <div className="flex items-center gap-4">
@@ -168,6 +187,8 @@ export default function Suppliers() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

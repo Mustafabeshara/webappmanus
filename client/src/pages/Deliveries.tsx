@@ -29,9 +29,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Truck, Package, CheckCircle, XCircle, Clock, Upload } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Truck, Package, CheckCircle, XCircle, Clock, Upload, List, Brain } from "lucide-react";
 import { toast } from "sonner";
 import { FileUpload } from "@/components/FileUpload";
+import DeliveryAnalytics from "@/components/DeliveryAnalytics";
 
 type DeliveryStatus = "planned" | "in_transit" | "delivered" | "cancelled";
 
@@ -230,9 +232,12 @@ export default function Deliveries() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Deliveries</h1>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <Truck className="h-8 w-8" />
+            Deliveries
+          </h1>
           <p className="text-muted-foreground mt-1">
-            Manage and track all deliveries
+            Manage and track all deliveries with AI-powered insights
           </p>
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)}>
@@ -241,6 +246,23 @@ export default function Deliveries() {
         </Button>
       </div>
 
+      <Tabs defaultValue="list" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="list" className="flex items-center gap-2">
+            <List className="h-4 w-4" />
+            Delivery List
+          </TabsTrigger>
+          <TabsTrigger value="ai-analysis" className="flex items-center gap-2">
+            <Brain className="h-4 w-4" />
+            AI Analysis
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ai-analysis">
+          <DeliveryAnalytics />
+        </TabsContent>
+
+        <TabsContent value="list">
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -380,6 +402,8 @@ export default function Deliveries() {
           </Table>
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Create Delivery Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>

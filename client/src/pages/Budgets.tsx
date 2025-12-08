@@ -22,6 +22,8 @@ import { trpc } from "@/lib/trpc";
 import { Loader2, Plus, Search, Eye, DollarSign } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { BudgetForecast } from "@/components/BudgetForecast";
+import { ExportButton } from "@/components/ExportButton";
 
 export default function Budgets() {
   const { user } = useAuth();
@@ -49,11 +51,17 @@ export default function Budgets() {
           <h1 className="text-3xl font-bold mb-2">Budgets</h1>
           <p className="text-muted-foreground">Manage budgets and track spending</p>
         </div>
-        <Button onClick={() => setLocation("/budgets/create")}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Budget
-        </Button>
+        <div className="flex gap-2">
+          <ExportButton module="budgets" />
+          <Button onClick={() => setLocation("/budgets/create")}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Budget
+          </Button>
+        </div>
       </div>
+
+      {/* AI Budget Forecasting */}
+      <BudgetForecast />
 
       {/* Filters */}
       <Card className="mb-6">

@@ -48,6 +48,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { FileUpload } from "@/components/FileUpload";
 import { FileViewer } from "@/components/FileViewer";
+import { ExportButton } from "@/components/ExportButton";
 
 function TendersSkeleton() {
   return (
@@ -168,12 +169,15 @@ export default function Tenders() {
         description="Manage tender opportunities and submissions"
         breadcrumbs={[{ label: "Tenders" }]}
         actions={
-          <Link href="/tenders/create">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Tender
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            <ExportButton module="tenders" />
+            <Link href="/tenders/create">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New Tender
+              </Button>
+            </Link>
+          </div>
         }
       />
 

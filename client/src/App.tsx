@@ -22,6 +22,7 @@ import Suppliers from "./pages/Suppliers";
 import CreateSupplier from "./pages/CreateSupplier";
 import SupplierDetails from "./pages/SupplierDetails";
 import Expenses from "./pages/Expenses";
+import Invoices from "./pages/Invoices";
 import Deliveries from "./pages/Deliveries";
 import PurchaseOrders from "./pages/PurchaseOrders";
 import Tasks from "./pages/Tasks";
@@ -29,6 +30,7 @@ import Users from "./pages/Users";
 import AuditLogs from "./pages/AuditLogs";
 import FileManager from "./pages/FileManager";
 import Login from "./pages/Login";
+import Notifications from "./pages/Notifications";
 
 function Router() {
   return (
@@ -179,7 +181,16 @@ function Router() {
           </DashboardLayout>
         )}
       </Route>
-      
+
+      {/* Invoices */}
+      <Route path={"/invoices"}>
+        {() => (
+          <DashboardLayout>
+            <Invoices />
+          </DashboardLayout>
+        )}
+      </Route>
+
       {/* Purchase Orders */}
       <Route path={"/purchase-orders"}>
         {() => (
@@ -224,7 +235,16 @@ function Router() {
           </DashboardLayout>
         )}
       </Route>
-      
+
+      {/* Notifications */}
+      <Route path={"/notifications"}>
+        {() => (
+          <DashboardLayout>
+            <Notifications />
+          </DashboardLayout>
+        )}
+      </Route>
+
       {/* Fallback routes */}
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
