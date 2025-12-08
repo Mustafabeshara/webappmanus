@@ -1,8 +1,13 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import { type Server } from "http";
-import { nanoid } from "nanoid";
+import crypto from "crypto";
 import path from "path";
+
+// Generate a random ID (replacement for nanoid to avoid crypto global issues in bundled code)
+function generateId(length = 10): string {
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+}
 
 export async function setupVite(app: Express, server: Server) {
   // Dynamically import vite and config only in development
@@ -38,7 +43,7 @@ export async function setupVite(app: Express, server: Server) {
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`
+        `src="/src/main.tsx?v=${generateId()}"`
       );
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
