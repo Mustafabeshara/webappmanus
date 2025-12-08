@@ -507,6 +507,31 @@ export async function getAllTenders() {
   return db.select().from(tenders).orderBy(desc(tenders.createdAt));
 }
 
+export async function getTendersPaginated(page: number, pageSize: number) {
+  const db = await getDb();
+  if (!db) return { data: [], totalCount: 0 };
+
+  const offset = (page - 1) * pageSize;
+
+  const [data, countResult] = await Promise.all([
+    db.select().from(tenders).orderBy(desc(tenders.createdAt)).limit(pageSize).offset(offset),
+    db.select({ count: sql<number>`count(*)` }).from(tenders),
+  ]);
+
+  return {
+    data,
+    totalCount: Number(countResult[0]?.count ?? 0),
+  };
+}
+
+export async function getTendersCount() {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db.select({ count: sql<number>`count(*)` }).from(tenders);
+  return Number(result[0]?.count ?? 0);
+}
+
 export async function getTenderById(id: number) {
   const db = await getDb();
   if (!db) return null;
@@ -640,9 +665,9 @@ export async function getExpenseById(id: number) {
 export async function createExpense(expense: typeof expenses.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const [result] = await db.insert(expenses).values(expense);
-  return { insertId: result.insertId };
+  return { insertId: (result as any).insertId };
 }
 
 export async function updateExpense(id: number, data: Partial<typeof expenses.$inferInsert>) {
@@ -942,9 +967,9 @@ export async function upsertSetting(setting: typeof settings.$inferInsert) {
 export async function createFile(file: typeof files.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const result = await db.insert(files).values(file);
-  return { id: Number(result.insertId), ...file };
+  return { id: Number((result as any)[0]?.insertId ?? 0), ...file };
 }
 
 export async function getFileById(id: number) {
@@ -1012,9 +1037,9 @@ export async function getFileHistory(fileId: number) {
 export async function createFileVersion(file: typeof files.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const result = await db.insert(files).values(file);
-  return { id: Number(result.insertId), ...file };
+  return { id: Number((result as any)[0]?.insertId ?? 0), ...file };
 }
 
 export async function markFileAsReplaced(fileId: number) {
@@ -1075,15 +1100,15 @@ export async function getPurchaseOrderItems(purchaseOrderId: number) {
 export async function createPurchaseOrder(po: typeof purchaseOrders.$inferInsert, items: typeof purchaseOrderItems.$inferInsert[]) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const result = await db.insert(purchaseOrders).values(po);
-  const poId = Number(result.insertId);
-  
+  const poId = Number((result as any)[0]?.insertId ?? 0);
+
   if (items.length > 0) {
     const itemsWithPoId = items.map(item => ({ ...item, purchaseOrderId: poId }));
     await db.insert(purchaseOrderItems).values(itemsWithPoId);
   }
-  
+
   return { id: poId, ...po };
 }
 
@@ -1129,9 +1154,9 @@ export async function getTasksByAssignee(userId: number) {
 export async function createTask(task: typeof tasks.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const result = await db.insert(tasks).values(task);
-  return { id: Number(result.insertId), ...task };
+  return { id: Number((result as any)[0]?.insertId ?? 0), ...task };
 }
 
 export async function updateTask(id: number, task: Partial<typeof tasks.$inferInsert>) {

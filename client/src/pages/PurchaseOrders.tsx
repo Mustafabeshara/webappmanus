@@ -19,8 +19,8 @@ export default function PurchaseOrders() {
   const [createdPOId, setCreatedPOId] = useState<number | null>(null);
   
   const { data: purchaseOrders = [], refetch } = trpc.purchaseOrders.getAll.useQuery();
-  const { data: suppliers = [] } = trpc.suppliers.getAll.useQuery();
-  const { data: departments = [] } = trpc.departments.getAll.useQuery();
+  const { data: suppliers = [] } = trpc.suppliers.list.useQuery();
+  const { data: departments = [] } = trpc.departments.list.useQuery();
   
   const createMutation = trpc.purchaseOrders.create.useMutation({
     onSuccess: (data) => {

@@ -3,12 +3,13 @@ import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router, uploadProcedure, sensitiveProcedure } from "./_core/trpc";
 import * as db from "./db";
 import * as utils from "./utils";
-import { storagePut } from "./storage";
+import { storagePut, storageGet } from "./storage";
 import { performOCR, extractTenderData, extractInvoiceData, extractExpenseData, generateForecast, detectAnomalies, analyzeTenderWinRate } from "./aiService";
 import { notifyOwner } from "./_core/notification";
+import * as ocrService from "./ocr";
 
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -563,7 +564,27 @@ export const appRouter = router({
     list: protectedProcedure.query(async () => {
       return await db.getAllTenders();
     }),
-    
+
+    listPaginated: protectedProcedure
+      .input(z.object({
+        page: z.number().int().min(1).default(1),
+        pageSize: z.number().int().min(1).max(100).default(20),
+      }))
+      .query(async ({ input }) => {
+        const { data, totalCount } = await db.getTendersPaginated(input.page, input.pageSize);
+        const totalPages = Math.ceil(totalCount / input.pageSize);
+        return {
+          data,
+          pagination: {
+            page: input.page,
+            pageSize: input.pageSize,
+            totalCount,
+            totalPages,
+            hasMore: input.page < totalPages,
+          },
+        };
+      }),
+
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
@@ -851,14 +872,14 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const expenseNumber = utils.generateExpenseNumber();
-        
-        await db.createExpense({
+
+        const result = await db.createExpense({
           ...input,
           expenseNumber,
           createdBy: ctx.user.id,
         } as any);
-        
-        return { success: true, expenseNumber };
+
+        return { success: true, expenseNumber, id: Number(result.insertId) };
       }),
     
     update: protectedProcedure
@@ -1024,7 +1045,7 @@ export const appRouter = router({
         return await db.getDocumentsByEntity(input.entityType, input.entityId);
       }),
     
-    upload: protectedProcedure
+    upload: uploadProcedure
       .input(z.object({
         entityType: z.string(),
         entityId: z.number(),
@@ -1039,7 +1060,7 @@ export const appRouter = router({
         const buffer = Buffer.from(input.fileData, 'base64');
         const fileKey = `documents/${input.entityType}/${input.entityId}/${Date.now()}-${input.fileName}`;
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
-        
+
         // Save document record
         const result = await db.createDocument({
           folderId: input.folderId,
@@ -1053,9 +1074,9 @@ export const appRouter = router({
           documentType: input.documentType,
           uploadedBy: ctx.user.id,
         } as any);
-        
+
         const documentId = Number(result.insertId);
-        
+
         return { success: true, documentId, fileUrl: url };
       }),
     
@@ -1135,6 +1156,220 @@ export const appRouter = router({
       .input(z.object({ documentId: z.number() }))
       .query(async ({ input }) => {
         return await db.getExtractionResult(input.documentId);
+      }),
+  }),
+
+  // ============================================
+  // TENDER OCR EXTRACTION (Python-based)
+  // ============================================
+  tenderOCR: router({
+    // Check if OCR service is available
+    status: protectedProcedure.query(async () => {
+      return await ocrService.getOCRStatus();
+    }),
+
+    // Upload and extract tender PDF in one step
+    uploadAndExtract: uploadProcedure
+      .input(z.object({
+        fileName: z.string(),
+        fileData: z.string(), // base64 PDF data
+        department: z.string().default("Biomedical Engineering"),
+        tenderId: z.number().optional(), // Link to existing tender
+        saveToTender: z.boolean().default(false), // Create/update tender from results
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Validate it's a PDF
+        if (!input.fileName.toLowerCase().endsWith('.pdf')) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Only PDF files are supported for OCR extraction',
+          });
+        }
+
+        // Upload to S3 first
+        const buffer = Buffer.from(input.fileData, 'base64');
+        const fileKey = `tender-ocr/${Date.now()}-${input.fileName}`;
+        const { url } = await storagePut(fileKey, buffer, 'application/pdf');
+
+        // Create document record
+        const docResult = await db.createDocument({
+          entityType: input.tenderId ? 'tender' : 'ocr_upload',
+          entityId: input.tenderId || 0,
+          fileName: input.fileName,
+          fileKey,
+          fileUrl: url,
+          fileSize: buffer.length,
+          mimeType: 'application/pdf',
+          documentType: 'tender_pdf',
+          uploadedBy: ctx.user.id,
+          status: 'processing',
+          extractionStatus: 'processing',
+        } as any);
+
+        const documentId = Number((docResult as any).insertId);
+
+        // Run OCR extraction
+        const ocrResult = await ocrService.extractTenderFromBase64(input.fileData, input.fileName, {
+          department: input.department,
+          languages: ['eng', 'ara'],
+          dpi: 300,
+          maxPages: 10,
+        });
+
+        if (!ocrResult.success || !ocrResult.data) {
+          // Update document status to failed
+          await db.updateDocument(documentId, {
+            status: 'failed',
+            extractionStatus: 'failed',
+          });
+
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: ocrResult.error || 'OCR extraction failed',
+          });
+        }
+
+        // Save extraction result
+        await db.createExtractionResult({
+          documentId,
+          extractedData: JSON.stringify(ocrResult.data),
+          confidenceScores: JSON.stringify({ overall: ocrResult.data.ocr_confidence }),
+          provider: 'tesseract',
+          ocrProvider: 'tesseract',
+        } as any);
+
+        // Update document status
+        await db.updateDocument(documentId, {
+          status: 'completed',
+          extractionStatus: 'completed',
+        });
+
+        // Optionally create/update tender from extracted data
+        let tenderId = input.tenderId;
+        if (input.saveToTender && ocrResult.data) {
+          const tenderData = {
+            title: ocrResult.data.title || `Tender ${ocrResult.data.reference_number}`,
+            referenceNumber: ocrResult.data.reference_number,
+            description: ocrResult.data.specifications_text || '',
+            status: 'draft' as const,
+            submissionDeadline: ocrResult.data.closing_date ? new Date(ocrResult.data.closing_date.split('/').reverse().join('-')) : null,
+            createdBy: ctx.user.id,
+          };
+
+          if (tenderId) {
+            // Update existing tender
+            await db.updateTender(tenderId, tenderData);
+          } else {
+            // Create new tender
+            const tenderResult = await db.createTender(tenderData as any);
+            tenderId = Number((tenderResult as any).insertId);
+
+            // Link document to tender
+            await db.updateDocument(documentId, {
+              entityType: 'tender',
+              entityId: tenderId,
+            });
+          }
+
+          // Create tender items from extracted items
+          if (ocrResult.data.items && ocrResult.data.items.length > 0) {
+            for (const item of ocrResult.data.items) {
+              await db.createTenderItem({
+                tenderId: tenderId,
+                description: item.description,
+                quantity: parseInt(item.quantity) || 1,
+                unit: item.unit || 'units',
+                specifications: item.specifications || '',
+              } as any);
+            }
+          }
+        }
+
+        return {
+          success: true,
+          documentId,
+          tenderId,
+          extraction: ocrResult.data,
+          fileUrl: url,
+        };
+      }),
+
+    // Extract from an existing document
+    extractFromDocument: protectedProcedure
+      .input(z.object({
+        documentId: z.number(),
+        department: z.string().default("Biomedical Engineering"),
+      }))
+      .mutation(async ({ input }) => {
+        // Get document
+        const documents = await db.getDocumentsByEntity('', 0);
+        const document = documents.find(d => d.id === input.documentId);
+
+        if (!document) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found' });
+        }
+
+        if (document.mimeType !== 'application/pdf') {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Only PDF files are supported for OCR extraction',
+          });
+        }
+
+        // Update status to processing
+        await db.updateDocument(input.documentId, {
+          extractionStatus: 'processing',
+        });
+
+        // Download file and run OCR
+        // Note: For S3 files, you'd need to download first
+        const ocrResult = await ocrService.extractTenderFromPDF(document.fileUrl, {
+          department: input.department,
+        });
+
+        if (!ocrResult.success || !ocrResult.data) {
+          await db.updateDocument(input.documentId, {
+            extractionStatus: 'failed',
+          });
+
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: ocrResult.error || 'OCR extraction failed',
+          });
+        }
+
+        // Save extraction result
+        await db.createExtractionResult({
+          documentId: input.documentId,
+          extractedData: JSON.stringify(ocrResult.data),
+          confidenceScores: JSON.stringify({ overall: ocrResult.data.ocr_confidence }),
+          provider: 'tesseract',
+          ocrProvider: 'tesseract',
+        } as any);
+
+        // Update status
+        await db.updateDocument(input.documentId, {
+          extractionStatus: 'completed',
+        });
+
+        return {
+          success: true,
+          extraction: ocrResult.data,
+        };
+      }),
+
+    // Get extraction results for a document
+    getResults: protectedProcedure
+      .input(z.object({ documentId: z.number() }))
+      .query(async ({ input }) => {
+        const result = await db.getExtractionResult(input.documentId);
+        if (!result) return null;
+
+        return {
+          ...result,
+          extractedData: result.extractedData ? JSON.parse(result.extractedData) : null,
+          confidenceScores: result.confidenceScores ? JSON.parse(result.confidenceScores) : null,
+        };
       }),
   }),
 
@@ -1407,7 +1642,7 @@ export const appRouter = router({
 
   // Files router for universal file management
   files: router({
-    uploadToS3: protectedProcedure
+    uploadToS3: uploadProcedure
       .input(z.object({
         fileName: z.string(),
         fileData: z.string(), // base64 encoded file data
@@ -1445,7 +1680,7 @@ export const appRouter = router({
         return file;
       }),
 
-    upload: protectedProcedure
+    upload: uploadProcedure
       .input(z.object({
         fileName: z.string(),
         fileKey: z.string(),
@@ -1474,19 +1709,19 @@ export const appRouter = router({
         return await db.getFilesByEntity(input.entityType, input.entityId, input.category);
       }),
 
-    delete: protectedProcedure
+    delete: sensitiveProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const file = await db.getFileById(input.id);
         if (!file) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'File not found' });
         }
-        
+
         // Check if user owns the file or is admin
         if (file.uploadedBy !== ctx.user.id && ctx.user.role !== 'admin') {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized to delete this file' });
         }
-        
+
         await db.deleteFile(input.id);
         return { success: true };
       }),

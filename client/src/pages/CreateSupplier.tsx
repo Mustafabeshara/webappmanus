@@ -1,20 +1,36 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  FormField,
+  FormSection,
+  FormActions,
+  ValidatedInput,
+  ValidatedTextarea,
+} from "@/components/ui/form-field";
+import { PageHeader } from "@/components/ui/page-header";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { validateRequired, validateEmail, validatePhone, validateNumberRange } from "@/lib/validation";
+import { Loader2, AlertCircle, Building2, User, Mail, Phone, MapPin, FileText, Star } from "lucide-react";
+import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+
+interface FormErrors {
+  name?: string;
+  email?: string;
+  phone?: string;
+  rating?: string;
+}
 
 export default function CreateSupplier() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
   const [formData, setFormData] = useState({
     name: "",
@@ -27,6 +43,84 @@ export default function CreateSupplier() {
     rating: "",
     notes: "",
   });
+
+  // Validation functions
+  const validateField = useCallback(
+    (field: string, value: unknown): string | undefined => {
+      switch (field) {
+        case "name": {
+          const required = validateRequired(value as string, "Supplier name");
+          if (!required.valid) return required.error;
+          return undefined;
+        }
+        case "email": {
+          if (!value) return undefined;
+          const email = validateEmail(value as string);
+          if (!email.valid) return email.error;
+          return undefined;
+        }
+        case "phone": {
+          if (!value) return undefined;
+          const phone = validatePhone(value as string);
+          if (!phone.valid) return phone.error;
+          return undefined;
+        }
+        case "rating": {
+          if (!value) return undefined;
+          const range = validateNumberRange(value as string, 1, 5, "Rating");
+          if (!range.valid) return range.error;
+          return undefined;
+        }
+        default:
+          return undefined;
+      }
+    },
+    []
+  );
+
+  // Validate all fields before submission
+  const validateAll = useCallback(() => {
+    const newErrors: FormErrors = {};
+
+    const nameError = validateField("name", formData.name);
+    if (nameError) newErrors.name = nameError;
+
+    const emailError = validateField("email", formData.email);
+    if (emailError) newErrors.email = emailError;
+
+    const phoneError = validateField("phone", formData.phone);
+    if (phoneError) newErrors.phone = phoneError;
+
+    const ratingError = validateField("rating", formData.rating);
+    if (ratingError) newErrors.rating = ratingError;
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [formData, validateField]);
+
+  // Handle field change with validation
+  const handleChange = useCallback(
+    (field: string, value: string) => {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+
+      // Validate on change if field was already touched
+      if (touched[field]) {
+        const error = validateField(field, value);
+        setErrors((prev) => ({ ...prev, [field]: error }));
+      }
+    },
+    [touched, validateField]
+  );
+
+  // Handle field blur - mark as touched and validate
+  const handleBlur = useCallback(
+    (field: string) => {
+      setTouched((prev) => ({ ...prev, [field]: true }));
+      const error = validateField(field, formData[field as keyof typeof formData]);
+      setErrors((prev) => ({ ...prev, [field]: error }));
+    },
+    [formData, validateField]
+  );
 
   const createMutation = trpc.suppliers.create.useMutation({
     onSuccess: () => {
@@ -41,9 +135,17 @@ export default function CreateSupplier() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.name) {
-      toast.error("Please enter supplier name");
+
+    // Mark all fields as touched
+    setTouched({
+      name: true,
+      email: true,
+      phone: true,
+      rating: true,
+    });
+
+    if (!validateAll()) {
+      toast.error("Please fix the errors before submitting");
       return;
     }
 
@@ -59,25 +161,29 @@ export default function CreateSupplier() {
     });
   };
 
+  const hasErrors = Object.values(errors).some(Boolean);
+
   if (!user) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setLocation("/suppliers")}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold">Create New Supplier</h1>
-          <p className="text-muted-foreground mt-1">
-            Add a new supplier or manufacturer to your network
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6 pb-10">
+      <PageHeader
+        title="Create New Supplier"
+        description="Add a new supplier or manufacturer to your network"
+        breadcrumbs={[
+          { label: "Suppliers", href: "/suppliers" },
+          { label: "Create New" },
+        ]}
+      />
+
+      {hasErrors && (
+        <Alert variant="destructive" className="animate-in slide-in-from-top-2">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Please fix the validation errors below before submitting.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <form onSubmit={handleSubmit}>
         <Card>
@@ -86,76 +192,132 @@ export default function CreateSupplier() {
             <CardDescription>Enter the supplier details</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Supplier Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., Medical Supplies Inc."
-                  required
+            {/* Basic Info Section */}
+            <FormSection title="Basic Information" columns={2}>
+              <FormField
+                id="name"
+                label="Supplier Name"
+                required
+                error={touched.name ? errors.name : undefined}
+              >
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <ValidatedInput
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => handleChange("name", e.target.value)}
+                    onBlur={() => handleBlur("name")}
+                    placeholder="e.g., Medical Supplies Inc."
+                    error={touched.name && !!errors.name}
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </FormField>
+
+              <FormField
+                id="contactPerson"
+                label="Contact Person"
+                hint="Primary contact at this supplier"
+              >
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <ValidatedInput
+                    id="contactPerson"
+                    value={formData.contactPerson}
+                    onChange={(e) => handleChange("contactPerson", e.target.value)}
+                    placeholder="e.g., John Doe"
+                    className="pl-10"
+                  />
+                </div>
+              </FormField>
+            </FormSection>
+
+            {/* Contact Info Section */}
+            <FormSection title="Contact Information" columns={2}>
+              <FormField
+                id="email"
+                label="Email"
+                error={touched.email ? errors.email : undefined}
+              >
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <ValidatedInput
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleChange("email", e.target.value)}
+                    onBlur={() => handleBlur("email")}
+                    placeholder="supplier@example.com"
+                    error={touched.email && !!errors.email}
+                    className="pl-10"
+                  />
+                </div>
+              </FormField>
+
+              <FormField
+                id="phone"
+                label="Phone"
+                error={touched.phone ? errors.phone : undefined}
+              >
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <ValidatedInput
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => handleChange("phone", e.target.value)}
+                    onBlur={() => handleBlur("phone")}
+                    placeholder="+1 234 567 8900"
+                    error={touched.phone && !!errors.phone}
+                    className="pl-10"
+                  />
+                </div>
+              </FormField>
+            </FormSection>
+
+            {/* Address Section */}
+            <FormField
+              id="address"
+              label="Address"
+              hint="Full business address"
+            >
+              <div className="relative">
+                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <ValidatedTextarea
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) => handleChange("address", e.target.value)}
+                  placeholder="Enter full address"
+                  rows={3}
+                  className="pl-10"
                 />
               </div>
+            </FormField>
 
-              <div className="space-y-2">
-                <Label htmlFor="contactPerson">Contact Person</Label>
-                <Input
-                  id="contactPerson"
-                  value={formData.contactPerson}
-                  onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
-                  placeholder="e.g., John Doe"
-                />
-              </div>
-            </div>
+            {/* Business Info Section */}
+            <FormSection title="Business Details" columns={2}>
+              <FormField
+                id="taxId"
+                label="Tax ID"
+                hint="Tax identification number"
+              >
+                <div className="relative">
+                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <ValidatedInput
+                    id="taxId"
+                    value={formData.taxId}
+                    onChange={(e) => handleChange("taxId", e.target.value)}
+                    placeholder="Tax identification number"
+                    className="pl-10"
+                  />
+                </div>
+              </FormField>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="supplier@example.com"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="+1 234 567 8900"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="address">Address</Label>
-              <Textarea
-                id="address"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="Enter full address"
-                rows={3}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="taxId">Tax ID</Label>
-                <Input
-                  id="taxId"
-                  value={formData.taxId}
-                  onChange={(e) => setFormData({ ...formData, taxId: e.target.value })}
-                  placeholder="Tax identification number"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="complianceStatus">Compliance Status</Label>
+              <FormField
+                id="complianceStatus"
+                label="Compliance Status"
+                hint="Current compliance verification status"
+              >
                 <Select
                   value={formData.complianceStatus}
                   onValueChange={(value: "pending" | "compliant" | "non_compliant") =>
@@ -166,43 +328,60 @@ export default function CreateSupplier() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="pending">Pending Review</SelectItem>
                     <SelectItem value="compliant">Compliant</SelectItem>
                     <SelectItem value="non_compliant">Non-Compliant</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
+              </FormField>
+            </FormSection>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="rating">Rating (1-5)</Label>
-                <Input
-                  id="rating"
-                  type="number"
-                  min="1"
-                  max="5"
-                  value={formData.rating}
-                  onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
-                  placeholder="1-5"
-                />
-              </div>
-            </div>
+            {/* Rating Section */}
+            <FormSection columns={2}>
+              <FormField
+                id="rating"
+                label="Rating (1-5)"
+                error={touched.rating ? errors.rating : undefined}
+                hint="Overall supplier performance rating"
+              >
+                <div className="relative">
+                  <Star className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <ValidatedInput
+                    id="rating"
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={formData.rating}
+                    onChange={(e) => handleChange("rating", e.target.value)}
+                    onBlur={() => handleBlur("rating")}
+                    placeholder="1-5"
+                    error={touched.rating && !!errors.rating}
+                    className="pl-10"
+                  />
+                </div>
+              </FormField>
+            </FormSection>
 
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
+            {/* Notes Section */}
+            <FormField
+              id="notes"
+              label="Notes"
+              hint="Additional notes or comments about this supplier"
+            >
+              <ValidatedTextarea
                 id="notes"
                 value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                onChange={(e) => handleChange("notes", e.target.value)}
                 placeholder="Additional notes or comments"
                 rows={4}
               />
-            </div>
+            </FormField>
 
-            <div className="flex gap-3">
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Creating..." : "Create Supplier"}
+            {/* Actions */}
+            <FormActions>
+              <Button type="submit" disabled={isSubmitting || hasErrors}>
+                {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Create Supplier
               </Button>
               <Button
                 type="button"
@@ -211,7 +390,7 @@ export default function CreateSupplier() {
               >
                 Cancel
               </Button>
-            </div>
+            </FormActions>
           </CardContent>
         </Card>
       </form>

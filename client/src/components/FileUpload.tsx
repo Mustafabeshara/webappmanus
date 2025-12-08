@@ -4,23 +4,28 @@ import { Card } from "@/components/ui/card";
 import { Upload, X, File, Image, FileText } from "lucide-react";
 import { toast } from "sonner";
 
-interface FileUploadProps {
-  onUpload: (files: File[]) => Promise<void>;
+export interface FileUploadProps {
+  onUpload?: (files: File[]) => Promise<void>;
+  onFilesSelected?: (files: File[]) => void;
   accept?: string;
   multiple?: boolean;
   maxSize?: number; // in MB
+  maxSizeMB?: number; // alias for maxSize
   maxFiles?: number;
   disabled?: boolean;
 }
 
 export function FileUpload({
   onUpload,
+  onFilesSelected,
   accept = "*/*",
   multiple = true,
-  maxSize = 10,
+  maxSize,
+  maxSizeMB,
   maxFiles = 5,
   disabled = false,
 }: FileUploadProps) {
+  const effectiveMaxSize = maxSize ?? maxSizeMB ?? 10;
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -73,17 +78,27 @@ export function FileUpload({
     }
 
     // Validate file sizes
-    const invalidFiles = files.filter(file => file.size > maxSize * 1024 * 1024);
+    const invalidFiles = files.filter(file => file.size > effectiveMaxSize * 1024 * 1024);
     if (invalidFiles.length > 0) {
-      toast.error(`Files must be smaller than ${maxSize}MB`);
+      toast.error(`Files must be smaller than ${effectiveMaxSize}MB`);
       return;
     }
 
-    setSelectedFiles(prev => [...prev, ...files]);
+    const newFiles = [...selectedFiles, ...files];
+    setSelectedFiles(newFiles);
+
+    // If onFilesSelected is provided, call it immediately
+    if (onFilesSelected) {
+      onFilesSelected(newFiles);
+    }
   };
 
   const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    const newFiles = selectedFiles.filter((_, i) => i !== index);
+    setSelectedFiles(newFiles);
+    if (onFilesSelected) {
+      onFilesSelected(newFiles);
+    }
   };
 
   const handleUpload = async () => {
@@ -91,6 +106,8 @@ export function FileUpload({
       toast.error("Please select files to upload");
       return;
     }
+
+    if (!onUpload) return;
 
     setUploading(true);
     try {
@@ -140,7 +157,7 @@ export function FileUpload({
             Drop files here or click to browse
           </p>
           <p className="text-xs text-muted-foreground">
-            {multiple ? `Up to ${maxFiles} files` : "Single file"} • Max {maxSize}MB each
+            {multiple ? `Up to ${maxFiles} files` : "Single file"} • Max {effectiveMaxSize}MB each
           </p>
         </div>
       </Card>
@@ -153,6 +170,7 @@ export function FileUpload({
         onChange={handleFileInput}
         className="hidden"
         disabled={disabled}
+        aria-label="File upload input"
       />
 
       {selectedFiles.length > 0 && (
@@ -183,13 +201,15 @@ export function FileUpload({
             </div>
           ))}
 
-          <Button
-            onClick={handleUpload}
-            disabled={uploading || disabled}
-            className="w-full"
-          >
-            {uploading ? "Uploading..." : `Upload ${selectedFiles.length} file(s)`}
-          </Button>
+          {onUpload && (
+            <Button
+              onClick={handleUpload}
+              disabled={uploading || disabled}
+              className="w-full"
+            >
+              {uploading ? "Uploading..." : `Upload ${selectedFiles.length} file(s)`}
+            </Button>
+          )}
         </div>
       )}
     </div>

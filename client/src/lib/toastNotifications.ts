@@ -25,7 +25,7 @@ type EntityType =
   | "invoices"
   | "system";
 
-interface Notification {
+export interface Notification {
   id: number;
   type: NotificationType;
   title: string;

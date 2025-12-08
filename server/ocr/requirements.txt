@@ -1,0 +1,17 @@
+# OCR Dependencies for Tender Extraction
+# Install with: pip install -r requirements.txt
+
+# Tesseract Python wrapper
+pytesseract>=0.3.10
+
+# PDF to image conversion (requires Poppler)
+pdf2image>=1.16.0
+
+# Image processing
+Pillow>=10.0.0
+
+# Data handling
+pandas>=2.0.0
+
+# Excel export
+openpyxl>=3.1.0
