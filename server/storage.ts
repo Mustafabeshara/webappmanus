@@ -1,70 +1,35 @@
-// Preconfigured storage helpers for Manus WebDev templates
-// Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
+// Local file storage helpers - no external dependencies required
+// Files are stored locally and served via Express static middleware
 
-import { ENV } from './_core/env';
+import { promises as fs } from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 
-type StorageConfig = { baseUrl: string; apiKey: string };
+// Storage directory - use /tmp for Railway compatibility or local uploads folder
+const STORAGE_DIR = process.env.STORAGE_DIR || path.join(process.cwd(), 'uploads');
+const BASE_URL = process.env.BASE_URL || '';
 
-function getStorageConfig(): StorageConfig {
-  const baseUrl = ENV.forgeApiUrl;
-  const apiKey = ENV.forgeApiKey;
-
-  if (!baseUrl || !apiKey) {
-    throw new Error(
-      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
-    );
+// Ensure storage directory exists
+async function ensureStorageDir(): Promise<void> {
+  try {
+    await fs.mkdir(STORAGE_DIR, { recursive: true });
+  } catch (err) {
+    // Directory might already exist
   }
-
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
-}
-
-function buildUploadUrl(baseUrl: string, relKey: string): URL {
-  const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
-  url.searchParams.set("path", normalizeKey(relKey));
-  return url;
-}
-
-async function buildDownloadUrl(
-  baseUrl: string,
-  relKey: string,
-  apiKey: string
-): Promise<string> {
-  const downloadApiUrl = new URL(
-    "v1/storage/downloadUrl",
-    ensureTrailingSlash(baseUrl)
-  );
-  downloadApiUrl.searchParams.set("path", normalizeKey(relKey));
-  const response = await fetch(downloadApiUrl, {
-    method: "GET",
-    headers: buildAuthHeaders(apiKey),
-  });
-  return (await response.json()).url;
-}
-
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value : `${value}/`;
 }
 
 function normalizeKey(relKey: string): string {
-  return relKey.replace(/^\/+/, "");
+  return relKey.replace(/^\/+/, '').replace(/\.\./g, '');
 }
 
-function toFormData(
-  data: Buffer | Uint8Array | string,
-  contentType: string,
-  fileName: string
-): FormData {
-  const blob =
-    typeof data === "string"
-      ? new Blob([data], { type: contentType })
-      : new Blob([data as any], { type: contentType });
-  const form = new FormData();
-  form.append("file", blob, fileName || "file");
-  return form;
+function getFilePath(key: string): string {
+  return path.join(STORAGE_DIR, key);
 }
 
-function buildAuthHeaders(apiKey: string): HeadersInit {
-  return { Authorization: `Bearer ${apiKey}` };
+function getPublicUrl(key: string): string {
+  // Return a URL path that can be served by Express static middleware
+  const baseUrl = BASE_URL || '';
+  return `${baseUrl}/uploads/${key}`;
 }
 
 export async function storagePut(
@@ -72,31 +37,72 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
-  const key = normalizeKey(relKey);
-  const uploadUrl = buildUploadUrl(baseUrl, key);
-  const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: buildAuthHeaders(apiKey),
-    body: formData,
-  });
+  await ensureStorageDir();
 
-  if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText);
-    throw new Error(
-      `Storage upload failed (${response.status} ${response.statusText}): ${message}`
-    );
+  const key = normalizeKey(relKey);
+  const filePath = getFilePath(key);
+
+  // Ensure subdirectories exist
+  const dir = path.dirname(filePath);
+  await fs.mkdir(dir, { recursive: true });
+
+  // Convert data to Buffer if needed
+  let buffer: Buffer;
+  if (typeof data === 'string') {
+    buffer = Buffer.from(data);
+  } else if (data instanceof Uint8Array) {
+    buffer = Buffer.from(data);
+  } else {
+    buffer = data;
   }
-  const url = (await response.json()).url;
+
+  // Write file to disk
+  await fs.writeFile(filePath, buffer);
+
+  const url = getPublicUrl(key);
+
   return { key, url };
 }
 
-export async function storageGet(relKey: string): Promise<{ key: string; url: string; }> {
-  const { baseUrl, apiKey } = getStorageConfig();
+export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
   const key = normalizeKey(relKey);
-  return {
-    key,
-    url: await buildDownloadUrl(baseUrl, key, apiKey),
-  };
+  const filePath = getFilePath(key);
+
+  // Check if file exists
+  try {
+    await fs.access(filePath);
+  } catch {
+    throw new Error(`File not found: ${key}`);
+  }
+
+  const url = getPublicUrl(key);
+  return { key, url };
+}
+
+export async function storageDelete(relKey: string): Promise<void> {
+  const key = normalizeKey(relKey);
+  const filePath = getFilePath(key);
+
+  try {
+    await fs.unlink(filePath);
+  } catch {
+    // File might not exist, ignore
+  }
+}
+
+export async function storageExists(relKey: string): Promise<boolean> {
+  const key = normalizeKey(relKey);
+  const filePath = getFilePath(key);
+
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Get the storage directory path (for Express static middleware)
+export function getStorageDirectory(): string {
+  return STORAGE_DIR;
 }
