@@ -1,3 +1,9 @@
+// Polyfill crypto for jose in Node.js ESM environment
+import { webcrypto } from "crypto";
+if (!globalThis.crypto) {
+  (globalThis as unknown as { crypto: typeof webcrypto }).crypto = webcrypto;
+}
+
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { ForbiddenError } from "@shared/_core/errors";
 import { parse as parseCookieHeader } from "cookie";
