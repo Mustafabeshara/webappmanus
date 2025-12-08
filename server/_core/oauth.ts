@@ -4,7 +4,12 @@ import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 import { expressRateLimit, RATE_LIMITS } from "./rateLimit";
-import { nanoid } from "nanoid";
+import crypto from "crypto";
+
+// Generate a random ID (replacement for nanoid to avoid crypto global issues)
+function generateId(length = 10): string {
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+}
 
 export function registerOAuthRoutes(app: Express) {
   // Simple password login endpoint (replaces Manus OAuth)
@@ -23,7 +28,7 @@ export function registerOAuthRoutes(app: Express) {
 
     try {
       // Generate a unique user ID for this admin session
-      const openId = `admin-${nanoid(10)}`;
+      const openId = `admin-${generateId(10)}`;
       console.log("[Auth] Creating user with openId:", openId);
       console.log("[Auth] DATABASE_URL:", process.env.DATABASE_URL?.substring(0, 30) + "...");
 
