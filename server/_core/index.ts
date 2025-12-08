@@ -1,4 +1,9 @@
 import "dotenv/config";
+// Polyfill globalThis.crypto for jose library in Node.js environments
+import { webcrypto } from "crypto";
+if (!globalThis.crypto) {
+  (globalThis as unknown as { crypto: typeof webcrypto }).crypto = webcrypto;
+}
 import express from "express";
 import { createServer } from "http";
 import net from "net";
