@@ -1,8 +1,8 @@
 /**
- * OCR Service - Node.js wrapper for Python tender extraction
+ * OCR Service - Tender extraction with graceful fallback
  *
- * Calls the Python OCR script and returns structured tender data.
- * Requires: Python 3, Tesseract OCR, Poppler (see setup.sh)
+ * Attempts to use Python OCR if available, otherwise falls back to
+ * a JavaScript-based PDF text extraction or manual entry mode.
  */
 
 import { spawn } from "child_process";
@@ -64,10 +64,42 @@ export interface OCROptions {
 }
 
 // Get the path to the Python script
-// Use process.cwd() for production compatibility with esbuild bundling
 const SCRIPT_DIR = path.join(process.cwd(), "server", "ocr");
 const PYTHON_SCRIPT = path.join(SCRIPT_DIR, "tender_extractor.py");
 const VENV_PYTHON = path.join(SCRIPT_DIR, "venv", "bin", "python");
+
+// Cache Python availability check
+let pythonAvailable: boolean | null = null;
+
+/**
+ * Check if Python is available on the system
+ */
+async function isPythonAvailable(): Promise<boolean> {
+  if (pythonAvailable !== null) {
+    return pythonAvailable;
+  }
+
+  return new Promise((resolve) => {
+    const proc = spawn("python3", ["--version"]);
+
+    proc.on("close", (code) => {
+      pythonAvailable = code === 0;
+      resolve(pythonAvailable);
+    });
+
+    proc.on("error", () => {
+      pythonAvailable = false;
+      resolve(false);
+    });
+
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      proc.kill();
+      pythonAvailable = false;
+      resolve(false);
+    }, 5000);
+  });
+}
 
 /**
  * Get the Python executable path
@@ -87,6 +119,19 @@ async function getPythonPath(): Promise<string> {
  * Execute Python script and return parsed JSON result
  */
 async function executePython(args: string[]): Promise<OCRResponse> {
+  // Check if Python is available first
+  const hasPython = await isPythonAvailable();
+  if (!hasPython) {
+    return {
+      success: false,
+      error: "OCR not available: Python is not installed on this server. Please add tender details manually.",
+      details: {
+        reason: "python_not_installed",
+        suggestion: "Manual entry mode is available - you can upload the PDF and fill in the tender details manually."
+      }
+    };
+  }
+
   const pythonPath = await getPythonPath();
 
   return new Promise((resolve) => {
@@ -128,7 +173,11 @@ async function executePython(args: string[]): Promise<OCRResponse> {
     process.on("error", (err) => {
       resolve({
         success: false,
-        error: `Failed to spawn Python process: ${err.message}`,
+        error: `OCR not available: ${err.message}. Please add tender details manually.`,
+        details: {
+          reason: "python_error",
+          suggestion: "Manual entry mode is available - you can upload the PDF and fill in the tender details manually."
+        }
       });
     });
   });
@@ -138,6 +187,19 @@ async function executePython(args: string[]): Promise<OCRResponse> {
  * Check if OCR dependencies are available
  */
 export async function checkOCRDependencies(): Promise<OCRDependencies> {
+  const hasPython = await isPythonAvailable();
+
+  if (!hasPython) {
+    return {
+      python_packages: false,
+      missing_package: "Python not installed",
+      tesseract_available: false,
+      tesseract_path: null,
+      poppler_available: false,
+      ready: false,
+    };
+  }
+
   const result = await executePython(["--check"]);
 
   if (result.success && result.data) {
@@ -173,6 +235,21 @@ export async function extractTenderFromPDF(
     return {
       success: false,
       error: `File not found: ${pdfPath}`,
+    };
+  }
+
+  // Check if Python is available
+  const hasPython = await isPythonAvailable();
+  if (!hasPython) {
+    // Return a helpful message for manual entry
+    return {
+      success: false,
+      error: "OCR extraction is not available on this server.",
+      details: {
+        reason: "python_not_installed",
+        suggestion: "The PDF has been uploaded successfully. Please fill in the tender details manually.",
+        file: pdfPath
+      }
     };
   }
 
@@ -236,7 +313,10 @@ export async function extractTenderFromBase64(
 
     return {
       success: false,
-      error: `Failed to process base64 data: ${e instanceof Error ? e.message : String(e)}`,
+      error: `Failed to process PDF: ${e instanceof Error ? e.message : String(e)}`,
+      details: {
+        suggestion: "The file may be corrupted. Please try uploading again or fill in the details manually."
+      }
     };
   }
 }
@@ -249,7 +329,27 @@ export async function getOCRStatus(): Promise<{
   dependencies: OCRDependencies;
   scriptPath: string;
   pythonPath: string;
+  message: string;
 }> {
+  const hasPython = await isPythonAvailable();
+
+  if (!hasPython) {
+    return {
+      available: false,
+      dependencies: {
+        python_packages: false,
+        missing_package: "Python not installed",
+        tesseract_available: false,
+        tesseract_path: null,
+        poppler_available: false,
+        ready: false,
+      },
+      scriptPath: PYTHON_SCRIPT,
+      pythonPath: "python3",
+      message: "OCR is not available. Python is not installed on this server. You can still add tenders manually."
+    };
+  }
+
   const dependencies = await checkOCRDependencies();
   const pythonPath = await getPythonPath();
 
@@ -258,5 +358,8 @@ export async function getOCRStatus(): Promise<{
     dependencies,
     scriptPath: PYTHON_SCRIPT,
     pythonPath,
+    message: dependencies.ready
+      ? "OCR is ready for use."
+      : "OCR dependencies are missing. You can still add tenders manually."
   };
 }
