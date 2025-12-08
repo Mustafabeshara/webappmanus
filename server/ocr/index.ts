@@ -64,7 +64,8 @@ export interface OCROptions {
 }
 
 // Get the path to the Python script
-const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname);
+// Use process.cwd() for production compatibility with esbuild bundling
+const SCRIPT_DIR = path.join(process.cwd(), "server", "ocr");
 const PYTHON_SCRIPT = path.join(SCRIPT_DIR, "tender_extractor.py");
 const VENV_PYTHON = path.join(SCRIPT_DIR, "venv", "bin", "python");
 
