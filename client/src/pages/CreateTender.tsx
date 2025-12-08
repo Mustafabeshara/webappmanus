@@ -17,10 +17,11 @@ import {
   validateMinLength,
   validateFutureDate,
 } from "@/lib/validation";
-import { Loader2, Plus, Trash2, AlertCircle, DollarSign } from "lucide-react";
-import { useState, useCallback, useMemo } from "react";
+import { Loader2, Plus, Trash2, AlertCircle, DollarSign, Upload, FileText, CheckCircle2 } from "lucide-react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { Progress } from "@/components/ui/progress";
 
 interface TenderItem {
   description: string;
@@ -60,6 +61,112 @@ export default function CreateTender() {
   const [items, setItems] = useState<TenderItem[]>([
     { description: "", quantity: 1, unit: "piece", estimatedPrice: 0 },
   ]);
+
+  // OCR upload state
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [ocrResult, setOcrResult] = useState<{
+    success: boolean;
+    referenceNumber?: string;
+    itemsCount?: number;
+    confidence?: number;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // OCR upload mutation
+  const ocrMutation = trpc.tenderOCR.uploadAndExtract.useMutation({
+    onSuccess: (data) => {
+      setIsUploading(false);
+      setUploadProgress(100);
+
+      if (data.extraction) {
+        // Auto-fill form with extracted data
+        setFormData(prev => ({
+          ...prev,
+          title: data.extraction.title || prev.title,
+          description: data.extraction.specifications_text || prev.description,
+        }));
+
+        // Auto-fill items if extracted
+        if (data.extraction.items && data.extraction.items.length > 0) {
+          const extractedItems: TenderItem[] = data.extraction.items.map((item) => ({
+            description: item.description || "",
+            quantity: parseInt(item.quantity) || 1,
+            unit: item.unit || "piece",
+            estimatedPrice: 0,
+          }));
+          setItems(extractedItems);
+        }
+
+        // If deadline was extracted
+        if (data.extraction.closing_date) {
+          try {
+            const parts = data.extraction.closing_date.split('/');
+            if (parts.length === 3) {
+              const dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}T12:00`;
+              setFormData(prev => ({ ...prev, submissionDeadline: dateStr }));
+            }
+          } catch {
+            // Ignore date parsing errors
+          }
+        }
+
+        setOcrResult({
+          success: true,
+          referenceNumber: data.extraction.reference_number,
+          itemsCount: data.extraction.items_count,
+          confidence: data.extraction.ocr_confidence,
+        });
+
+        toast.success(`Extracted ${data.extraction.items_count || 0} items from PDF`);
+      }
+    },
+    onError: (error) => {
+      setIsUploading(false);
+      setUploadProgress(0);
+      toast.error(`OCR extraction failed: ${error.message}`);
+    },
+  });
+
+  // Handle PDF file selection
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      toast.error("Please select a PDF file");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size must be less than 10MB");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(10);
+    setOcrResult(null);
+
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      setUploadProgress(30);
+
+      ocrMutation.mutate({
+        fileName: file.name,
+        fileData: base64,
+        department: "Biomedical Engineering",
+        saveToTender: false,
+      });
+      setUploadProgress(50);
+    };
+    reader.onerror = () => {
+      setIsUploading(false);
+      toast.error("Failed to read file");
+    };
+    reader.readAsDataURL(file);
+  }, [ocrMutation]);
 
   // Validation functions
   const validateField = useCallback(
@@ -265,6 +372,102 @@ export default function CreateTender() {
           { label: "Create New" },
         ]}
       />
+
+      {/* OCR Upload Section */}
+      <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            Upload Tender PDF (OCR Extraction)
+          </CardTitle>
+          <CardDescription>
+            Upload a PDF document to automatically extract tender details using OCR.
+            Supports English and Arabic text.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            onChange={handleFileSelect}
+            className="hidden"
+            aria-label="Upload tender PDF file"
+          />
+
+          {!isUploading && !ocrResult && (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
+            >
+              <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+              <p className="text-sm font-medium">Click to upload a PDF</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Max 10MB - PDF files only
+              </p>
+            </div>
+          )}
+
+          {isUploading && (
+            <div className="space-y-3 py-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span className="text-sm">Extracting tender data...</span>
+              </div>
+              <Progress value={uploadProgress} className="h-2" />
+              <p className="text-xs text-muted-foreground">
+                This may take a moment for larger documents
+              </p>
+            </div>
+          )}
+
+          {ocrResult && ocrResult.success && (
+            <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 space-y-2">
+              <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                <CheckCircle2 className="h-5 w-5" />
+                <span className="font-medium">Extraction Complete</span>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-sm mt-3">
+                {ocrResult.referenceNumber && (
+                  <div>
+                    <span className="text-muted-foreground">Reference:</span>
+                    <p className="font-medium">{ocrResult.referenceNumber}</p>
+                  </div>
+                )}
+                <div>
+                  <span className="text-muted-foreground">Items Found:</span>
+                  <p className="font-medium">{ocrResult.itemsCount || 0}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Confidence:</span>
+                  <p className="font-medium">{Math.round((ocrResult.confidence || 0) * 100)}%</p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => {
+                  setOcrResult(null);
+                  setUploadProgress(0);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+              >
+                Upload Another PDF
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="relative flex items-center gap-4 py-2">
+        <div className="flex-1 border-t border-muted" />
+        <span className="text-xs text-muted-foreground uppercase tracking-wider">
+          or fill in manually
+        </span>
+        <div className="flex-1 border-t border-muted" />
+      </div>
 
       {hasErrors && (
         <Alert variant="destructive" className="animate-in slide-in-from-top-2">

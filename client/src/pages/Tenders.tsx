@@ -168,7 +168,7 @@ export default function Tenders() {
         description="Manage tender opportunities and submissions"
         breadcrumbs={[{ label: "Tenders" }]}
         actions={
-          <Link href="/tenders/new">
+          <Link href="/tenders/create">
             <Button>
               <Plus className="mr-2 h-4 w-4" />
               New Tender
@@ -255,7 +255,7 @@ export default function Tenders() {
                   description="Create your first tender to start tracking opportunities."
                   action={{
                     label: "Create Tender",
-                    onClick: () => setLocation("/tenders/new"),
+                    onClick: () => setLocation("/tenders/create"),
                     icon: Plus,
                   }}
                 />

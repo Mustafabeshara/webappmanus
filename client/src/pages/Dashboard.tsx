@@ -122,7 +122,7 @@ export default function Dashboard() {
         title="Dashboard"
         description="Welcome to your AI-powered business management system"
         actions={
-          <Link href="/tenders/new">
+          <Link href="/tenders/create">
             <Button>
               <Plus className="h-4 w-4 mr-2" />
               New Tender
@@ -310,7 +310,7 @@ export default function Dashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <QuickActionButton href="/tenders/new" icon={FileText} label="New Tender" />
+            <QuickActionButton href="/tenders/create" icon={FileText} label="New Tender" />
             <QuickActionButton href="/invoices/new" icon={TrendingUp} label="New Invoice" />
             <QuickActionButton href="/expenses/new" icon={DollarSign} label="New Expense" />
             <QuickActionButton href="/templates" icon={LayoutGrid} label="Templates" />
