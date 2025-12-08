@@ -24,6 +24,8 @@ export function registerOAuthRoutes(app: Express) {
     try {
       // Generate a unique user ID for this admin session
       const openId = `admin-${nanoid(10)}`;
+      console.log("[Auth] Creating user with openId:", openId);
+      console.log("[Auth] DATABASE_URL:", process.env.DATABASE_URL?.substring(0, 30) + "...");
 
       await db.upsertUser({
         openId,
@@ -32,19 +34,24 @@ export function registerOAuthRoutes(app: Express) {
         loginMethod: "password",
         lastSignedIn: new Date(),
       });
+      console.log("[Auth] User upserted successfully");
 
       const sessionToken = await sdk.createSessionToken(openId, {
         name: "Admin",
         expiresInMs: ONE_YEAR_MS,
       });
+      console.log("[Auth] Session token created");
 
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
       res.json({ success: true });
-    } catch (error) {
-      console.error("[Auth] Login failed", error);
-      res.status(500).json({ error: "Login failed" });
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const errStack = error instanceof Error ? error.stack : '';
+      console.error("[Auth] Login failed:", errMsg);
+      console.error("[Auth] Error stack:", errStack);
+      res.status(500).json({ error: "Login failed", details: errMsg });
     }
   });
 
