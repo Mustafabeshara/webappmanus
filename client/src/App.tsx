@@ -28,12 +28,14 @@ import Tasks from "./pages/Tasks";
 import Users from "./pages/Users";
 import AuditLogs from "./pages/AuditLogs";
 import FileManager from "./pages/FileManager";
+import Login from "./pages/Login";
 
 function Router() {
   return (
     <Switch>
       {/* Public routes */}
       <Route path={"/"} component={Home} />
+      <Route path={"/login"} component={Login} />
       
       {/* Dashboard routes */}
       <Route path={"/files"}>
