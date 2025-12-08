@@ -184,16 +184,35 @@ export function getStatusConfig(
 
 /**
  * Format currency values consistently
+ * Supports multiple currencies with KWD as default
  */
-export function formatCurrency(cents: number | null | undefined): string {
+export function formatCurrency(
+  cents: number | null | undefined,
+  currencyCode: string = "KWD"
+): string {
   if (cents == null) return "N/A";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency: currencyCode,
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(cents / 100);
 }
+
+/**
+ * Supported currencies list
+ */
+export const SUPPORTED_CURRENCIES = [
+  { code: "KWD", name: "Kuwaiti Dinar", symbol: "KD" },
+  { code: "SAR", name: "Saudi Riyal", symbol: "ر.س" },
+  { code: "AED", name: "UAE Dirham", symbol: "د.إ" },
+  { code: "USD", name: "US Dollar", symbol: "$" },
+  { code: "EUR", name: "Euro", symbol: "€" },
+  { code: "GBP", name: "British Pound", symbol: "£" },
+  { code: "BHD", name: "Bahraini Dinar", symbol: "BD" },
+  { code: "QAR", name: "Qatari Riyal", symbol: "ر.ق" },
+  { code: "OMR", name: "Omani Rial", symbol: "ر.ع" },
+] as const;
 
 /**
  * Format large numbers with abbreviations

@@ -135,7 +135,25 @@ export const appRouter = router({
   // ============================================
   budgetCategories: router({
     list: protectedProcedure.query(async () => {
-      return await db.getAllBudgetCategories();
+      const categories = await db.getAllBudgetCategories();
+
+      // Return default categories if none exist in database
+      if (!categories || categories.length === 0) {
+        return [
+          { id: 1, name: "Medical Equipment", code: "MED-EQ", description: "Medical devices and equipment", parentId: null, isActive: true },
+          { id: 2, name: "Laboratory Supplies", code: "LAB-SUP", description: "Lab consumables and supplies", parentId: null, isActive: true },
+          { id: 3, name: "Pharmaceuticals", code: "PHARMA", description: "Medicines and pharmaceutical products", parentId: null, isActive: true },
+          { id: 4, name: "IT & Technology", code: "IT-TECH", description: "Computers, software, and IT services", parentId: null, isActive: true },
+          { id: 5, name: "Facilities & Maintenance", code: "FAC-MAINT", description: "Building maintenance and facilities", parentId: null, isActive: true },
+          { id: 6, name: "Office Supplies", code: "OFF-SUP", description: "General office supplies and stationery", parentId: null, isActive: true },
+          { id: 7, name: "Training & Development", code: "TRAIN-DEV", description: "Staff training and professional development", parentId: null, isActive: true },
+          { id: 8, name: "Biomedical Engineering", code: "BIOMED", description: "Biomedical equipment and services", parentId: null, isActive: true },
+          { id: 9, name: "Capital Projects", code: "CAP-PROJ", description: "Major capital expenditures", parentId: null, isActive: true },
+          { id: 10, name: "Operational Expenses", code: "OPS-EXP", description: "Day-to-day operational costs", parentId: null, isActive: true },
+        ];
+      }
+
+      return categories;
     }),
     
     create: protectedProcedure
@@ -1198,7 +1216,7 @@ export const appRouter = router({
       if (overdueInvoices.length > 0) {
         insights.push({
           type: 'warning',
-          message: `${overdueInvoices.length} invoice(s) are overdue totaling SAR ${(totalOverdue / 100).toLocaleString()}. Follow up immediately.`,
+          message: `${overdueInvoices.length} invoice(s) are overdue totaling KD ${(totalOverdue / 100).toLocaleString()}. Follow up immediately.`,
         });
       }
 

@@ -48,7 +48,7 @@ export default function Invoices() {
   };
 
   const formatCurrency = (amount: number) => {
-    return `SAR ${(amount / 100).toLocaleString()}`;
+    return `KD ${(amount / 100).toLocaleString()}`;
   };
 
   const formatDate = (date: Date | string | null) => {

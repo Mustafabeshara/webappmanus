@@ -24,8 +24,21 @@ export default function CreateBudget() {
     departmentId: "",
     fiscalYear: currentYear.toString(),
     allocatedAmount: "",
+    currency: "KWD",
     notes: "",
   });
+
+  const currencies = [
+    { code: "KWD", name: "Kuwaiti Dinar", symbol: "KD" },
+    { code: "SAR", name: "Saudi Riyal", symbol: "ر.س" },
+    { code: "AED", name: "UAE Dirham", symbol: "د.إ" },
+    { code: "USD", name: "US Dollar", symbol: "$" },
+    { code: "EUR", name: "Euro", symbol: "€" },
+    { code: "GBP", name: "British Pound", symbol: "£" },
+    { code: "BHD", name: "Bahraini Dinar", symbol: "BD" },
+    { code: "QAR", name: "Qatari Riyal", symbol: "ر.ق" },
+    { code: "OMR", name: "Omani Rial", symbol: "ر.ع" },
+  ];
 
   const categories = trpc.budgetCategories.list.useQuery();
 
@@ -143,22 +156,45 @@ export default function CreateBudget() {
               />
             </div>
 
-            <div>
-              <Label htmlFor="allocatedAmount">Allocated Amount ($) *</Label>
-              <Input
-                id="allocatedAmount"
-                type="number"
-                min="0"
-                step="0.01"
-                value={formData.allocatedAmount}
-                onChange={(e) => setFormData({ ...formData, allocatedAmount: e.target.value })}
-                placeholder="0.00"
-                required
-              />
-              <p className="text-sm text-muted-foreground mt-1">
-                Enter the total budget amount to be allocated
-              </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="currency">Currency *</Label>
+                <Select
+                  value={formData.currency}
+                  onValueChange={(value) => setFormData({ ...formData, currency: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((currency) => (
+                      <SelectItem key={currency.code} value={currency.code}>
+                        {currency.code} - {currency.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="allocatedAmount">
+                  Allocated Amount ({currencies.find(c => c.code === formData.currency)?.symbol || formData.currency}) *
+                </Label>
+                <Input
+                  id="allocatedAmount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.allocatedAmount}
+                  onChange={(e) => setFormData({ ...formData, allocatedAmount: e.target.value })}
+                  placeholder="0.00"
+                  required
+                />
+              </div>
             </div>
+            <p className="text-sm text-muted-foreground">
+              Enter the total budget amount to be allocated
+            </p>
 
             <div>
               <Label htmlFor="notes">Notes</Label>
