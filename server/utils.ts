@@ -1,6 +1,15 @@
-import { customAlphabet } from 'nanoid';
+import crypto from 'crypto';
 
-const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 10);
+// Generate random alphanumeric string (replacement for nanoid to avoid crypto global issues)
+function generateRandomId(length: number): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  const bytes = crypto.randomBytes(length);
+  for (let i = 0; i < length; i++) {
+    result += chars[bytes[i] % chars.length];
+  }
+  return result;
+}
 
 /**
  * Generate unique reference numbers for various entities
@@ -9,55 +18,55 @@ const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 10);
 export function generateTenderReference(): string {
   const year = new Date().getFullYear();
   const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  const random = nanoid(6).toUpperCase();
+  const random = generateRandomId(6);
   return `TND-${year}${month}-${random}`;
 }
 
 export function generateInvoiceNumber(): string {
   const year = new Date().getFullYear();
   const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  const random = nanoid(6).toUpperCase();
+  const random = generateRandomId(6);
   return `INV-${year}${month}-${random}`;
 }
 
 export function generateExpenseNumber(): string {
   const year = new Date().getFullYear();
   const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  const random = nanoid(6).toUpperCase();
+  const random = generateRandomId(6);
   return `EXP-${year}${month}-${random}`;
 }
 
 export function generateDeliveryNumber(): string {
   const year = new Date().getFullYear();
   const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  const random = nanoid(6).toUpperCase();
+  const random = generateRandomId(6);
   return `DEL-${year}${month}-${random}`;
 }
 
 export function generateSupplierCode(): string {
-  const random = nanoid(8).toUpperCase();
+  const random = generateRandomId(8);
   return `SUP-${random}`;
 }
 
 export function generateCustomerCode(): string {
-  const random = nanoid(8).toUpperCase();
+  const random = generateRandomId(8);
   return `CUS-${random}`;
 }
 
 export function generateProductSKU(): string {
-  const random = nanoid(10).toUpperCase();
+  const random = generateRandomId(10);
   return `SKU-${random}`;
 }
 
 export function generateDepartmentCode(name: string): string {
   const prefix = name.substring(0, 3).toUpperCase();
-  const random = nanoid(4).toUpperCase();
+  const random = generateRandomId(4);
   return `${prefix}-${random}`;
 }
 
 export function generateBudgetCategoryCode(name: string): string {
   const prefix = name.substring(0, 3).toUpperCase();
-  const random = nanoid(4).toUpperCase();
+  const random = generateRandomId(4);
   return `${prefix}-${random}`;
 }
 
