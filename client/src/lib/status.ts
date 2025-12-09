@@ -127,37 +127,45 @@ export const priorityConfig: Record<PriorityLevel, StatusConfig> = {
   },
 };
 
-// Stat card color configs
+// Stat card color configs - Corporate Navy + Sunset Orange Theme
 export const statCardColors = {
+  // Primary navy blue
+  navy: {
+    icon: "text-[#1e3a5f] dark:text-blue-300",
+    bg: "bg-[#1e3a5f]/10 dark:bg-[#1e3a5f]/30",
+    border: "border-[#1e3a5f]/20 dark:border-[#1e3a5f]",
+  },
+  // Standard blue (kept for compatibility)
   blue: {
-    icon: "text-blue-600 dark:text-blue-400",
-    bg: "bg-blue-100 dark:bg-blue-900/50",
-    border: "border-blue-200 dark:border-blue-800",
+    icon: "text-[#2d5a87] dark:text-blue-300",
+    bg: "bg-[#2d5a87]/10 dark:bg-[#2d5a87]/30",
+    border: "border-[#2d5a87]/20 dark:border-[#2d5a87]",
   },
   green: {
-    icon: "text-green-600 dark:text-green-400",
-    bg: "bg-green-100 dark:bg-green-900/50",
-    border: "border-green-200 dark:border-green-800",
+    icon: "text-emerald-600 dark:text-emerald-400",
+    bg: "bg-emerald-50 dark:bg-emerald-900/30",
+    border: "border-emerald-200 dark:border-emerald-800",
   },
   purple: {
-    icon: "text-purple-600 dark:text-purple-400",
-    bg: "bg-purple-100 dark:bg-purple-900/50",
-    border: "border-purple-200 dark:border-purple-800",
+    icon: "text-violet-600 dark:text-violet-400",
+    bg: "bg-violet-50 dark:bg-violet-900/30",
+    border: "border-violet-200 dark:border-violet-800",
   },
+  // Sunset orange - accent color
   orange: {
-    icon: "text-orange-600 dark:text-orange-400",
-    bg: "bg-orange-100 dark:bg-orange-900/50",
-    border: "border-orange-200 dark:border-orange-800",
+    icon: "text-orange-500 dark:text-orange-400",
+    bg: "bg-orange-50 dark:bg-orange-900/30",
+    border: "border-orange-200 dark:border-orange-700",
   },
   red: {
     icon: "text-red-600 dark:text-red-400",
-    bg: "bg-red-100 dark:bg-red-900/50",
+    bg: "bg-red-50 dark:bg-red-900/30",
     border: "border-red-200 dark:border-red-800",
   },
   yellow: {
-    icon: "text-yellow-600 dark:text-yellow-400",
-    bg: "bg-yellow-100 dark:bg-yellow-900/50",
-    border: "border-yellow-200 dark:border-yellow-800",
+    icon: "text-amber-600 dark:text-amber-400",
+    bg: "bg-amber-50 dark:bg-amber-900/30",
+    border: "border-amber-200 dark:border-amber-800",
   },
 };
 

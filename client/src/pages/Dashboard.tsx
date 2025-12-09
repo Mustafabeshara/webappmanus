@@ -186,14 +186,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Stats Grid */}
+      {/* Stats Grid - Corporate Navy + Sunset Orange Theme */}
       <StatCardGrid>
         <StatCard
           title="Active Tenders"
           value={analytics?.tenders.open || 0}
           subtitle={`of ${analytics?.tenders.total || 0} total`}
           icon={FileText}
-          color="blue"
+          color="navy"
           onClick={() => setLocation("/tenders")}
         />
         <StatCard
@@ -214,7 +214,7 @@ export default function Dashboard() {
           value={analytics?.invoices.unpaid || 0}
           subtitle={`of ${analytics?.invoices.total || 0} total`}
           icon={TrendingUp}
-          color="purple"
+          color="blue"
           onClick={() => setLocation("/invoices")}
         />
         <StatCard
@@ -241,26 +241,26 @@ export default function Dashboard() {
             <div className="space-y-1">
               <QuickStatRow
                 icon={CheckCircle}
-                iconColor="text-green-600 dark:text-green-400"
+                iconColor="text-emerald-600 dark:text-emerald-400"
                 label="Awarded Tenders"
                 value={analytics?.tenders.awarded || 0}
               />
               <QuickStatRow
                 icon={Clock}
-                iconColor="text-yellow-600 dark:text-yellow-400"
+                iconColor="text-amber-600 dark:text-amber-400"
                 label="Pending Expenses"
                 value={analytics?.expenses.pending || 0}
               />
               <QuickStatRow
                 icon={AlertTriangle}
-                iconColor="text-red-600 dark:text-red-400"
+                iconColor="text-red-500 dark:text-red-400"
                 label="Overdue Invoices"
                 value={analytics?.invoices.overdue || 0}
                 highlight={(analytics?.invoices.overdue || 0) > 0}
               />
               <QuickStatRow
                 icon={Package}
-                iconColor="text-orange-600 dark:text-orange-400"
+                iconColor="text-orange-500 dark:text-orange-400"
                 label="Low Stock Alerts"
                 value={lowStock?.length || 0}
                 highlight={(lowStock?.length || 0) > 0}
@@ -383,9 +383,9 @@ function QuickActionButton({
     <Link href={href}>
       <Button
         variant="outline"
-        className="w-full justify-start h-11 hover:bg-primary/5 hover:border-primary/20 transition-all"
+        className="w-full justify-start h-11 border-[#1e3a5f]/20 hover:bg-[#1e3a5f]/5 hover:border-[#1e3a5f]/40 hover:text-[#1e3a5f] dark:border-[#2d5a87]/30 dark:hover:bg-[#2d5a87]/10 dark:hover:border-[#2d5a87] dark:hover:text-blue-300 transition-all duration-200"
       >
-        <Icon className="h-4 w-4 mr-2.5 text-muted-foreground" />
+        <Icon className="h-4 w-4 mr-2.5 text-[#1e3a5f]/60 dark:text-blue-400/60 group-hover:text-[#1e3a5f] dark:group-hover:text-blue-300" />
         {label}
       </Button>
     </Link>
