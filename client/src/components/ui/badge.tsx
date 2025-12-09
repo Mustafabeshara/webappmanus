@@ -5,22 +5,22 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center justify-center rounded-md border px-2.5 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1.5 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-all duration-200 overflow-hidden",
+  "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-[11px] font-semibold tracking-wide w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:ring-[2px] focus-visible:ring-offset-1 transition-colors duration-150 overflow-hidden uppercase",
   {
     variants: {
       variant: {
         default:
-          "border-transparent bg-gradient-to-r from-[#1e3a5f] to-[#2d5a87] text-white shadow-sm [a&]:hover:shadow-md [a&]:hover:scale-105",
+          "border-transparent bg-[#1e3a5f] text-white",
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/80",
+          "border-border bg-muted text-foreground/80",
         destructive:
-          "border-transparent bg-gradient-to-r from-red-600 to-red-500 text-white shadow-sm [a&]:hover:shadow-md focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
+          "border-transparent bg-red-600 text-white",
         outline:
-          "border-[#1e3a5f]/20 text-[#1e3a5f] dark:border-[#2d5a87]/40 dark:text-blue-300 [a&]:hover:bg-[#1e3a5f]/5 [a&]:hover:border-[#1e3a5f]/40",
+          "border-border text-foreground/70 bg-transparent",
         success:
-          "border-transparent bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-sm",
+          "border-transparent bg-emerald-600 text-white",
         warning:
-          "border-transparent bg-gradient-to-r from-[#f97316] to-[#fb923c] text-white shadow-sm",
+          "border-transparent bg-[#f97316] text-white",
       },
     },
     defaultVariants: {
