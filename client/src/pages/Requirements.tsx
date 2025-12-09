@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { Link } from "wouter";
 
 type RequirementItemInput = {
   description: string;
@@ -343,6 +344,11 @@ export default function Requirements() {
                           <Button size="sm" variant="outline" onClick={() => submitStatus(req.id)}>
                             Update
                           </Button>
+                          <Link href={`/requirements/${req.id}`}>
+                            <Button size="sm" variant="ghost">
+                              Open
+                            </Button>
+                          </Link>
                         </div>
                       </TableCell>
                     </TableRow>

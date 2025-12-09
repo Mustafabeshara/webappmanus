@@ -47,6 +47,14 @@ function determineApprovalGate(totalValueCents: number) {
   return "committee";
 }
 
+async function requireRequirementsPermission(ctx: { user: { id: number; role: string } }, action: 'view' | 'create' | 'edit' | 'approve') {
+  if (ctx.user.role === 'admin') return;
+  const allowed = await checkPermission(ctx.user.id, 'requirements', action);
+  if (!allowed) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized for requirements module' });
+  }
+}
+
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== 'admin') {
@@ -337,13 +345,15 @@ export const appRouter = router({
   // REQUIREMENTS & CMS WORKFLOW
   // ============================================
   requirements: router({
-    list: protectedProcedure.query(async () => {
+    list: protectedProcedure.query(async ({ ctx }) => {
+      await requireRequirementsPermission(ctx, 'view');
       return await db.getAllRequirementRequests();
     }),
 
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        await requireRequirementsPermission(ctx, 'view');
         return await db.getRequirementRequestById(input.id);
       }),
 
@@ -363,6 +373,7 @@ export const appRouter = router({
         })).min(1),
       }))
       .mutation(async ({ input, ctx }) => {
+        await requireRequirementsPermission(ctx, 'create');
         const totalValue = input.items.reduce((sum, item) => sum + item.estimatedUnitPrice * item.quantity, 0);
         const gate = determineApprovalGate(totalValue);
 
@@ -377,6 +388,16 @@ export const appRouter = router({
           createdBy: ctx.user.id,
         } as any, input.items as any);
 
+        await db.createAuditLog({
+          userId: ctx.user.id,
+          action: 'create',
+          entityType: 'requirements_request',
+          entityId: requestId,
+          changes: JSON.stringify({ totalValue, approvalGate: gate }),
+          ipAddress: ctx.req.ip,
+          userAgent: ctx.req.headers['user-agent'],
+        } as any);
+
         return { requestId, totalValue, approvalGate: gate };
       }),
 
@@ -385,8 +406,18 @@ export const appRouter = router({
         id: z.number(),
         status: z.enum(REQUIREMENT_STATUSES),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        await requireRequirementsPermission(ctx, 'edit');
         await db.updateRequirementStatus(input.id, input.status as any);
+        await db.createAuditLog({
+          userId: ctx.user.id,
+          action: 'update',
+          entityType: 'requirements_request',
+          entityId: input.id,
+          changes: JSON.stringify({ status: input.status }),
+          ipAddress: ctx.req.ip,
+          userAgent: ctx.req.headers['user-agent'],
+        } as any);
         return { success: true };
       }),
 
@@ -398,6 +429,7 @@ export const appRouter = router({
         note: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        await requireRequirementsPermission(ctx, 'approve');
         await db.addCommitteeApproval({
           requestId: input.requestId,
           role: input.role,
@@ -406,6 +438,15 @@ export const appRouter = router({
           approverId: ctx.user.id,
           approverName: ctx.user.name,
           decidedAt: new Date(),
+        } as any);
+        await db.createAuditLog({
+          userId: ctx.user.id,
+          action: 'approve',
+          entityType: 'requirements_request',
+          entityId: input.requestId,
+          changes: JSON.stringify({ role: input.role, decision: input.decision }),
+          ipAddress: ctx.req.ip,
+          userAgent: ctx.req.headers['user-agent'],
         } as any);
         return { success: true };
       }),
@@ -419,13 +460,23 @@ export const appRouter = router({
         nextFollowupDate: z.string().optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        await requireRequirementsPermission(ctx, 'edit');
         const id = await db.upsertCmsCase(input.requestId, {
           caseNumber: input.caseNumber,
           status: input.status,
           cmsContact: input.cmsContact,
           nextFollowupDate: input.nextFollowupDate ? new Date(input.nextFollowupDate) : undefined,
           notes: input.notes,
+        } as any);
+        await db.createAuditLog({
+          userId: ctx.user.id,
+          action: 'update',
+          entityType: 'requirements_request',
+          entityId: input.requestId,
+          changes: JSON.stringify({ cmsCaseId: id, status: input.status, caseNumber: input.caseNumber }),
+          ipAddress: ctx.req.ip,
+          userAgent: ctx.req.headers['user-agent'],
         } as any);
         return { success: true, cmsCaseId: id };
       }),
@@ -438,6 +489,7 @@ export const appRouter = router({
         nextActionDate: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        await requireRequirementsPermission(ctx, 'edit');
         await db.addCmsFollowup({
           requestId: input.requestId,
           note: input.note,
@@ -445,6 +497,15 @@ export const appRouter = router({
           followupDate: new Date(),
           nextActionDate: input.nextActionDate ? new Date(input.nextActionDate) : undefined,
           createdBy: ctx.user.id,
+        } as any);
+        await db.createAuditLog({
+          userId: ctx.user.id,
+          action: 'update',
+          entityType: 'requirements_request',
+          entityId: input.requestId,
+          changes: JSON.stringify({ followup: input.note }),
+          ipAddress: ctx.req.ip,
+          userAgent: ctx.req.headers['user-agent'],
         } as any);
         return { success: true };
       }),
