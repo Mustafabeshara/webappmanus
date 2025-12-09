@@ -55,6 +55,21 @@ async function requireRequirementsPermission(ctx: { user: { id: number; role: st
   }
 }
 
+function requiredApprovalsForGate(gate: typeof APPROVAL_ROLES[number] | string) {
+  if (gate === "ctc_audit") {
+    return ["committee_head", "fatwa", "ctc", "audit"] as const;
+  }
+  if (gate === "fatwa") {
+    return ["committee_head", "fatwa"] as const;
+  }
+  return ["committee_head"] as const;
+}
+
+function hasRequiredApprovals(approvals: Array<{ role: string; decision: string }>, gate: string) {
+  const needed = requiredApprovalsForGate(gate);
+  return needed.every(role => approvals.some(a => a.role === role && a.decision === "approved"));
+}
+
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== 'admin') {
@@ -401,6 +416,31 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         await requireRequirementsPermission(ctx, 'edit');
+
+        const requirement = await db.getRequirementRequestById(input.id);
+        if (!requirement) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Requirement not found" });
+        }
+
+        const approvals = (requirement as any).approvals || [];
+        const needsApprovalForStatus = new Set([
+          "submitted_to_cms",
+          "budget_allocated",
+          "tender_posted",
+          "award_pending",
+          "award_approved",
+          "discount_requested",
+          "contract_issued",
+          "closed",
+        ]);
+
+        if (needsApprovalForStatus.has(input.status) && !hasRequiredApprovals(approvals, requirement.approvalGate)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Required approvals not completed for this threshold",
+          });
+        }
+
         await db.updateRequirementStatus(input.id, input.status as any);
         await db.createAuditLog({
           userId: ctx.user.id,
@@ -3193,9 +3233,32 @@ export const appRouter = router({
         category: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        // Basic safety checks
+        const allowedMimeTypes = [
+          "application/pdf",
+          "image/png",
+          "image/jpeg",
+          "image/jpg",
+          "text/plain",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "text/csv",
+        ];
+        const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB
+
+        if (!allowedMimeTypes.includes(input.mimeType)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Unsupported file type" });
+        }
+
         // Convert base64 to buffer
         const buffer = Buffer.from(input.fileData, 'base64');
         const fileSize = buffer.length;
+
+        if (fileSize > MAX_FILE_BYTES) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "File too large (max 25MB)" });
+        }
         
         // Generate unique file key
         const timestamp = Date.now();

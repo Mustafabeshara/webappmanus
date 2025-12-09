@@ -8,6 +8,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { getStorageDirectory } from "../storage";
+import { getDb } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -39,6 +40,17 @@ async function startServer() {
   const uploadsDir = getStorageDirectory();
   app.use('/uploads', express.static(uploadsDir));
   console.log(`Serving uploads from: ${uploadsDir}`);
+
+  // Health and readiness probes
+  app.get("/healthz", (_req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  app.get("/readyz", async (_req, res) => {
+    const db = await getDb();
+    const dbReady = !!db;
+    res.status(dbReady ? 200 : 503).json({ status: dbReady ? "ok" : "degraded", db: dbReady ? "connected" : "unavailable" });
+  });
 
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);

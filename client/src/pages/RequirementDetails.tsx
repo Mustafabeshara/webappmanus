@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,6 +52,8 @@ function formatKwd(amountCents?: number | null) {
 }
 
 export default function RequirementDetails() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const params = useParams();
   const [, setLocation] = useLocation();
   const id = useMemo(() => Number(params.id || 0), [params.id]);
@@ -79,6 +82,16 @@ export default function RequirementDetails() {
   const items = requirement?.items || [];
   const cmsCase = requirement?.cmsCase;
   const followups = requirement?.followups || [];
+
+  const requiredRoles = useMemo(() => {
+    if (requirement?.approvalGate === "ctc_audit") return ["committee_head", "fatwa", "ctc", "audit"];
+    if (requirement?.approvalGate === "fatwa") return ["committee_head", "fatwa"];
+    return ["committee_head"];
+  }, [requirement?.approvalGate]);
+
+  const missingApprovals = requiredRoles.filter(role => !approvals.some(a => a.role === role && a.decision === "approved"));
+  const nextFollowupDue = cmsCase?.nextFollowupDate ? new Date(cmsCase.nextFollowupDate) : null;
+  const followupOverdue = nextFollowupDue ? nextFollowupDue.getTime() < Date.now() : false;
 
   if (!id || Number.isNaN(id)) {
     return <div className="p-6">Invalid requirement ID.</div>;
@@ -202,6 +215,16 @@ export default function RequirementDetails() {
           <div className="text-xs text-muted-foreground">
             {isAbove100k ? "CTC + Audit required" : isAbove75k ? "فتوى والتشريع required" : "Committee approval required"}
           </div>
+          {missingApprovals.length > 0 && (
+            <div className="mt-2 text-xs text-red-600">
+              Pending: {missingApprovals.join(", ")}
+            </div>
+          )}
+          {followupOverdue && (
+            <div className="mt-1 text-xs text-red-600">
+              Follow-up overdue (next: {nextFollowupDue?.toLocaleDateString()})
+            </div>
+          )}
         </div>
       </div>
 
@@ -225,7 +248,7 @@ export default function RequirementDetails() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button onClick={handleStatusUpdate} disabled={updateStatus.isPending}>
+              <Button onClick={handleStatusUpdate} disabled={updateStatus.isPending || !isAdmin}>
                 {updateStatus.isPending ? "Updating..." : "Update"}
               </Button>
             </div>
@@ -301,7 +324,7 @@ export default function RequirementDetails() {
               </div>
             </div>
             <div className="mt-3">
-              <Button onClick={handleAddApproval} disabled={addApproval.isPending}>
+              <Button onClick={handleAddApproval} disabled={addApproval.isPending || !isAdmin}>
                 {addApproval.isPending ? "Saving..." : "Record Approval"}
               </Button>
             </div>
@@ -363,7 +386,7 @@ export default function RequirementDetails() {
                 rows={3}
               />
             </div>
-            <Button onClick={handleSaveCms} disabled={upsertCms.isPending}>
+            <Button onClick={handleSaveCms} disabled={upsertCms.isPending || !isAdmin}>
               {upsertCms.isPending ? "Saving..." : "Save CMS Info"}
             </Button>
           </CardContent>
@@ -430,7 +453,7 @@ export default function RequirementDetails() {
               <Label>Next Action Date</Label>
               <Input type="date" value={followupNextAction} onChange={(e) => setFollowupNextAction(e.target.value)} />
             </div>
-            <Button onClick={handleAddFollowup} disabled={addFollowup.isPending}>
+            <Button onClick={handleAddFollowup} disabled={addFollowup.isPending || !isAdmin}>
               {addFollowup.isPending ? "Logging..." : "Log"}
             </Button>
           </div>
