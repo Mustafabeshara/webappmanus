@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,6 +67,8 @@ function formatKwd(amountCents?: number) {
 }
 
 export default function Requirements() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [createOpen, setCreateOpen] = useState(false);
   const [hospital, setHospital] = useState("");
   const [specialty, setSpecialty] = useState("");
@@ -186,7 +189,7 @@ export default function Requirements() {
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button>New Requirement</Button>
+            <Button disabled={!isAdmin}>New Requirement</Button>
           </DialogTrigger>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
@@ -296,6 +299,7 @@ export default function Requirements() {
                   <TableHead>Fiscal Year</TableHead>
                   <TableHead>Approval Gate</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Next Follow-up</TableHead>
                   <TableHead>Total</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -323,6 +327,17 @@ export default function Requirements() {
                       <TableCell>
                         <Badge>{statusLabels[req.status] || req.status}</Badge>
                       </TableCell>
+                      <TableCell>
+                        {req.cmsCase?.nextFollowupDate ? (
+                          <Badge
+                            variant={new Date(req.cmsCase.nextFollowupDate).getTime() < Date.now() ? "destructive" : "secondary"}
+                          >
+                            {new Date(req.cmsCase.nextFollowupDate).toLocaleDateString()}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>{formatKwd(req.totalValue)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -341,7 +356,7 @@ export default function Requirements() {
                               ))}
                             </SelectContent>
                           </Select>
-                          <Button size="sm" variant="outline" onClick={() => submitStatus(req.id)}>
+                          <Button size="sm" variant="outline" onClick={() => submitStatus(req.id)} disabled={!isAdmin}>
                             Update
                           </Button>
                           <Link href={`/requirements/${req.id}`}>
