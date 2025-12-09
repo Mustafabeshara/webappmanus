@@ -15,7 +15,7 @@ import { trpc } from "@/lib/trpc";
 import {
   validateRequired,
   validateMinLength,
-  validateFutureDate,
+  validateDate,
 } from "@/lib/validation";
 import { Loader2, Plus, Trash2, AlertCircle, DollarSign, Upload, FileText, CheckCircle2 } from "lucide-react";
 import { useState, useCallback, useMemo, useRef } from "react";
@@ -181,20 +181,20 @@ export default function CreateTender() {
         }
         case "submissionDeadline": {
           if (!value) return undefined;
-          const futureDate = validateFutureDate(
+          const dateResult = validateDate(
             value as string,
             "Submission deadline"
           );
-          if (!futureDate.valid) return futureDate.error;
+          if (!dateResult.valid) return dateResult.error;
           return undefined;
         }
         case "evaluationDeadline": {
           if (!value) return undefined;
-          const futureDate = validateFutureDate(
+          const dateResult = validateDate(
             value as string,
             "Evaluation deadline"
           );
-          if (!futureDate.valid) return futureDate.error;
+          if (!dateResult.valid) return dateResult.error;
           // Must be after submission deadline
           if (formData.submissionDeadline && value) {
             const subDate = new Date(formData.submissionDeadline);

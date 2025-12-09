@@ -8,7 +8,54 @@
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs/promises";
-import pdfParse from "pdf-parse";
+import { createRequire } from "module";
+
+// Use createRequire to load CommonJS pdf-parse module at runtime
+// This avoids esbuild bundling issues with ESM/CJS interop
+const require = createRequire(import.meta.url);
+
+// Lazy-loaded pdf-parse PDFParse class
+let PDFParseClass: (new (options: { data: Uint8Array }) => {
+  getText(): Promise<{ pages: Array<{ text: string }>; text: string }>;
+  getInfo(): Promise<{ total: number; info: Record<string, unknown> }>;
+}) | null = null;
+
+async function getPdfParseClass() {
+  if (!PDFParseClass) {
+    try {
+      // Use require() to load CommonJS module - avoids esbuild static import issues
+      // pdf-parse v2 exports PDFParse as a class that needs to be instantiated with new
+      const pdfParseModule = require("pdf-parse");
+      PDFParseClass = pdfParseModule.PDFParse;
+      console.log("[OCR] pdf-parse PDFParse class loaded successfully");
+    } catch (error) {
+      console.error("[OCR] Failed to load pdf-parse:", error);
+      throw new Error("PDF parsing library not available");
+    }
+  }
+  return PDFParseClass;
+}
+
+// Helper function to extract text from PDF buffer
+async function extractTextFromPdf(dataBuffer: Buffer): Promise<{ text: string; numpages: number }> {
+  const PdfParseClass = await getPdfParseClass();
+  // pdf-parse v2 expects Uint8Array, convert Buffer if necessary
+  const dataArray = new Uint8Array(dataBuffer);
+  const parser = new PdfParseClass({ data: dataArray });
+
+  // getText() handles the document loading internally in v2
+  const textResult = await parser.getText();
+  const infoResult = await parser.getInfo();
+
+  // v2 returns text in both pages array and combined text property
+  const fullText = textResult.text || textResult.pages.map(page => page.text).join('\n\n');
+
+  // getInfo returns { total: number, info: {...} } - use 'total' for page count
+  return {
+    text: fullText,
+    numpages: infoResult.total || textResult.pages.length
+  };
+}
 
 // Types for OCR results
 export interface TenderItem {
@@ -25,6 +72,7 @@ export interface TenderOCRResult {
   reference_number: string;
   title: string;
   closing_date: string;
+  evaluation_date: string;
   posting_date: string;
   department: string;
   items: TenderItem[];
@@ -231,13 +279,20 @@ async function extractWithJavaScript(
   options: OCROptions = {}
 ): Promise<OCRResponse> {
   try {
+    console.log("[OCR JS] Starting JavaScript PDF extraction for:", pdfPath);
     const dataBuffer = await fs.readFile(pdfPath);
-    const pdfData = await pdfParse(dataBuffer);
+    console.log("[OCR JS] Read file, buffer size:", dataBuffer.length);
+
+    const pdfData = await extractTextFromPdf(dataBuffer);
+    console.log("[OCR JS] Extracted text length:", pdfData.text?.length || 0);
+    console.log("[OCR JS] Number of pages:", pdfData.numpages);
+
     const text = pdfData.text;
     const filename = path.basename(pdfPath);
 
     // Parse extracted text to find tender information
     const result = parseTenderText(text, filename, options.department);
+    console.log("[OCR JS] Parsed result - ref:", result.reference_number, "items:", result.items?.length);
 
     return {
       success: true,
@@ -249,6 +304,7 @@ async function extractWithJavaScript(
       },
     };
   } catch (e) {
+    console.error("[OCR JS] Extraction failed:", e);
     return {
       success: false,
       error: `PDF text extraction failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -257,6 +313,66 @@ async function extractWithJavaScript(
       }
     };
   }
+}
+
+/**
+ * Parse a date string (DD/MM/YYYY or similar) to a Date object
+ */
+function parseDateString(dateStr: string): Date | null {
+  if (!dateStr) return null;
+
+  // Normalize separators
+  const normalized = dateStr.replace(/[-./]/g, "/");
+  const parts = normalized.split("/");
+
+  if (parts.length !== 3) return null;
+
+  let day: number, month: number, year: number;
+
+  // Check if format is DD/MM/YYYY or YYYY/MM/DD
+  if (parts[0].length === 4) {
+    // YYYY/MM/DD format
+    year = parseInt(parts[0]);
+    month = parseInt(parts[1]) - 1;
+    day = parseInt(parts[2]);
+  } else {
+    // DD/MM/YYYY format (common in MOH tenders)
+    day = parseInt(parts[0]);
+    month = parseInt(parts[1]) - 1;
+    year = parseInt(parts[2]);
+    // Handle 2-digit year
+    if (year < 100) {
+      year += year < 50 ? 2000 : 1900;
+    }
+  }
+
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+
+  return new Date(year, month, day);
+}
+
+/**
+ * Format a Date object as YYYY-MM-DD (ISO format for form inputs)
+ */
+function formatDateISO(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Calculate evaluation date (2 weeks after closing date)
+ */
+function calculateEvaluationDate(closingDateStr: string): string {
+  const closingDate = parseDateString(closingDateStr);
+  if (!closingDate) return "";
+
+  // Add 14 days (2 weeks)
+  const evalDate = new Date(closingDate);
+  evalDate.setDate(evalDate.getDate() + 14);
+
+  return formatDateISO(evalDate);
 }
 
 /**
@@ -273,7 +389,7 @@ function parseTenderText(
   const refPatterns = [
     /(?:Tender\s*(?:No\.?|Number|Ref\.?)?[:\s]*)?([\d]{1,2}[A-Z]{2,3}[\d]{2,4})/i,
     /(?:Reference[:\s]*)?([\d]{1,2}[A-Z]{2,3}[\d]{2,4})/i,
-    /\b([\d]{1,2}(?:TN|LB|AL|EQ|LS|MA|PS|PT|TE|TS|IC|RC|BM)[\d]{2,4})\b/i,
+    /\b([\d]{1,2}(?:TN|LB|AL|EQ|LS|MA|PS|PT|TE|TS|IC|RC|BM|CDP|SSN)[\d]{2,4})\b/i,
   ];
 
   let referenceNumber = "";
@@ -291,10 +407,12 @@ function parseTenderText(
     }
   }
 
-  // Extract closing date
+  // Extract closing date - try multiple patterns
   const closingDatePatterns = [
+    /CLOSING\s*DATE\s*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
     /(?:Closing\s*Date|Close\s*Date|Last\s*Date|Deadline)[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
     /(?:close[sd]?\s*(?:on|by)?|deadline)[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    /ــــخ اﻹغـﻼق[:\s]*([\d]{4}[/\-.][\d]{1,2}[/\-.][\d]{1,2})/i, // Arabic closing date
   ];
 
   let closingDate = "";
@@ -306,9 +424,22 @@ function parseTenderText(
     }
   }
 
+  // Convert closing date to ISO format for form input
+  let closingDateISO = "";
+  if (closingDate) {
+    const parsed = parseDateString(closingDate);
+    if (parsed) {
+      closingDateISO = formatDateISO(parsed);
+    }
+  }
+
+  // Calculate evaluation date (2 weeks after closing)
+  const evaluationDate = closingDateISO ? calculateEvaluationDate(closingDate) : "";
+
   // Extract posting date
   const postingDatePatterns = [
     /(?:Posted|Published|Posted\s*Date|Publication\s*Date)[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    /Printed\s*On\s*:\s*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
   ];
 
   let postingDate = "";
@@ -320,12 +451,18 @@ function parseTenderText(
     }
   }
 
-  // If no posting date, try first date in document
-  if (!postingDate) {
-    const allDates = text.match(/([\d]{2}\/[\d]{2}\/[\d]{4})/g);
-    if (allDates && allDates.length > 0) {
-      postingDate = allDates[0];
+  // Convert posting date to ISO format
+  let postingDateISO = "";
+  if (postingDate) {
+    const parsed = parseDateString(postingDate);
+    if (parsed) {
+      postingDateISO = formatDateISO(parsed);
     }
+  }
+
+  // If no posting date, use today
+  if (!postingDateISO) {
+    postingDateISO = formatDateISO(new Date());
   }
 
   // Extract items
@@ -356,9 +493,10 @@ function parseTenderText(
 
   return {
     reference_number: referenceNumber,
-    title: "",
-    closing_date: closingDate,
-    posting_date: postingDate,
+    title: referenceNumber, // Use reference number as title
+    closing_date: closingDateISO,
+    evaluation_date: evaluationDate,
+    posting_date: postingDateISO,
     department: department || "Biomedical Engineering",
     items,
     specifications_text: specifications,
@@ -374,12 +512,20 @@ function parseTenderText(
 }
 
 /**
- * Extract items from tender text
+ * Extract items from tender text - handles MOH tabular format
  */
 function extractItemsFromText(text: string): TenderItem[] {
   const items: TenderItem[] = [];
-  const lines = text.split("\n");
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l);
 
+  // Try MOH tabular format first
+  // MOH format has sections: SL No, item descriptions, UNIT, QUANTITY
+  const mohItems = extractMOHTableItems(lines);
+  if (mohItems.length > 0) {
+    return mohItems;
+  }
+
+  // Fallback to line-by-line pattern matching
   const itemPatterns = [
     /^[\s]*([\d]+)[.)\-:\s]+([^0-9]+?)[\s]*[-–:][\s]*([\d]+(?:[.,][\d]+)?)\s*(pieces?|pcs?|units?|each|nos?|sets?|qty)?/i,
     /^[\s]*([\d]+)\s+([^\t]+?)\t+\s*([\d]+(?:[.,][\d]+)?)\s*(pieces?|pcs?|units?)?/i,
@@ -390,11 +536,10 @@ function extractItemsFromText(text: string): TenderItem[] {
   const seen = new Set<string>();
 
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.length < 5) continue;
+    if (line.length < 5) continue;
 
     for (const pattern of itemPatterns) {
-      const match = trimmed.match(pattern);
+      const match = line.match(pattern);
       if (match) {
         const [, num, desc, qty, unit] = match;
         let description = desc.trim().replace(/\s+/g, " ").replace(/^[\d\s\-\.]+/, "");
@@ -404,7 +549,6 @@ function extractItemsFromText(text: string): TenderItem[] {
           if (!seen.has(key)) {
             seen.add(key);
 
-            // Detect Arabic in description
             const arabicPattern = /[\u0600-\u06FF]/;
             const hasArabic = arabicPattern.test(description);
 
@@ -422,6 +566,150 @@ function extractItemsFromText(text: string): TenderItem[] {
         break;
       }
     }
+  }
+
+  return items;
+}
+
+/**
+ * Extract items from MOH tabular format
+ * MOH tenders have a specific layout with item numbers, descriptions, units, and quantities in separate sections
+ */
+function extractMOHTableItems(lines: string[]): TenderItem[] {
+  const items: TenderItem[] = [];
+
+  // Find key markers
+  let slNoIndex = -1;
+  let itemDescIndex = -1;
+  let unitIndex = -1;
+  let quantityIndex = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].toUpperCase();
+    if (line === "SL NO" || line === "SL. NO" || line === "SL.NO") slNoIndex = i;
+    if (line === "ITEM DESCRIPTION" || line.includes("DESCRIPTION")) itemDescIndex = i;
+    if (line === "UNIT") unitIndex = i;
+    if (line === "QUANTITY") quantityIndex = i;
+  }
+
+  // If we don't have the key markers, this isn't MOH format
+  if (slNoIndex === -1) return [];
+
+  const itemNumbers: string[] = [];
+  const descriptions: string[] = [];
+  const units: string[] = [];
+  const quantities: string[] = [];
+
+  // Look for consecutive item numbers before SL NO
+  for (let i = 0; i < slNoIndex; i++) {
+    if (/^[\d]+$/.test(lines[i]) && parseInt(lines[i]) <= 100) {
+      itemNumbers.push(lines[i]);
+    }
+  }
+
+  const expectedItemCount = itemNumbers.length;
+
+  // Extract descriptions between SL NO and UNIT (or ITEM DESCRIPTION and UNIT)
+  // These need to be joined if split across lines
+  const descEndIdx = unitIndex > -1 ? unitIndex : quantityIndex > -1 ? quantityIndex : lines.length;
+  const rawDescLines: string[] = [];
+
+  for (let i = slNoIndex + 1; i < descEndIdx; i++) {
+    const line = lines[i];
+    // Skip headers
+    if (line.toUpperCase() === "ITEM DESCRIPTION") continue;
+    // Skip if it's just numbers or too short
+    if (/^[\d]+$/.test(line) || line.length < 2) continue;
+    // Skip Arabic-only lines
+    if (/^[\u0600-\u06FF\s\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+$/.test(line)) continue;
+    // Skip unit keywords in description area
+    if (/^(PCS?|PIECES?|EACH|UNITS?|NOS?|SETS?)$/i.test(line)) continue;
+
+    rawDescLines.push(line);
+  }
+
+  // Merge description lines: if we have more raw lines than expected items,
+  // some descriptions are split across lines
+  if (rawDescLines.length > expectedItemCount && expectedItemCount > 0) {
+    let currentDesc = "";
+    for (const line of rawDescLines) {
+      // If line starts with uppercase letter and we have content, might be new item
+      if (currentDesc && /^[A-Z]/.test(line) && descriptions.length < expectedItemCount) {
+        // Check if this looks like a continuation (starts with common continuation words)
+        if (/^(SIZES?|AND|WITH|FOR|IN|TO|OR)\b/i.test(line)) {
+          currentDesc += " " + line;
+        } else {
+          descriptions.push(currentDesc.trim());
+          currentDesc = line;
+        }
+      } else {
+        currentDesc = currentDesc ? currentDesc + " " + line : line;
+      }
+    }
+    if (currentDesc) {
+      descriptions.push(currentDesc.trim());
+    }
+  } else {
+    // Use raw lines directly
+    for (const line of rawDescLines) {
+      descriptions.push(line);
+    }
+  }
+
+  // MOH format: units appear BEFORE the "UNIT" header, quantities BEFORE "QUANTITY" header
+  // Extract units: look for PCS/PIECES etc. BEFORE the UNIT marker
+  if (unitIndex > -1) {
+    // Look backwards from UNIT marker for unit values
+    for (let i = unitIndex - 1; i >= 0 && units.length < expectedItemCount; i--) {
+      const line = lines[i].toUpperCase();
+      if (/^(PCS?|PIECES?|EACH|UNITS?|NOS?|SETS?)$/i.test(line)) {
+        units.unshift(line.toLowerCase()); // Add to front since we're going backwards
+      } else if (/^[A-Z]/.test(line) && line.length > 5) {
+        // Hit description text, stop
+        break;
+      }
+    }
+  }
+
+  // Extract quantities: look for numbers BETWEEN UNIT and QUANTITY markers
+  if (unitIndex > -1 && quantityIndex > -1) {
+    for (let i = unitIndex + 1; i < quantityIndex; i++) {
+      const line = lines[i];
+      if (/^[\d]+$/.test(line)) {
+        quantities.push(line);
+      }
+    }
+  } else if (quantityIndex > -1) {
+    // If no UNIT marker, look for numbers before QUANTITY
+    for (let i = quantityIndex - 1; i >= 0 && quantities.length < expectedItemCount; i--) {
+      const line = lines[i];
+      if (/^[\d]+$/.test(line) && parseInt(line) <= 10000) {
+        quantities.unshift(line);
+      } else if (/^[A-Z]/.test(line) && line.length > 5) {
+        break;
+      }
+    }
+  }
+
+  // Build items - use the count of item numbers or descriptions
+  const itemCount = Math.max(expectedItemCount, descriptions.length);
+
+  for (let i = 0; i < itemCount; i++) {
+    const description = descriptions[i] || "";
+    if (!description || description.length < 3) continue;
+
+    const arabicPattern = /[\u0600-\u06FF]/;
+    const hasArabic = arabicPattern.test(description);
+
+    items.push({
+      item_number: itemNumbers[i] || String(i + 1),
+      description: description.substring(0, 500),
+      quantity: quantities[i] || "",
+      unit: units[i] || "pcs",
+      specifications: "",
+      language: hasArabic ? "arabic" : "english",
+      has_arabic: hasArabic,
+    });
   }
 
   return items;

@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: moh-tender-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: moh_tender_db
+      MYSQL_USER: moh_user
+      MYSQL_PASSWORD: moh_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Application (Development mode)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: moh-tender-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=mysql://moh_user:moh_password@mysql:3306/moh_tender_db
+      - JWT_SECRET=your-local-development-secret-key-min-32-chars
+      - VITE_APP_ID=local-dev
+      - OAUTH_SERVER_URL=https://oauth.manus.app
+      - OWNER_OPEN_ID=local-dev-owner
+      - STORAGE_DIR=/app/uploads
+    volumes:
+      - ./:/app
+      - /app/node_modules
+      - uploads_data:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: pnpm run dev
+
+  # phpMyAdmin (optional - for database management)
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: moh-tender-phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: moh_user
+      PMA_PASSWORD: moh_password
+    depends_on:
+      - mysql
+
+volumes:
+  mysql_data:
+  uploads_data:

@@ -151,6 +151,25 @@ export function validateFutureDate(
   return { valid: true };
 }
 
+// Date validation (just checks if valid date, no future/past restriction)
+// Use this for historical tender entry
+export function validateDate(
+  date: string | Date,
+  fieldName: string = "Date"
+): ValidationResult {
+  if (!date) {
+    return { valid: true };
+  }
+
+  const dateValue = typeof date === "string" ? new Date(date) : date;
+
+  if (isNaN(dateValue.getTime())) {
+    return { valid: false, error: `${fieldName} must be a valid date` };
+  }
+
+  return { valid: true };
+}
+
 // Date validation (must be in the past)
 export function validatePastDate(
   date: string | Date,

@@ -37,6 +37,7 @@ export function registerOAuthRoutes(app: Express) {
         name: "Admin",
         email: null,
         loginMethod: "password",
+        role: "admin", // Admin password login grants admin role
         lastSignedIn: new Date(),
       });
       console.log("[Auth] User upserted successfully");

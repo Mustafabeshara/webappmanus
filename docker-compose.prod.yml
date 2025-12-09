@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # Nginx Reverse Proxy with SSL
+  nginx:
+    image: nginx:alpine
+    container_name: moh-tender-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - uploads_data:/var/www/uploads:ro
+    depends_on:
+      - app
+    networks:
+      - moh-network
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: moh-tender-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-moh_tender_db}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - moh-network
+    # Don't expose port externally in production
+    # ports:
+    #   - "3306:3306"
+
+  # Application (Production)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: moh-tender-app
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-moh_tender_db}
+      - JWT_SECRET=${JWT_SECRET}
+      - VITE_APP_ID=${VITE_APP_ID:-moh-tender-prod}
+      - OAUTH_SERVER_URL=${OAUTH_SERVER_URL}
+      - OWNER_OPEN_ID=${OWNER_OPEN_ID}
+      - STORAGE_DIR=/app/uploads
+      - BASE_URL=${BASE_URL}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - moh-network
+    # Don't expose directly, use nginx
+    # ports:
+    #   - "3000:3000"
+
+  # Database backup service (runs daily)
+  backup:
+    image: mysql:8.0
+    container_name: moh-tender-backup
+    restart: "no"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-moh_tender_db}
+    volumes:
+      - ./backups:/backups
+    entrypoint: >
+      sh -c "mysqldump -h mysql -u ${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL_DATABASE:-moh_tender_db} > /backups/backup_$$(date +%Y%m%d_%H%M%S).sql"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - moh-network
+    profiles:
+      - backup
+
+volumes:
+  mysql_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+networks:
+  moh-network:
+    driver: bridge

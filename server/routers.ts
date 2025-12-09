@@ -58,6 +58,13 @@ export const appRouter = router({
     list: adminProcedure.query(async () => {
       return await db.getAllUsers();
     }),
+
+    // Basic user list for non-admin users (e.g., for task assignment)
+    listBasic: protectedProcedure.query(async () => {
+      const users = await db.getAllUsers();
+      // Return only id and name for non-admin use cases
+      return users.map(u => ({ id: u.id, name: u.name }));
+    }),
     
     updateRole: adminProcedure
       .input(z.object({
@@ -877,7 +884,78 @@ export const appRouter = router({
         
         return { success: true, tenderId, referenceNumber };
       }),
-    
+
+    // Bulk import up to 10 tenders at once (for historical data)
+    bulkImport: protectedProcedure
+      .input(z.object({
+        tenders: z.array(z.object({
+          title: z.string(),
+          description: z.string().optional(),
+          submissionDeadline: z.date().optional(),
+          evaluationDeadline: z.date().optional(),
+          requirements: z.string().optional(),
+          terms: z.string().optional(),
+          estimatedValue: z.number().optional(),
+          status: z.enum(["draft", "open", "awarded", "closed", "archived"]).optional(),
+          items: z.array(z.object({
+            description: z.string(),
+            quantity: z.number(),
+            unit: z.string().optional(),
+            estimatedPrice: z.number().optional(),
+          })).optional(),
+        })).min(1).max(10),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const results: Array<{ success: boolean; tenderId?: number; referenceNumber?: string; title: string; error?: string }> = [];
+
+        for (const tenderData of input.tenders) {
+          try {
+            const { items, ...tender } = tenderData;
+            const referenceNumber = utils.generateTenderReference();
+
+            const result = await db.createTender({
+              ...tender,
+              referenceNumber,
+              createdBy: ctx.user.id,
+            } as any);
+
+            const tenderId = Number(result.insertId);
+
+            if (items && items.length > 0) {
+              for (const item of items) {
+                await db.createTenderItem({
+                  tenderId,
+                  ...item,
+                } as any);
+              }
+            }
+
+            results.push({
+              success: true,
+              tenderId,
+              referenceNumber,
+              title: tender.title
+            });
+          } catch (error) {
+            results.push({
+              success: false,
+              title: tenderData.title,
+              error: error instanceof Error ? error.message : "Unknown error"
+            });
+          }
+        }
+
+        const successCount = results.filter(r => r.success).length;
+        const failureCount = results.filter(r => !r.success).length;
+
+        return {
+          success: failureCount === 0,
+          totalImported: successCount,
+          totalFailed: failureCount,
+          results
+        };
+      }),
+
     createFromTemplate: protectedProcedure
       .input(z.object({
         templateId: z.number(),

@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Tenders from "./pages/Tenders";
 import CreateTender from "./pages/CreateTender";
+import BulkImportTenders from "./pages/BulkImportTenders";
 import TenderDetails from "./pages/TenderDetails";
 import TenderTemplates from "./pages/TenderTemplates";
 import CreateTemplate from "./pages/CreateTemplate";
@@ -31,6 +32,10 @@ import AuditLogs from "./pages/AuditLogs";
 import FileManager from "./pages/FileManager";
 import Login from "./pages/Login";
 import Notifications from "./pages/Notifications";
+import Customers from "./pages/Customers";
+import CreateCustomer from "./pages/CreateCustomer";
+import CustomerDetails from "./pages/CustomerDetails";
+import Settings from "./pages/Settings";
 
 function Router() {
   return (
@@ -72,7 +77,15 @@ function Router() {
           </DashboardLayout>
         )}
       </Route>
-      
+
+      <Route path={"/tenders/bulk-import"}>
+        {() => (
+          <DashboardLayout>
+            <BulkImportTenders />
+          </DashboardLayout>
+        )}
+      </Route>
+
       <Route path={"/tenders/:id"}>
         {() => (
           <DashboardLayout>
@@ -241,6 +254,40 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Notifications />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      {/* Customers - specific routes BEFORE dynamic routes */}
+      <Route path={"/customers/create"}>
+        {() => (
+          <DashboardLayout>
+            <CreateCustomer />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      <Route path={"/customers/:id"}>
+        {() => (
+          <DashboardLayout>
+            <CustomerDetails />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      <Route path={"/customers"}>
+        {() => (
+          <DashboardLayout>
+            <Customers />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      {/* Settings */}
+      <Route path={"/settings"}>
+        {() => (
+          <DashboardLayout>
+            <Settings />
           </DashboardLayout>
         )}
       </Route>

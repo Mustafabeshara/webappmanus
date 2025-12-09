@@ -21,7 +21,7 @@ export default function Tasks() {
   
   const { data: allTasks = [], refetch } = trpc.tasks.getAll.useQuery();
   const { data: myTasks = [], refetch: refetchMy } = trpc.tasks.getMyTasks.useQuery();
-  const { data: users = [] } = trpc.users.list.useQuery();
+  const { data: users = [] } = trpc.users.listBasic.useQuery();
   
   const tasks = view === "all" ? allTasks : myTasks;
   
