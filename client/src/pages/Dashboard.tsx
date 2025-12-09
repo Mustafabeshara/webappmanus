@@ -381,11 +381,8 @@ function QuickActionButton({
 }) {
   return (
     <Link href={href}>
-      <Button
-        variant="outline"
-        className="w-full justify-start h-11 border-[#1e3a5f]/20 hover:bg-[#1e3a5f]/5 hover:border-[#1e3a5f]/40 hover:text-[#1e3a5f] dark:border-[#2d5a87]/30 dark:hover:bg-[#2d5a87]/10 dark:hover:border-[#2d5a87] dark:hover:text-blue-300 transition-all duration-200"
-      >
-        <Icon className="h-4 w-4 mr-2.5 text-[#1e3a5f]/60 dark:text-blue-400/60 group-hover:text-[#1e3a5f] dark:group-hover:text-blue-300" />
+      <Button variant="outline" className="w-full justify-start h-11">
+        <Icon className="h-4 w-4 mr-2.5" />
         {label}
       </Button>
     </Link>

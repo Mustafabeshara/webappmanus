@@ -54,10 +54,13 @@ function Input({
       type={type}
       data-slot="input"
       className={cn(
-        "file:text-foreground placeholder:text-muted-foreground/60 selection:bg-primary selection:text-primary-foreground dark:bg-input/20 border-border h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-all duration-150 outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
-        "hover:border-[#1e3a5f]/40 dark:hover:border-[#2d5a87]/60",
-        "focus-visible:border-[#1e3a5f] focus-visible:ring-[#1e3a5f]/20 focus-visible:ring-[3px] dark:focus-visible:border-[#2d5a87] dark:focus-visible:ring-[#2d5a87]/30",
-        "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+        "flex h-9 w-full min-w-0 rounded-lg border border-border bg-transparent px-3 py-2 text-sm transition-colors",
+        "placeholder:text-muted-foreground/60",
+        "hover:border-border/80",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
+        "file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground",
+        "aria-invalid:border-destructive aria-invalid:ring-destructive/20",
         className
       )}
       onCompositionStart={handleCompositionStart}

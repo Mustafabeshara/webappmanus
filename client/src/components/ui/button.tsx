@@ -5,21 +5,21 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-[13px] font-semibold tracking-tight transition-all duration-150 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-[2px] focus-visible:ring-offset-1 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors duration-200 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
   {
     variants: {
       variant: {
-        default: "bg-[#1e3a5f] text-white shadow-sm hover:bg-[#2d5a87] hover:shadow-md active:bg-[#1e3a5f] focus-visible:ring-[#1e3a5f]/50",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
         destructive:
-          "bg-red-600 text-white shadow-sm hover:bg-red-700 hover:shadow-md active:bg-red-600 focus-visible:ring-red-500/50",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
-          "border border-border bg-transparent shadow-sm hover:bg-muted/50 hover:border-[#1e3a5f]/40 dark:border-border dark:hover:bg-muted/30 dark:hover:border-[#2d5a87]",
+          "border border-border bg-background hover:bg-muted hover:text-foreground",
         secondary:
-          "bg-muted text-foreground shadow-sm hover:bg-muted/70",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost:
-          "hover:bg-muted/50 dark:hover:bg-muted/30",
-        link: "text-[#1e3a5f] dark:text-blue-300 underline-offset-4 hover:underline p-0 h-auto",
-        accent: "bg-[#f97316] text-white shadow-sm hover:bg-[#ea580c] hover:shadow-md active:bg-[#f97316] focus-visible:ring-[#f97316]/50",
+          "hover:bg-muted hover:text-foreground",
+        link: "text-primary underline-offset-4 hover:underline p-0 h-auto",
+        accent: "bg-[#f97316] text-white hover:bg-[#ea580c]",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

@@ -28,7 +28,7 @@ export function PageHeader({
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Link href="/dashboard">
-            <span className="flex items-center gap-1 hover:text-[#f97316] transition-colors cursor-pointer">
+            <span className="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer">
               <Home className="h-3.5 w-3.5" />
             </span>
           </Link>
@@ -37,7 +37,7 @@ export function PageHeader({
               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
               {item.href ? (
                 <Link href={item.href}>
-                  <span className="hover:text-[#f97316] transition-colors cursor-pointer">
+                  <span className="hover:text-primary transition-colors cursor-pointer">
                     {item.label}
                   </span>
                 </Link>
@@ -50,7 +50,7 @@ export function PageHeader({
       )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl bg-gradient-to-r from-[#1e3a5f] to-[#2d5a87] dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             {title}
           </h1>
           {description && (
