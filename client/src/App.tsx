@@ -32,6 +32,7 @@ import FileManager from "./pages/FileManager";
 import Login from "./pages/Login";
 import Notifications from "./pages/Notifications";
 import Requirements from "./pages/Requirements";
+import RequirementDetails from "./pages/RequirementDetails";
 
 function Router() {
   return (
@@ -125,6 +126,14 @@ function Router() {
       </Route>
 
       {/* Requirements (annual requests -> CMS) */}
+      <Route path={"/requirements/:id"}>
+        {() => (
+          <DashboardLayout>
+            <RequirementDetails />
+          </DashboardLayout>
+        )}
+      </Route>
+
       <Route path={"/requirements"}>
         {() => (
           <DashboardLayout>
