@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,15 @@ import { toast } from "sonner";
 
 export default function CreateProduct() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const queryParams = useMemo(() => {
+    try {
+      const [, query] = location.split("?");
+      return new URLSearchParams(query);
+    } catch {
+      return new URLSearchParams();
+    }
+  }, [location]);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -35,6 +43,8 @@ export default function CreateProduct() {
     location: "",
   });
 
+  const { data: suppliers = [] } = trpc.suppliers.list.useQuery();
+
   const createProduct = trpc.products.create.useMutation({
     onSuccess: () => {
       toast.success("Product created successfully");
@@ -49,13 +59,18 @@ export default function CreateProduct() {
     e.preventDefault();
     
     if (!user) return;
-    
+    const price = parseFloat(formData.unitPrice);
+    if (Number.isNaN(price)) {
+      toast.error("Unit price is required");
+      return;
+    }
+
     createProduct.mutate({
       name: formData.name,
       description: formData.description || undefined,
       category: formData.category || undefined,
       manufacturerId: formData.manufacturerId ? parseInt(formData.manufacturerId) : undefined,
-      unitPrice: Math.round(parseFloat(formData.unitPrice) * 100),
+      unitPrice: Math.round(price * 100),
       unit: formData.unit,
       specifications: formData.specifications || undefined,
       minStockLevel: parseInt(formData.minStockLevel),
@@ -64,6 +79,13 @@ export default function CreateProduct() {
       location: formData.location || undefined,
     });
   };
+
+  useEffect(() => {
+    const supplierId = queryParams.get("supplierId");
+    if (supplierId) {
+      setFormData(prev => ({ ...prev, manufacturerId: supplierId }));
+    }
+  }, [queryParams]);
 
   if (!user) {
     return null;
@@ -129,14 +151,23 @@ export default function CreateProduct() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="manufacturerId">Manufacturer ID</Label>
-                <Input
-                  id="manufacturerId"
-                  type="number"
+                <Label htmlFor="manufacturerId">Supplier</Label>
+                <Select
                   value={formData.manufacturerId}
-                  onChange={(e) => setFormData({ ...formData, manufacturerId: e.target.value })}
-                  placeholder="Optional"
-                />
+                  onValueChange={(value) => setFormData({ ...formData, manufacturerId: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Optional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Unspecified</SelectItem>
+                    {suppliers.map((supplier: any) => (
+                      <SelectItem key={supplier.id} value={supplier.id.toString()}>
+                        {supplier.name} (#{supplier.id})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
