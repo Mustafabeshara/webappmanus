@@ -1,10 +1,17 @@
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { COOKIE_NAME } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 import { expressRateLimit, RATE_LIMITS } from "./rateLimit";
 import crypto from "crypto";
+
+type LoginAttempt = { count: number; firstFailure: number; lockedUntil?: number };
+const failedLoginAttempts = new Map<string, LoginAttempt>();
+const MAX_FAILURES = 5;
+const FAILURE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const LOCKOUT_MS = 10 * 60 * 1000; // 10 minutes
+const SESSION_COOKIE_MAX_AGE = 1000 * 60 * 60 * 24 * 7; // 7 days
 
 // Generate a random ID (replacement for nanoid to avoid crypto global issues)
 function generateId(length = 10): string {
@@ -15,6 +22,18 @@ export function registerOAuthRoutes(app: Express) {
   // Simple password login endpoint (replaces Manus OAuth)
   app.post("/api/auth/login", expressRateLimit(RATE_LIMITS.auth), async (req: Request, res: Response) => {
     const { password } = req.body;
+    const clientId = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+    const attempt = failedLoginAttempts.get(clientId);
+    const now = Date.now();
+
+    if (attempt?.lockedUntil && attempt.lockedUntil > now) {
+      res.status(429).json({
+        error: "LOCKED",
+        message: "Too many failed attempts. Try again later.",
+        retryAfterMs: attempt.lockedUntil - now,
+      });
+      return;
+    }
 
     if (!password) {
       res.status(400).json({ error: "Password is required" });
@@ -22,9 +41,20 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     if (!sdk.verifyPassword(password)) {
+      const nextAttempt: LoginAttempt = attempt && (now - attempt.firstFailure) < FAILURE_WINDOW_MS
+        ? { count: attempt.count + 1, firstFailure: attempt.firstFailure }
+        : { count: 1, firstFailure: now };
+
+      if (nextAttempt.count >= MAX_FAILURES) {
+        nextAttempt.lockedUntil = now + LOCKOUT_MS;
+      }
+      failedLoginAttempts.set(clientId, nextAttempt);
+
       res.status(401).json({ error: "Invalid password" });
       return;
     }
+
+    failedLoginAttempts.delete(clientId);
 
     try {
       // Generate a unique user ID for this admin session
@@ -43,12 +73,11 @@ export function registerOAuthRoutes(app: Express) {
 
       const sessionToken = await sdk.createSessionToken(openId, {
         name: "Admin",
-        expiresInMs: ONE_YEAR_MS,
       });
       console.log("[Auth] Session token created");
 
       const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_COOKIE_MAX_AGE });
 
       res.json({ success: true });
     } catch (error: unknown) {

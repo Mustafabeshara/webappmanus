@@ -82,6 +82,113 @@ export const budgets = mysqlTable("budgets", {
 });
 
 /**
+ * Annual requirements requests (hospital/department) feeding the tender process
+ */
+export const requirementsRequests = mysqlTable("requirements_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 64 }),
+  hospital: varchar("hospital", { length: 255 }).notNull(),
+  specialty: varchar("specialty", { length: 255 }).notNull(),
+  departmentId: int("departmentId"),
+  fiscalYear: int("fiscalYear").notNull(), // April-March fiscal year start
+  totalValue: int("totalValue").default(0).notNull(), // cents
+  approvalGate: mysqlEnum("approvalGate", ["committee", "fatwa", "ctc_audit"]).default("committee").notNull(),
+  status: mysqlEnum("status", [
+    "draft",
+    "department_review",
+    "committee_pending",
+    "committee_approved",
+    "submitted_to_cms",
+    "budget_allocated",
+    "tender_posted",
+    "award_pending",
+    "award_approved",
+    "discount_requested",
+    "contract_issued",
+    "closed",
+    "rejected",
+  ]).default("draft").notNull(),
+  notes: text("notes"),
+  submittedAt: timestamp("submittedAt"),
+  cmsCaseId: int("cmsCaseId"),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Line items inside a requirements request
+ */
+export const requirementItems = mysqlTable("requirement_items", {
+  id: int("id").autoincrement().primaryKey(),
+  requestId: int("requestId").notNull(),
+  description: text("description").notNull(),
+  quantity: int("quantity").default(1).notNull(),
+  unit: varchar("unit", { length: 50 }).default("unit").notNull(),
+  estimatedUnitPrice: int("estimatedUnitPrice").default(0).notNull(), // cents
+  category: varchar("category", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/**
+ * Committee and higher-level approvals tied to a requirements request
+ */
+export const committeeApprovals = mysqlTable("committee_approvals", {
+  id: int("id").autoincrement().primaryKey(),
+  requestId: int("requestId").notNull(),
+  role: mysqlEnum("role", [
+    "head_of_department",
+    "committee_head",
+    "specialty_head",
+    "fatwa",
+    "ctc",
+    "audit",
+  ]).notNull(),
+  decision: mysqlEnum("decision", ["pending", "approved", "rejected"]).default("pending").notNull(),
+  note: text("note"),
+  approverId: int("approverId"),
+  approverName: varchar("approverName", { length: 255 }),
+  decidedAt: timestamp("decidedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/**
+ * CMS case tracking for submitted requests
+ */
+export const cmsCases = mysqlTable("cms_cases", {
+  id: int("id").autoincrement().primaryKey(),
+  requestId: int("requestId").notNull(),
+  caseNumber: varchar("caseNumber", { length: 100 }),
+  status: mysqlEnum("status", [
+    "with_cms",
+    "discount_requested",
+    "awaiting_ctc",
+    "awaiting_fatwa",
+    "awaiting_audit",
+    "contract_issued",
+    "closed",
+  ]).default("with_cms").notNull(),
+  cmsContact: varchar("cmsContact", { length: 255 }),
+  nextFollowupDate: timestamp("nextFollowupDate"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Follow-up log entries while the case is with CMS
+ */
+export const cmsFollowups = mysqlTable("cms_followups", {
+  id: int("id").autoincrement().primaryKey(),
+  requestId: int("requestId").notNull(),
+  note: text("note"),
+  contact: varchar("contact", { length: 255 }),
+  followupDate: timestamp("followupDate").defaultNow().notNull(),
+  nextActionDate: timestamp("nextActionDate"),
+  createdBy: int("createdBy"),
+});
+
+/**
  * Suppliers and manufacturers
  */
 export const suppliers = mysqlTable("suppliers", {

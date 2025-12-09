@@ -13,6 +13,40 @@ import { notifyOwner } from "./_core/notification";
 import * as ocrService from "./ocr";
 import { generateExport, EXPORT_CONFIGS } from "./export";
 
+const REQUIREMENT_STATUSES = [
+  "draft",
+  "department_review",
+  "committee_pending",
+  "committee_approved",
+  "submitted_to_cms",
+  "budget_allocated",
+  "tender_posted",
+  "award_pending",
+  "award_approved",
+  "discount_requested",
+  "contract_issued",
+  "closed",
+  "rejected",
+] as const;
+
+const APPROVAL_ROLES = [
+  "head_of_department",
+  "committee_head",
+  "specialty_head",
+  "fatwa",
+  "ctc",
+  "audit",
+] as const;
+
+const THRESHOLD_FATWA = 75_000 * 100; // cents
+const THRESHOLD_CTC_AUDIT = 100_000 * 100; // cents
+
+function determineApprovalGate(totalValueCents: number) {
+  if (totalValueCents > THRESHOLD_CTC_AUDIT) return "ctc_audit";
+  if (totalValueCents >= THRESHOLD_FATWA) return "fatwa";
+  return "committee";
+}
+
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== 'admin') {
@@ -293,6 +327,123 @@ export const appRouter = router({
   }),
 
   // ============================================
+  // REQUIREMENTS & CMS WORKFLOW
+  // ============================================
+  requirements: router({
+    list: protectedProcedure.query(async () => {
+      return await db.getAllRequirementRequests();
+    }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getRequirementRequestById(input.id);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        hospital: z.string(),
+        specialty: z.string(),
+        departmentId: z.number().optional(),
+        fiscalYear: z.number(),
+        notes: z.string().optional(),
+        items: z.array(z.object({
+          description: z.string(),
+          quantity: z.number().min(1),
+          unit: z.string().default("unit"),
+          estimatedUnitPrice: z.number().min(0),
+          category: z.string().optional(),
+        })).min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const totalValue = input.items.reduce((sum, item) => sum + item.estimatedUnitPrice * item.quantity, 0);
+        const gate = determineApprovalGate(totalValue);
+
+        const { requestId } = await db.createRequirementRequest({
+          hospital: input.hospital,
+          specialty: input.specialty,
+          departmentId: input.departmentId,
+          fiscalYear: input.fiscalYear,
+          notes: input.notes,
+          approvalGate: gate,
+          status: "draft",
+          createdBy: ctx.user.id,
+        } as any, input.items as any);
+
+        return { requestId, totalValue, approvalGate: gate };
+      }),
+
+    updateStatus: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(REQUIREMENT_STATUSES),
+      }))
+      .mutation(async ({ input }) => {
+        await db.updateRequirementStatus(input.id, input.status as any);
+        return { success: true };
+      }),
+
+    addApproval: protectedProcedure
+      .input(z.object({
+        requestId: z.number(),
+        role: z.enum(APPROVAL_ROLES),
+        decision: z.enum(["approved", "rejected"]),
+        note: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await db.addCommitteeApproval({
+          requestId: input.requestId,
+          role: input.role,
+          decision: input.decision,
+          note: input.note,
+          approverId: ctx.user.id,
+          approverName: ctx.user.name,
+          decidedAt: new Date(),
+        } as any);
+        return { success: true };
+      }),
+
+    upsertCmsCase: protectedProcedure
+      .input(z.object({
+        requestId: z.number(),
+        caseNumber: z.string().optional(),
+        status: z.enum(["with_cms", "discount_requested", "awaiting_ctc", "awaiting_fatwa", "awaiting_audit", "contract_issued", "closed"]).optional(),
+        cmsContact: z.string().optional(),
+        nextFollowupDate: z.string().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const id = await db.upsertCmsCase(input.requestId, {
+          caseNumber: input.caseNumber,
+          status: input.status,
+          cmsContact: input.cmsContact,
+          nextFollowupDate: input.nextFollowupDate ? new Date(input.nextFollowupDate) : undefined,
+          notes: input.notes,
+        } as any);
+        return { success: true, cmsCaseId: id };
+      }),
+
+    addFollowup: protectedProcedure
+      .input(z.object({
+        requestId: z.number(),
+        note: z.string(),
+        contact: z.string().optional(),
+        nextActionDate: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        await db.addCmsFollowup({
+          requestId: input.requestId,
+          note: input.note,
+          contact: input.contact,
+          followupDate: new Date(),
+          nextActionDate: input.nextActionDate ? new Date(input.nextActionDate) : undefined,
+          createdBy: ctx.user.id,
+        } as any);
+        return { success: true };
+      }),
+  }),
+
+  // ============================================
   // SUPPLIERS
   // ============================================
   suppliers: router({
@@ -304,6 +455,12 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return await db.getSupplierById(input.id);
+      }),
+
+    products: protectedProcedure
+      .input(z.object({ supplierId: z.number() }))
+      .query(async ({ input }) => {
+        return await db.getProductsBySupplierId(input.supplierId);
       }),
     
     create: protectedProcedure
@@ -1782,10 +1939,9 @@ export const appRouter = router({
         extractionType: z.enum(["tender", "invoice", "expense"]),
       }))
       .mutation(async ({ input }) => {
-        const documents = await db.getDocumentsByEntity('', 0);
-        const document = documents.find(d => d.id === input.documentId);
+        const document = await db.getDocumentById(input.documentId);
         
-        if (!document) throw new TRPCError({ code: 'NOT_FOUND' });
+        if (!document) throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found' });
         
         // Update document status
         await db.updateDocument(input.documentId, {

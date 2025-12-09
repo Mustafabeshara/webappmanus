@@ -8,6 +8,7 @@ import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
+import { ONE_YEAR_MS } from "@shared/const";
 
 // Utility function
 const isNonEmptyString = (value: unknown): value is string =>
@@ -20,6 +21,8 @@ export type SessionPayload = {
 };
 
 class SDKServer {
+  private readonly defaultSessionTtlMs = ENV.isProduction ? 1000 * 60 * 60 * 24 * 7 : ONE_YEAR_MS;
+
   private parseCookies(cookieHeader: string | undefined) {
     if (!cookieHeader) {
       return new Map<string, string>();
@@ -62,7 +65,7 @@ class SDKServer {
     options: { expiresInMs?: number } = {}
   ): Promise<string> {
     const issuedAt = Date.now();
-    const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
+    const expiresInMs = options.expiresInMs ?? this.defaultSessionTtlMs;
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
     const secretKey = this.getSessionSecret();
 

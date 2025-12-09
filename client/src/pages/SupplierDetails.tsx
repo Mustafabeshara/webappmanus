@@ -2,6 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Building2, Mail, Phone, MapPin, FileText, Star, Pencil } from "lucide-react";
 import { useLocation, useParams } from "wouter";
@@ -13,6 +14,9 @@ export default function SupplierDetails() {
   const supplierId = parseInt(params.id || "0");
 
   const { data: supplier, isLoading } = trpc.suppliers.get.useQuery({ id: supplierId });
+  const { data: supplierProducts = [], isLoading: productsLoading } = trpc.suppliers.products.useQuery({ supplierId }, {
+    enabled: supplierId > 0,
+  });
 
   if (!user) return null;
 
@@ -210,6 +214,54 @@ export default function SupplierDetails() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <CardTitle>Products from this Supplier</CardTitle>
+            <CardDescription>Inventory items linked via manufacturer ID</CardDescription>
+          </div>
+          <Button variant="outline" onClick={() => setLocation(`/inventory/create?supplierId=${supplierId}`)}>
+            Add product for {supplier.name}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {productsLoading ? (
+            <div className="text-sm text-muted-foreground">Loading products…</div>
+          ) : supplierProducts.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No products are linked to this supplier yet.</div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Unit Price</TableHead>
+                    <TableHead>Unit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {supplierProducts.map((product: any) => (
+                    <TableRow key={product.id}>
+                      <TableCell className="font-medium">{product.name}</TableCell>
+                      <TableCell>{product.sku}</TableCell>
+                      <TableCell>{product.category || "-"}</TableCell>
+                      <TableCell>
+                        {typeof product.unitPrice === "number"
+                          ? `${(product.unitPrice / 100).toFixed(2)}`
+                          : "-"}
+                      </TableCell>
+                      <TableCell>{product.unit || "-"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {supplier.notes && (
         <Card>

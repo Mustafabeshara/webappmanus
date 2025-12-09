@@ -41,6 +41,7 @@ const menuGroups = [
       { icon: FileText, label: "Tenders", path: "/tenders" },
       { icon: FileText, label: "Templates", path: "/templates" },
       { icon: DollarSign, label: "Budgets", path: "/budgets" },
+      { icon: ClipboardList, label: "Requirements", path: "/requirements" },
     ],
   },
   {

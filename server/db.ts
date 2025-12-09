@@ -23,6 +23,11 @@ import {
   expenses,
   deliveries,
   deliveryItems,
+  requirementsRequests,
+  requirementItems,
+  committeeApprovals,
+  cmsCases,
+  cmsFollowups,
   documentFolders,
   documents,
   extractionResults,
@@ -255,6 +260,128 @@ export async function updateBudgetSpent(budgetId: number, amount: number) {
 }
 
 // ============================================
+// REQUIREMENTS & COMMITTEE APPROVALS
+// ============================================
+
+function calculateRequirementTotal(items: Array<{ estimatedUnitPrice?: number; quantity?: number }>): number {
+  return items.reduce((sum, item) => {
+    const price = item.estimatedUnitPrice ?? 0;
+    const qty = item.quantity ?? 1;
+    return sum + price * qty;
+  }, 0);
+}
+
+export async function createRequirementRequest(
+  request: typeof requirementsRequests.$inferInsert,
+  items: Array<typeof requirementItems.$inferInsert>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const totalValue = calculateRequirementTotal(items);
+  const [result] = await db.insert(requirementsRequests).values({
+    ...request,
+    totalValue,
+  });
+  const requestId = Number((result as any).insertId);
+
+  if (items.length > 0 && requestId) {
+    for (const item of items) {
+      await db.insert(requirementItems).values({
+        ...item,
+        requestId,
+      });
+    }
+  }
+
+  return { requestId, totalValue };
+}
+
+export async function getAllRequirementRequests() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const requests = await db.select().from(requirementsRequests).orderBy(desc(requirementsRequests.createdAt));
+  const ids = requests.map(r => r.id).filter(Boolean) as number[];
+
+  if (ids.length === 0) return requests;
+
+  const approvals = await db.select().from(committeeApprovals).where(inArray(committeeApprovals.requestId, ids));
+  const cms = await db.select().from(cmsCases).where(inArray(cmsCases.requestId, ids));
+
+  return requests.map(req => {
+    const reqApprovals = approvals.filter(a => a.requestId === req.id);
+    const reqCms = cms.find(c => c.requestId === req.id) || null;
+    return {
+      ...req,
+      approvals: reqApprovals,
+      cmsCase: reqCms,
+    };
+  });
+}
+
+export async function getRequirementRequestById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.select().from(requirementsRequests).where(eq(requirementsRequests.id, id)).limit(1);
+  if (result.length === 0) return null;
+
+  const request = result[0];
+  const [items, approvals, cmsCase, followups] = await Promise.all([
+    db.select().from(requirementItems).where(eq(requirementItems.requestId, id)),
+    db.select().from(committeeApprovals).where(eq(committeeApprovals.requestId, id)),
+    db.select().from(cmsCases).where(eq(cmsCases.requestId, id)).limit(1),
+    db.select().from(cmsFollowups).where(eq(cmsFollowups.requestId, id)).orderBy(desc(cmsFollowups.followupDate)),
+  ]);
+
+  return {
+    ...request,
+    items,
+    approvals,
+    cmsCase: cmsCase.length > 0 ? cmsCase[0] : null,
+    followups,
+  };
+}
+
+export async function updateRequirementStatus(id: number, status: typeof requirementsRequests.$inferSelect["status"]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(requirementsRequests).set({ status, updatedAt: new Date() }).where(eq(requirementsRequests.id, id));
+}
+
+export async function addCommitteeApproval(approval: typeof committeeApprovals.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(committeeApprovals).values(approval);
+  return { insertId: (result as any).insertId };
+}
+
+export async function upsertCmsCase(requestId: number, data: Partial<typeof cmsCases.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db.select().from(cmsCases).where(eq(cmsCases.requestId, requestId)).limit(1);
+  if (existing.length > 0) {
+    await db.update(cmsCases).set({ ...data, updatedAt: new Date() }).where(eq(cmsCases.requestId, requestId));
+    return existing[0].id;
+  }
+
+  const [result] = await db.insert(cmsCases).values({
+    ...data,
+    requestId,
+  });
+  return Number((result as any).insertId);
+}
+
+export async function addCmsFollowup(entry: typeof cmsFollowups.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(cmsFollowups).values(entry);
+  return { insertId: (result as any).insertId };
+}
+
+// ============================================
 // SUPPLIERS
 // ============================================
 
@@ -352,6 +479,14 @@ export async function getProductById(id: number) {
   
   const result = await db.select().from(products).where(eq(products.id, id)).limit(1);
   return result.length > 0 ? result[0] : null;
+}
+
+export async function getProductsBySupplierId(supplierId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(products)
+    .where(and(eq(products.manufacturerId, supplierId), eq(products.isActive, true)))
+    .orderBy(asc(products.name));
 }
 
 export async function createProduct(product: typeof products.$inferInsert) {
@@ -752,6 +887,20 @@ export async function getDocumentsByEntity(entityType: string, entityId: number)
       eq(documents.isDeleted, false)
     ))
     .orderBy(desc(documents.createdAt));
+}
+
+export async function getDocumentById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db.select().from(documents)
+    .where(and(
+      eq(documents.id, id),
+      eq(documents.isDeleted, false)
+    ))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
 }
 
 export async function createDocument(doc: typeof documents.$inferInsert) {
