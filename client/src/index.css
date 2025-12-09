@@ -130,7 +130,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -142,6 +142,37 @@
   input[type="checkbox"]:not(:disabled),
   input[type="radio"]:not(:disabled) {
     @apply cursor-pointer;
+  }
+
+  /* Custom scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e3a5f40;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #1e3a5f60;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: #2d5a8740;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #2d5a8760;
+  }
+
+  /* Selection styling */
+  ::selection {
+    background: #f9731630;
+    color: inherit;
+  }
+  .dark ::selection {
+    background: #f9731640;
   }
 }
 

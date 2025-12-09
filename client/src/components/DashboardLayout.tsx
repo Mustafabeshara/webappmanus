@@ -207,19 +207,22 @@ function DashboardLayoutContent({
           className="border-r-0"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
+          <SidebarHeader className="h-16 justify-center border-b border-sidebar-border/50">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+                className="h-8 w-8 flex items-center justify-center hover:bg-[#f97316]/10 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f97316] shrink-0"
                 aria-label="Toggle navigation"
               >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                <PanelLeft className="h-4 w-4 text-sidebar-foreground/70" />
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
-                    Navigation
+                  <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#1e3a5f] to-[#2d5a87] flex items-center justify-center shadow-sm">
+                    <span className="text-white text-xs font-bold">M</span>
+                  </div>
+                  <span className="font-semibold tracking-tight truncate bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+                    Manus
                   </span>
                 </div>
               ) : null}
@@ -245,12 +248,20 @@ function DashboardLayoutContent({
                           isActive={isActive}
                           onClick={() => setLocation(item.path)}
                           tooltip={item.label}
-                          className="h-9 transition-all font-normal"
+                          className={`h-9 transition-all duration-200 font-normal ${
+                            isActive
+                              ? "bg-gradient-to-r from-[#f97316]/20 to-[#fb923c]/10 text-white border-l-2 border-[#f97316] shadow-sm"
+                              : "hover:bg-sidebar-accent/80"
+                          }`}
                         >
                           <item.icon
-                            className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`}
+                            className={`h-4 w-4 shrink-0 transition-colors ${
+                              isActive
+                                ? "text-[#f97316]"
+                                : "text-sidebar-foreground/60 group-hover:text-sidebar-foreground"
+                            }`}
                           />
-                          <span className={isActive ? "font-medium" : ""}>{item.label}</span>
+                          <span className={isActive ? "font-semibold" : "text-sidebar-foreground/90"}>{item.label}</span>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     );
