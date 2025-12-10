@@ -23,6 +23,12 @@ import {
   expenses,
   deliveries,
   deliveryItems,
+  opportunities,
+  commissionRules,
+  commissionAssignments,
+  commissionEntries,
+  employees,
+  leaveRequests,
   requirementsRequests,
   requirementItems,
   committeeApprovals,
@@ -1369,4 +1375,118 @@ export async function deleteTask(id: number) {
   if (!db) throw new Error("Database not available");
   
   await db.delete(tasks).where(eq(tasks.id, id));
+}
+
+// ============================================
+// OPPORTUNITIES
+// ============================================
+
+export async function getAllOpportunities() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(opportunities).orderBy(desc(opportunities.createdAt));
+}
+
+export async function createOpportunity(opp: typeof opportunities.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(opportunities).values(opp);
+  return { id: Number((result as any).insertId), ...opp };
+}
+
+export async function updateOpportunity(id: number, data: Partial<typeof opportunities.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(opportunities).set(data).where(eq(opportunities.id, id));
+}
+
+// ============================================
+// COMMISSIONS
+// ============================================
+
+export async function listCommissionRules() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(commissionRules).orderBy(desc(commissionRules.createdAt));
+}
+
+export async function createCommissionRule(rule: typeof commissionRules.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(commissionRules).values(rule);
+  return { id: Number((result as any).insertId), ...rule };
+}
+
+export async function listCommissionAssignments() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(commissionAssignments).orderBy(desc(commissionAssignments.createdAt));
+}
+
+export async function createCommissionAssignment(assign: typeof commissionAssignments.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(commissionAssignments).values(assign);
+  return { id: Number((result as any).insertId), ...assign };
+}
+
+export async function listCommissionEntries() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(commissionEntries).orderBy(desc(commissionEntries.createdAt));
+}
+
+export async function createCommissionEntry(entry: typeof commissionEntries.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(commissionEntries).values(entry);
+  return { id: Number((result as any).insertId), ...entry };
+}
+
+export async function updateCommissionEntry(id: number, data: Partial<typeof commissionEntries.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(commissionEntries).set(data).where(eq(commissionEntries.id, id));
+}
+
+// ============================================
+// HR (EMPLOYEES & LEAVE)
+// ============================================
+
+export async function listEmployees() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(employees).orderBy(desc(employees.createdAt));
+}
+
+export async function createEmployee(emp: typeof employees.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(employees).values(emp);
+  return { id: Number((result as any).insertId), ...emp };
+}
+
+export async function updateEmployee(id: number, data: Partial<typeof employees.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(employees).set(data).where(eq(employees.id, id));
+}
+
+export async function listLeaveRequests() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(leaveRequests).orderBy(desc(leaveRequests.createdAt));
+}
+
+export async function createLeaveRequest(req: typeof leaveRequests.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(leaveRequests).values(req);
+  return { id: Number((result as any).insertId), ...req };
+}
+
+export async function updateLeaveRequest(id: number, data: Partial<typeof leaveRequests.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(leaveRequests).set(data).where(eq(leaveRequests.id, id));
 }

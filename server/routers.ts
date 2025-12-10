@@ -70,6 +70,47 @@ function hasRequiredApprovals(approvals: Array<{ role: string; decision: string 
   return needed.every(role => approvals.some(a => a.role === role && a.decision === "approved"));
 }
 
+// Simple text tokenization for matching
+function tokenize(text: string | null | undefined): Set<string> {
+  if (!text) return new Set();
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+  );
+}
+
+function scoreSupplierAgainstTender(
+  tenderItems: Array<{ description?: string; specifications?: string }>,
+  supplierProducts: Array<{ name?: string; description?: string; specifications?: string }>
+) {
+  let total = 0;
+  let max = tenderItems.length * 100;
+
+  for (const item of tenderItems) {
+    const itemTokens = new Set([
+      ...tokenize(item.description),
+      ...tokenize(item.specifications),
+    ]);
+    let best = 0;
+    for (const product of supplierProducts) {
+      const productTokens = new Set([
+        ...tokenize(product.name),
+        ...tokenize(product.description),
+        ...tokenize((product as any).specifications),
+      ]);
+      const intersection = [...itemTokens].filter(t => productTokens.has(t));
+      const score = itemTokens.size === 0 ? 0 : Math.round((intersection.length / itemTokens.size) * 100);
+      if (score > best) best = score;
+    }
+    total += best;
+  }
+
+  return { total, coveragePercent: max === 0 ? 0 : Math.round((total / max) * 100) };
+}
+
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== 'admin') {
@@ -3299,6 +3340,219 @@ export const appRouter = router({
       }),
   }),
 
+  // ============================================
+  // Opportunities (Pipeline) & Forecast Inputs
+  // ============================================
+  opportunities: router({
+    list: protectedProcedure.query(async () => {
+      return await db.getAllOpportunities();
+    }),
+
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        customerId: z.number().optional(),
+        amount: z.number().min(0),
+        probability: z.number().min(0).max(100).default(50),
+        stage: z.enum(["prospect", "proposal", "negotiation", "verbal", "won", "lost"]).default("prospect"),
+        expectedCloseDate: z.string().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return await db.createOpportunity({
+          ...input,
+          expectedCloseDate: input.expectedCloseDate ? new Date(input.expectedCloseDate) : undefined,
+          createdBy: ctx.user.id,
+          ownerId: ctx.user.id,
+        } as any);
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        amount: z.number().optional(),
+        probability: z.number().min(0).max(100).optional(),
+        stage: z.enum(["prospect", "proposal", "negotiation", "verbal", "won", "lost"]).optional(),
+        expectedCloseDate: z.string().optional(),
+        status: z.enum(["open", "closed"]).optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, expectedCloseDate, ...rest } = input;
+        await db.updateOpportunity(id, {
+          ...rest,
+          expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : undefined,
+        });
+        return { success: true };
+      }),
+  }),
+
+  // ============================================
+  // Commissions
+  // ============================================
+  commissions: router({
+    listRules: protectedProcedure.query(async () => {
+      return await db.listCommissionRules();
+    }),
+
+    createRule: adminProcedure
+      .input(z.object({
+        name: z.string(),
+        scopeType: z.enum(["all", "product", "category"]).default("all"),
+        productId: z.number().optional(),
+        category: z.string().optional(),
+        rateBps: z.number().min(0),
+        minMarginBps: z.number().min(0).optional(),
+        isActive: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.createCommissionRule(input as any);
+      }),
+
+    assignments: protectedProcedure.query(async () => {
+      return await db.listCommissionAssignments();
+    }),
+
+    assignRule: adminProcedure
+      .input(z.object({
+        ruleId: z.number(),
+        userId: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.createCommissionAssignment(input as any);
+      }),
+
+    entries: protectedProcedure.query(async () => {
+      return await db.listCommissionEntries();
+    }),
+
+    updateEntry: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(["pending", "approved", "paid"]).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...rest } = input;
+        await db.updateCommissionEntry(id, rest as any);
+        return { success: true };
+      }),
+  }),
+
+  // ============================================
+  // HR: Employees & Leave
+  // ============================================
+  hr: router({
+    employees: router({
+      list: protectedProcedure.query(async () => {
+        return await db.listEmployees();
+      }),
+
+      create: adminProcedure
+        .input(z.object({
+          userId: z.number().optional(),
+          firstName: z.string().optional(),
+          lastName: z.string().optional(),
+          title: z.string().optional(),
+          departmentId: z.number().optional(),
+          managerId: z.number().optional(),
+          hireDate: z.string().optional(),
+          status: z.enum(["active", "on_leave", "terminated"]).optional(),
+          email: z.string().optional(),
+          phone: z.string().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          return await db.createEmployee({
+            ...input,
+            hireDate: input.hireDate ? new Date(input.hireDate) : undefined,
+          } as any);
+        }),
+
+      update: adminProcedure
+        .input(z.object({
+          id: z.number(),
+          firstName: z.string().optional(),
+          lastName: z.string().optional(),
+          title: z.string().optional(),
+          departmentId: z.number().optional(),
+          managerId: z.number().optional(),
+          hireDate: z.string().optional(),
+          status: z.enum(["active", "on_leave", "terminated"]).optional(),
+          email: z.string().optional(),
+          phone: z.string().optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const { id, hireDate, ...rest } = input;
+          await db.updateEmployee(id, {
+            ...rest,
+            hireDate: hireDate ? new Date(hireDate) : undefined,
+          } as any);
+          return { success: true };
+        }),
+    }),
+
+    leave: router({
+      list: protectedProcedure.query(async () => {
+        return await db.listLeaveRequests();
+      }),
+
+      create: protectedProcedure
+        .input(z.object({
+          employeeId: z.number(),
+          type: z.enum(["vacation", "sick", "personal", "unpaid"]).default("vacation"),
+          startDate: z.string(),
+          endDate: z.string(),
+          reason: z.string().optional(),
+        }))
+        .mutation(async ({ input, ctx }) => {
+          return await db.createLeaveRequest({
+            ...input,
+            startDate: new Date(input.startDate),
+            endDate: new Date(input.endDate),
+            approverId: ctx.user.id,
+          } as any);
+        }),
+
+      update: adminProcedure
+        .input(z.object({
+          id: z.number(),
+          status: z.enum(["pending", "approved", "rejected"]),
+          approverId: z.number().optional(),
+        }))
+        .mutation(async ({ input, ctx }) => {
+          await db.updateLeaveRequest(input.id, {
+            status: input.status,
+            approverId: input.approverId ?? ctx.user.id,
+            decidedAt: new Date(),
+          } as any);
+          return { success: true };
+        }),
+    }),
+  }),
+
+  // ============================================
+  // Tender → Supplier/Product matching (basic scoring)
+  // ============================================
+  tenderMatch: router({
+    byTender: protectedProcedure
+      .input(z.object({ tenderId: z.number() }))
+      .query(async ({ input }) => {
+        const tender = await db.getTenderById(input.tenderId);
+        if (!tender) throw new TRPCError({ code: "NOT_FOUND", message: "Tender not found" });
+
+        const items = await db.getTenderItems(input.tenderId);
+        const suppliers = await db.getAllSuppliers();
+        const products = await db.getAllProducts();
+
+        const supplierProducts = suppliers.map(supplier => {
+          const prods = products.filter(p => p.manufacturerId === supplier.id);
+          const score = scoreSupplierAgainstTender(items, prods);
+          return { supplier, products: prods, score };
+        }).sort((a, b) => b.score.total - a.score.total);
+
+        return supplierProducts;
+      }),
+  }),
   // Files router for universal file management
   files: router({
     uploadToS3: uploadProcedure

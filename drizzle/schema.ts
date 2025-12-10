@@ -716,6 +716,93 @@ export const files = mysqlTable("files", {
   uploadedAt: timestamp("uploadedAt").defaultNow().notNull(), // Alias for clarity in version history
 });
 
+/**
+ * Opportunities (pipeline) for forecasting
+ */
+export const opportunities = mysqlTable("opportunities", {
+  id: int("id").autoincrement().primaryKey(),
+  customerId: int("customerId"),
+  name: varchar("name", { length: 255 }).notNull(),
+  amount: int("amount").default(0).notNull(), // cents
+  probability: int("probability").default(50).notNull(), // percent
+  stage: mysqlEnum("stage", ["prospect", "proposal", "negotiation", "verbal", "won", "lost"]).default("prospect").notNull(),
+  expectedCloseDate: date("expectedCloseDate"),
+  ownerId: int("ownerId"),
+  status: mysqlEnum("status", ["open", "closed"]).default("open").notNull(),
+  notes: text("notes"),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Commission configuration and entries
+ */
+export const commissionRules = mysqlTable("commission_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  scopeType: mysqlEnum("scopeType", ["all", "product", "category"]).default("all").notNull(),
+  productId: int("productId"),
+  category: varchar("category", { length: 255 }),
+  rateBps: int("rateBps").default(0).notNull(), // basis points (1/100 of a percent)
+  minMarginBps: int("minMarginBps").default(0),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const commissionAssignments = mysqlTable("commission_assignments", {
+  id: int("id").autoincrement().primaryKey(),
+  ruleId: int("ruleId").notNull(),
+  userId: int("userId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const commissionEntries = mysqlTable("commission_entries", {
+  id: int("id").autoincrement().primaryKey(),
+  invoiceId: int("invoiceId"),
+  amount: int("amount").default(0).notNull(), // invoice amount cents
+  commissionAmount: int("commissionAmount").default(0).notNull(), // cents
+  userId: int("userId").notNull(),
+  ruleId: int("ruleId"),
+  status: mysqlEnum("status", ["pending", "approved", "paid"]).default("pending").notNull(),
+  periodStart: date("periodStart"),
+  periodEnd: date("periodEnd"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * HR - employees and leave
+ */
+export const employees = mysqlTable("employees", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId"),
+  firstName: varchar("firstName", { length: 255 }),
+  lastName: varchar("lastName", { length: 255 }),
+  title: varchar("title", { length: 255 }),
+  departmentId: int("departmentId"),
+  managerId: int("managerId"),
+  hireDate: date("hireDate"),
+  status: mysqlEnum("status", ["active", "on_leave", "terminated"]).default("active").notNull(),
+  email: varchar("email", { length: 320 }),
+  phone: varchar("phone", { length: 50 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const leaveRequests = mysqlTable("leave_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  employeeId: int("employeeId").notNull(),
+  type: mysqlEnum("type", ["vacation", "sick", "personal", "unpaid"]).default("vacation").notNull(),
+  startDate: date("startDate").notNull(),
+  endDate: date("endDate").notNull(),
+  status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
+  reason: text("reason"),
+  approverId: int("approverId"),
+  decidedAt: timestamp("decidedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -748,3 +835,9 @@ export type PurchaseOrderItem = typeof purchaseOrderItems.$inferSelect;
 export type InsertPurchaseOrderItem = typeof purchaseOrderItems.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = typeof tasks.$inferInsert;
+export type Opportunity = typeof opportunities.$inferSelect;
+export type CommissionRule = typeof commissionRules.$inferSelect;
+export type CommissionAssignment = typeof commissionAssignments.$inferSelect;
+export type CommissionEntry = typeof commissionEntries.$inferSelect;
+export type Employee = typeof employees.$inferSelect;
+export type LeaveRequest = typeof leaveRequests.$inferSelect;
