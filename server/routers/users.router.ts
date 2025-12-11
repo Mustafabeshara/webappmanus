@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { router } from "../_core/trpc";
-import { adminProcedure } from "./shared";
+import { adminProcedure, router } from "../_core/trpc";
+import { idSchema, userSchemas } from "../_core/validationSchemas";
 import * as db from "../db";
 
 export const usersRouter = router({
@@ -8,34 +8,23 @@ export const usersRouter = router({
     return await db.getAllUsers();
   }),
 
-  updateRole: adminProcedure
-    .input(z.object({
-      userId: z.number(),
-      role: z.enum(["admin", "user"]),
-    }))
+  updateRole: adminMutationProcedure
+    .input(userSchemas.updateRole)
     .mutation(async ({ input }) => {
       await db.updateUserRole(input.userId, input.role);
       return { success: true };
     }),
 
   getPermissions: adminProcedure
-    .input(z.object({ userId: z.number() }))
+    .input(z.object({ userId: idSchema }))
     .query(async ({ input }) => {
       return await db.getUserPermissions(input.userId);
     }),
 
-  updatePermission: adminProcedure
-    .input(z.object({
-      userId: z.number(),
-      module: z.string(),
-      canView: z.boolean().optional(),
-      canCreate: z.boolean().optional(),
-      canEdit: z.boolean().optional(),
-      canDelete: z.boolean().optional(),
-      canApprove: z.boolean().optional(),
-    }))
+  updatePermission: adminMutationProcedure
+    .input(userSchemas.updatePermission)
     .mutation(async ({ input }) => {
-      await db.upsertUserPermission(input as any);
+      await db.upsertUserPermission(input);
       return { success: true };
     }),
 });

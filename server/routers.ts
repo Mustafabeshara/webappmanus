@@ -17,9 +17,13 @@ import {
 import {
   budgetCategorySchemas,
   budgetSchemas,
+  customerSchemas,
   departmentSchemas,
   idSchema,
+  inventorySchemas,
+  productSchemas,
   requirementSchemas,
+  supplierSchemas,
   userSchemas,
 } from "./_core/validationSchemas";
 import {
@@ -707,29 +711,19 @@ export const appRouter = router({
     }),
 
     get: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(supplierSchemas.get)
       .query(async ({ input }) => {
         return await db.getSupplierById(input.id);
       }),
 
     products: protectedProcedure
-      .input(z.object({ supplierId: z.number() }))
+      .input(supplierSchemas.products)
       .query(async ({ input }) => {
         return await db.getProductsBySupplierId(input.supplierId);
       }),
 
-    create: protectedProcedure
-      .input(
-        z.object({
-          name: z.string(),
-          contactPerson: z.string().optional(),
-          email: z.string().optional(),
-          phone: z.string().optional(),
-          address: z.string().optional(),
-          taxId: z.string().optional(),
-          notes: z.string().optional(),
-        })
-      )
+    create: protectedMutationProcedure
+      .input(supplierSchemas.create)
       .mutation(async ({ input, ctx }) => {
         const code = utils.generateSupplierCode();
         await db.createSupplier({
@@ -740,24 +734,8 @@ export const appRouter = router({
         return { success: true, code };
       }),
 
-    update: protectedProcedure
-      .input(
-        z.object({
-          id: z.number(),
-          name: z.string().optional(),
-          contactPerson: z.string().optional(),
-          email: z.string().optional(),
-          phone: z.string().optional(),
-          address: z.string().optional(),
-          taxId: z.string().optional(),
-          complianceStatus: z
-            .enum(["compliant", "pending", "non_compliant"])
-            .optional(),
-          rating: z.number().optional(),
-          notes: z.string().optional(),
-          isActive: z.boolean().optional(),
-        })
-      )
+    update: protectedMutationProcedure
+      .input(supplierSchemas.update)
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
         await db.updateSupplier(id, data);
@@ -921,25 +899,13 @@ export const appRouter = router({
     }),
 
     get: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(customerSchemas.get)
       .query(async ({ input }) => {
         return await db.getCustomerById(input.id);
       }),
 
-    create: protectedProcedure
-      .input(
-        z.object({
-          name: z.string(),
-          type: z.enum(["hospital", "clinic", "pharmacy", "other"]),
-          contactPerson: z.string().optional(),
-          email: z.string().optional(),
-          phone: z.string().optional(),
-          address: z.string().optional(),
-          taxId: z.string().optional(),
-          creditLimit: z.number().optional(),
-          notes: z.string().optional(),
-        })
-      )
+    create: protectedMutationProcedure
+      .input(customerSchemas.create)
       .mutation(async ({ input, ctx }) => {
         const code = utils.generateCustomerCode();
         await db.createCustomer({
@@ -950,22 +916,8 @@ export const appRouter = router({
         return { success: true, code };
       }),
 
-    update: protectedProcedure
-      .input(
-        z.object({
-          id: z.number(),
-          name: z.string().optional(),
-          type: z.enum(["hospital", "clinic", "pharmacy", "other"]).optional(),
-          contactPerson: z.string().optional(),
-          email: z.string().optional(),
-          phone: z.string().optional(),
-          address: z.string().optional(),
-          taxId: z.string().optional(),
-          creditLimit: z.number().optional(),
-          notes: z.string().optional(),
-          isActive: z.boolean().optional(),
-        })
-      )
+    update: protectedMutationProcedure
+      .input(customerSchemas.update)
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
         await db.updateCustomer(id, data);
@@ -973,20 +925,13 @@ export const appRouter = router({
       }),
 
     getCommunications: protectedProcedure
-      .input(z.object({ customerId: z.number() }))
+      .input(customerSchemas.getCommunications)
       .query(async ({ input }) => {
         return await db.getCustomerCommunications(input.customerId);
       }),
 
-    addCommunication: protectedProcedure
-      .input(
-        z.object({
-          customerId: z.number(),
-          type: z.enum(["email", "phone", "meeting", "note"]),
-          subject: z.string().optional(),
-          content: z.string(),
-        })
-      )
+    addCommunication: protectedMutationProcedure
+      .input(customerSchemas.addCommunication)
       .mutation(async ({ input, ctx }) => {
         await db.createCustomerCommunication({
           ...input,
@@ -1005,7 +950,7 @@ export const appRouter = router({
     }),
 
     get: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(productSchemas.get)
       .query(async ({ input }) => {
         const product = await db.getProductById(input.id);
         if (!product) return null;
@@ -1023,23 +968,8 @@ export const appRouter = router({
         };
       }),
 
-    create: protectedProcedure
-      .input(
-        z.object({
-          name: z.string(),
-          description: z.string().optional(),
-          category: z.string().optional(),
-          manufacturerId: z.number().optional(),
-          unitPrice: z.number().optional(),
-          unit: z.string().optional(),
-          specifications: z.string().optional(),
-          // Inventory fields
-          minStockLevel: z.number().optional(),
-          maxStockLevel: z.number().optional(),
-          initialQuantity: z.number().optional(),
-          location: z.string().optional(),
-        })
-      )
+    create: protectedMutationProcedure
+      .input(productSchemas.create)
       .mutation(async ({ input, ctx }) => {
         const sku = utils.generateProductSKU();
         const {
@@ -1073,20 +1003,8 @@ export const appRouter = router({
         return { success: true, sku, productId };
       }),
 
-    update: protectedProcedure
-      .input(
-        z.object({
-          id: z.number(),
-          name: z.string().optional(),
-          description: z.string().optional(),
-          category: z.string().optional(),
-          manufacturerId: z.number().optional(),
-          unitPrice: z.number().optional(),
-          unit: z.string().optional(),
-          specifications: z.string().optional(),
-          isActive: z.boolean().optional(),
-        })
-      )
+    update: protectedMutationProcedure
+      .input(productSchemas.update)
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
         await db.updateProduct(id, data);
@@ -1107,42 +1025,20 @@ export const appRouter = router({
     }),
 
     byProduct: protectedProcedure
-      .input(z.object({ productId: z.number() }))
+      .input(inventorySchemas.byProduct)
       .query(async ({ input }) => {
         return await db.getInventoryByProduct(input.productId);
       }),
 
-    create: protectedProcedure
-      .input(
-        z.object({
-          productId: z.number(),
-          quantity: z.number(),
-          batchNumber: z.string().optional(),
-          expiryDate: z.date().optional(),
-          location: z.string().optional(),
-          minStockLevel: z.number().optional(),
-          maxStockLevel: z.number().optional(),
-          notes: z.string().optional(),
-        })
-      )
+    create: protectedMutationProcedure
+      .input(inventorySchemas.create)
       .mutation(async ({ input }) => {
         await db.createInventory(input as any);
         return { success: true };
       }),
 
-    update: protectedProcedure
-      .input(
-        z.object({
-          id: z.number(),
-          quantity: z.number().optional(),
-          batchNumber: z.string().optional(),
-          expiryDate: z.date().optional(),
-          location: z.string().optional(),
-          minStockLevel: z.number().optional(),
-          maxStockLevel: z.number().optional(),
-          notes: z.string().optional(),
-        })
-      )
+    update: protectedMutationProcedure
+      .input(inventorySchemas.update)
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
         await db.updateInventory(id, data);
