@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { trpc } from "@/lib/trpc";
 import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -69,36 +68,16 @@ export default function Commissions() {
   });
 
   // Queries
-  const { data: rules = [], isLoading: rulesLoading } = useQuery({
-    queryKey: ["commissions", "rules"],
-    queryFn: () => trpc.commissions.listRules.query(),
-  });
+  const { data: rules = [], isLoading: rulesLoading } = trpc.commissions.listRules.useQuery();
 
-  const { data: assignments = [], isLoading: assignmentsLoading } = useQuery({
-    queryKey: ["commissions", "assignments"],
-    queryFn: () => trpc.commissions.assignments.query(),
-  });
+  const { data: assignments = [], isLoading: assignmentsLoading } = trpc.commissions.assignments.useQuery();
 
-  const { data: entries = [], isLoading: entriesLoading } = useQuery({
-    queryKey: ["commissions", "entries"],
-    queryFn: () => trpc.commissions.entries.query(),
-  });
+  const { data: entries = [], isLoading: entriesLoading } = trpc.commissions.entries.useQuery();
 
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: () => trpc.users.list.query(),
-  });
+  const { data: users = [] } = trpc.users.list.useQuery();
 
   // Mutations
-  const createRuleMutation = useMutation({
-    mutationFn: (data: {
-      name: string;
-      description?: string;
-      percentage?: number;
-      flatAmount?: number;
-      minThreshold?: number;
-      maxThreshold?: number;
-    }) => trpc.commissions.createRule.mutate(data),
+  const createRuleMutation = trpc.commissions.createRule.useMutation({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["commissions", "rules"] });
       setIsRuleDialogOpen(false);
@@ -117,9 +96,7 @@ export default function Commissions() {
     },
   });
 
-  const assignRuleMutation = useMutation({
-    mutationFn: (data: { userId: number; ruleId: number }) =>
-      trpc.commissions.assignRule.mutate(data),
+  const assignRuleMutation = trpc.commissions.assignRule.useMutation({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["commissions", "assignments"] });
       setIsAssignDialogOpen(false);
@@ -131,9 +108,7 @@ export default function Commissions() {
     },
   });
 
-  const updateEntryMutation = useMutation({
-    mutationFn: (data: { id: number; status: string }) =>
-      trpc.commissions.updateEntry.mutate(data),
+  const updateEntryMutation = trpc.commissions.updateEntry.useMutation({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["commissions", "entries"] });
       toast.success("Commission entry updated successfully");

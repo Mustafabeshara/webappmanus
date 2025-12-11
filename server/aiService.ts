@@ -850,3 +850,452 @@ Return analysis as a JSON object:
     return null;
   }
 }
+
+
+// =============================================================================
+// COMPREHENSIVE DOCUMENT EXTRACTION FUNCTIONS
+// =============================================================================
+
+/**
+ * Extract supplier data from registration documents
+ */
+export async function extractSupplierData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting supplier/company registration information.
+Extract the following information and return it as a JSON object:
+{
+  "companyName": "company legal name",
+  "companyNameAr": "company name in Arabic if present",
+  "commercialRegistration": "CR number (10 digits)",
+  "vatNumber": "VAT number (15 digits, starts and ends with 3)",
+  "contactPerson": "primary contact person name",
+  "email": "email address",
+  "phone": "phone number",
+  "address": "full business address",
+  "city": "city name",
+  "country": "country name",
+  "bankName": "bank name if present",
+  "bankAccountNumber": "IBAN or account number",
+  "supplierType": ["array of supplier types: Manufacturer, Distributor, Agent, etc."],
+  "productCategories": ["array of product/service categories"],
+  "yearEstablished": "year company was established",
+  "employeeCount": number or null,
+  "capital": number (paid-up capital in cents) or null
+}
+
+Return ONLY the JSON object. If a field is not found, use null or empty string/array.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'supplier');
+}
+
+/**
+ * Extract detailed expense report data with line items
+ */
+export async function extractExpenseReportData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting expense report information.
+Extract the following information and return it as a JSON object:
+{
+  "reportTitle": "expense report title",
+  "employeeName": "employee name who submitted",
+  "department": "department name",
+  "reportDate": "YYYY-MM-DD format",
+  "periodStart": "YYYY-MM-DD format",
+  "periodEnd": "YYYY-MM-DD format",
+  "currency": "currency code (SAR, USD, etc.)",
+  "totalAmount": number (total in cents),
+  "justification": "business justification text",
+  "expenses": [
+    {
+      "date": "YYYY-MM-DD",
+      "category": "Travel, Meals, Accommodation, Transport, Supplies, Other",
+      "description": "expense description",
+      "vendor": "merchant/vendor name",
+      "amount": number (in cents),
+      "receiptNumber": "receipt number if available"
+    }
+  ]
+}
+
+Convert all amounts to cents. Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'expense_report');
+}
+
+/**
+ * Extract budget data from financial documents
+ */
+export async function extractBudgetData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting budget information.
+Extract the following information and return it as a JSON object:
+{
+  "budgetName": "budget name/title",
+  "fiscalYear": "fiscal year (e.g., 2024)",
+  "department": "department name",
+  "category": "budget category",
+  "totalAmount": number (total budget in cents),
+  "currency": "currency code",
+  "startDate": "YYYY-MM-DD format",
+  "endDate": "YYYY-MM-DD format",
+  "quarterlyBreakdown": {
+    "Q1": number (in cents),
+    "Q2": number (in cents),
+    "Q3": number (in cents),
+    "Q4": number (in cents)
+  },
+  "description": "budget description/purpose"
+}
+
+Convert all amounts to cents. Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'budget');
+}
+
+/**
+ * Extract commercial registration (CR) data
+ */
+export async function extractCommercialRegistrationData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting Saudi Commercial Registration (السجل التجاري) information.
+Extract the following information and return it as a JSON object:
+{
+  "crNumber": "10-digit CR number",
+  "companyName": "company name in English",
+  "companyNameAr": "company name in Arabic (اسم الشركة)",
+  "legalForm": "LLC, Joint Stock, Sole Proprietorship, Partnership, or Branch",
+  "capital": number (paid-up capital in cents),
+  "issueDate": "YYYY-MM-DD format",
+  "expiryDate": "YYYY-MM-DD format",
+  "activities": ["array of business activities"],
+  "city": "city of registration",
+  "managers": ["array of manager names"]
+}
+
+Look for Arabic text like: رقم السجل التجاري، اسم المنشأة، الشكل القانوني، رأس المال
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'commercial_registration');
+}
+
+/**
+ * Extract VAT certificate data
+ */
+export async function extractVATCertificateData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting VAT certificate information.
+Extract the following information and return it as a JSON object:
+{
+  "vatNumber": "15-digit VAT number (starts and ends with 3)",
+  "companyName": "taxpayer/company name",
+  "registrationDate": "YYYY-MM-DD format",
+  "status": "Active, Suspended, or Cancelled"
+}
+
+Look for Arabic text like: الرقم الضريبي، شهادة تسجيل ضريبة القيمة المضافة
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'vat_certificate');
+}
+
+/**
+ * Extract Zakat certificate data
+ */
+export async function extractZakatCertificateData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting Zakat & Tax certificate information.
+Extract the following information and return it as a JSON object:
+{
+  "certificateNumber": "certificate number",
+  "companyName": "company name",
+  "taxNumber": "tax number/distinctive number",
+  "issueDate": "YYYY-MM-DD format",
+  "expiryDate": "YYYY-MM-DD format"
+}
+
+Look for Arabic text like: شهادة الزكاة والدخل، رقم الشهادة، صالحة حتى
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'zakat_certificate');
+}
+
+/**
+ * Extract GOSI certificate data
+ */
+export async function extractGOSICertificateData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting GOSI certificate information.
+Extract the following information and return it as a JSON object:
+{
+  "certificateNumber": "certificate number",
+  "establishmentNumber": "establishment/subscription number",
+  "companyName": "company name",
+  "issueDate": "YYYY-MM-DD format",
+  "expiryDate": "YYYY-MM-DD format",
+  "complianceStatus": "Compliant, Non-Compliant, or Pending"
+}
+
+Look for Arabic text like: شهادة التأمينات الاجتماعية، رقم المنشأة
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'gosi_certificate');
+}
+
+/**
+ * Extract bank guarantee data
+ */
+export async function extractBankGuaranteeData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting bank guarantee/letter of guarantee information.
+Extract the following information and return it as a JSON object:
+{
+  "guaranteeNumber": "guarantee reference number",
+  "bankName": "issuing bank name",
+  "bankBranch": "bank branch",
+  "amount": number (guarantee amount in cents),
+  "currency": "SAR, USD, etc.",
+  "beneficiary": "beneficiary name",
+  "issueDate": "YYYY-MM-DD format",
+  "expiryDate": "YYYY-MM-DD format",
+  "guaranteeType": "Bid Bond, Performance Bond, Advance Payment, Retention, Credit Facility",
+  "purpose": "purpose of guarantee"
+}
+
+Convert amounts to cents. Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'bank_guarantee');
+}
+
+/**
+ * Extract Letter of Authorization (LOA) data
+ */
+export async function extractLOAData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting Letter of Authorization (LOA) information.
+Extract the following information and return it as a JSON object:
+{
+  "loaNumber": "LOA reference number if present",
+  "manufacturerName": "manufacturer/principal company name",
+  "manufacturerCountry": "manufacturer country of origin",
+  "authorizedDistributor": "authorized distributor/agent name",
+  "authorizationType": "Exclusive Distributor, Non-Exclusive Distributor, Authorized Agent, Authorized Reseller, Service Provider",
+  "territory": ["array of authorized territories/countries"],
+  "productLines": ["array of authorized product lines/brands"],
+  "issueDate": "YYYY-MM-DD format",
+  "expiryDate": "YYYY-MM-DD format",
+  "signatoryName": "name of person who signed",
+  "signatoryTitle": "title/position of signatory"
+}
+
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'loa');
+}
+
+/**
+ * Extract MOCI agency registration data
+ */
+export async function extractMOCILetterData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting Saudi MOCI agency registration information.
+Extract the following information and return it as a JSON object:
+{
+  "registrationNumber": "agency registration number",
+  "agentName": "agent/distributor company name",
+  "principalName": "principal/manufacturer name",
+  "principalCountry": "principal country of origin",
+  "agencyType": "Commercial Agency, Distribution Agreement, or Franchise",
+  "productDescription": "description of products/services covered",
+  "registrationDate": "YYYY-MM-DD format",
+  "expiryDate": "YYYY-MM-DD format"
+}
+
+Look for Arabic text like: وزارة التجارة، الوكالة التجارية
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'moci_letter');
+}
+
+/**
+ * Extract FDA certificate data
+ */
+export async function extractFDACertificateData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting FDA certificate and 510(k) clearance information.
+Extract the following information and return it as a JSON object:
+{
+  "fdaNumber": "FDA registration number or 510(k) number (e.g., K123456)",
+  "certificateType": "510(k) Clearance, PMA Approval, De Novo, FDA Registration, Establishment Registration, Device Listing",
+  "deviceName": "device/product name",
+  "deviceClass": "Class I, Class II, or Class III",
+  "productCode": "FDA product code",
+  "manufacturerName": "manufacturer name",
+  "manufacturerAddress": "manufacturer address",
+  "clearanceDate": "YYYY-MM-DD format",
+  "predicateDevice": "predicate device K number for 510(k)",
+  "intendedUse": "intended use statement"
+}
+
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'fda_certificate');
+}
+
+/**
+ * Extract CE marking certificate data
+ */
+export async function extractCECertificateData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting CE marking certificate information.
+Extract the following information and return it as a JSON object:
+{
+  "certificateNumber": "EC certificate number",
+  "certificateType": "EC Certificate, Declaration of Conformity, Technical File Review, Type Examination Certificate",
+  "notifiedBody": "notified body name",
+  "notifiedBodyNumber": "NB number (4 digits)",
+  "manufacturerName": "manufacturer name",
+  "productName": "product/device name",
+  "productModels": ["array of model numbers covered"],
+  "directive": ["MDR 2017/745", "MDD 93/42/EEC", etc.],
+  "classification": "Class I, IIa, IIb, III, A, B, C, or D",
+  "annexApplied": ["array of conformity assessment annexes"],
+  "issueDate": "YYYY-MM-DD format",
+  "expiryDate": "YYYY-MM-DD format"
+}
+
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'ce_certificate');
+}
+
+/**
+ * Extract ISO certificate data
+ */
+export async function extractISOCertificateData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting ISO certification information.
+Extract the following information and return it as a JSON object:
+{
+  "certificateNumber": "certificate number",
+  "isoStandard": ["ISO 9001:2015", "ISO 13485:2016", etc.],
+  "certificationBody": "certification body name",
+  "accreditationBody": "accreditation body (UKAS, DAkkS, ANAB, etc.)",
+  "companyName": "certified organization name",
+  "certifiedSites": ["array of certified site addresses"],
+  "scope": "certification scope description",
+  "issueDate": "YYYY-MM-DD format",
+  "expiryDate": "YYYY-MM-DD format",
+  "lastAuditDate": "YYYY-MM-DD format if mentioned"
+}
+
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'iso_certificate');
+}
+
+/**
+ * Extract SFDA certificate data
+ */
+export async function extractSFDACertificateData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting Saudi FDA (SFDA) medical device registration information.
+Extract the following information and return it as a JSON object:
+{
+  "sfdaNumber": "SFDA registration number (MDN)",
+  "certificateType": "Marketing Authorization, Device Listing, Establishment License, Import License, Free Sale Certificate",
+  "deviceName": "device/product name in English",
+  "deviceNameAr": "device name in Arabic",
+  "riskClass": "Class A, B, C, or D",
+  "gmdnCode": "GMDN code if present",
+  "manufacturerName": "manufacturer name",
+  "manufacturerCountry": "country of origin",
+  "localAgent": "local authorized representative name",
+  "issueDate": "YYYY-MM-DD format",
+  "expiryDate": "YYYY-MM-DD format",
+  "intendedUse": "intended use statement"
+}
+
+Look for Arabic text like: هيئة الغذاء والدواء، تسجيل الأجهزة الطبية
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'sfda_certificate');
+}
+
+/**
+ * Extract manufacturer authorization letter data
+ */
+export async function extractManufacturerAuthorizationData(documentText: string): Promise<ExtractionResult> {
+  const systemPrompt = `You are an AI assistant specialized in extracting manufacturer authorization letter information.
+Extract the following information and return it as a JSON object:
+{
+  "referenceNumber": "letter reference number",
+  "manufacturerName": "manufacturer company name",
+  "manufacturerCountry": "manufacturer country",
+  "authorizedCompany": "authorized company name",
+  "authorizationPurpose": "Tender Participation, General Distribution, Service Provision, After-Sales Support, Project Specific",
+  "tenderReference": "tender/project reference if mentioned",
+  "customerName": "end customer name if mentioned",
+  "products": ["array of authorized products/models"],
+  "letterDate": "YYYY-MM-DD format",
+  "validUntil": "YYYY-MM-DD format if specified",
+  "signatoryName": "signatory name",
+  "signatoryTitle": "signatory title/position"
+}
+
+Return ONLY the JSON object.`;
+
+  return await genericExtraction(documentText, systemPrompt, 'manufacturer_authorization');
+}
+
+/**
+ * Generic extraction helper function
+ */
+async function genericExtraction(
+  documentText: string, 
+  systemPrompt: string, 
+  extractionType: string
+): Promise<ExtractionResult> {
+  const providers = ['groq', 'gemini', 'anthropic'];
+
+  for (const provider of providers) {
+    try {
+      const response = await invokeLLM({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Extract data from this document:\n\n${documentText}` },
+        ],
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content || typeof content !== 'string') continue;
+
+      // Parse JSON, handling potential markdown code blocks
+      let jsonStr = content.trim();
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      }
+
+      const data = JSON.parse(jsonStr);
+
+      // Generate confidence scores based on field completeness
+      const confidence: Record<string, number> = {};
+      Object.keys(data).forEach(key => {
+        if (data[key] !== null && data[key] !== '' &&
+            !(Array.isArray(data[key]) && data[key].length === 0)) {
+          // Higher confidence for key identification fields
+          const keyFields = ['certificateNumber', 'registrationNumber', 'vatNumber', 'crNumber', 
+                           'fdaNumber', 'sfdaNumber', 'companyName', 'manufacturerName'];
+          if (keyFields.includes(key)) {
+            confidence[key] = 0.9;
+          } else {
+            confidence[key] = 0.75;
+          }
+        }
+      });
+
+      return {
+        success: true,
+        data,
+        confidence,
+        provider,
+      };
+    } catch (error) {
+      console.warn(`[AI] ${provider} failed for ${extractionType} extraction:`, error);
+      continue;
+    }
+  }
+
+  return {
+    success: false,
+    data: {},
+    confidence: {},
+    provider: 'none',
+    errors: [`All extraction methods failed for ${extractionType}`],
+  };
+}

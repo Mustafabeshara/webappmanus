@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { trpc } from "@/lib/trpc";
+import { useQueryClient } from "@tanstack/react-query";
+import { trpc, trpcClient } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -200,16 +200,10 @@ export function DocumentUploadWizard({
   const [extractionStatus, setExtractionStatus] = useState<string>("");
 
   // Fetch suppliers for dropdowns
-  const { data: suppliers = [] } = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: () => trpc.suppliers.list.query(),
-  });
+  const { data: suppliers = [] } = trpc.suppliers.list.useQuery();
 
   // Fetch customers for dropdowns
-  const { data: customers = [] } = useQuery({
-    queryKey: ["customers"],
-    queryFn: () => trpc.customers.list.query(),
-  });
+  const { data: customers = [] } = trpc.customers.list.useQuery();
 
   // Reset wizard state
   const resetWizard = useCallback(() => {
@@ -263,7 +257,7 @@ export function DocumentUploadWizard({
       // Call extraction API
       setExtractionStatus("Analyzing document with AI...");
 
-      const response = await trpc.documents.extractFromBase64.mutate({
+      const response = await trpcClient.documents.extractFromBase64.mutate({
         fileData: base64,
         fileName: file.name,
         documentType: selectedTemplate.module as any,
@@ -343,7 +337,7 @@ export function DocumentUploadWizard({
         const file = uploadedFiles[0];
         const base64 = await fileToBase64(file);
 
-        const uploadResult = await trpc.files.uploadToS3.mutate({
+        const uploadResult = await trpcClient.files.uploadToS3.mutate({
           fileName: file.name,
           mimeType: file.type,
           size: file.size,
@@ -359,7 +353,7 @@ export function DocumentUploadWizard({
       let result;
       switch (selectedTemplate.module) {
         case "tenders":
-          result = await trpc.tenders.create.mutate({
+          result = await trpcClient.tenders.create.mutate({
             referenceNumber: formData.tenderNumber,
             title: formData.title,
             customerId: parseInt(formData.customerId),
@@ -370,7 +364,7 @@ export function DocumentUploadWizard({
           });
           break;
         case "invoices":
-          result = await trpc.invoices.create.mutate({
+          result = await trpcClient.invoices.create.mutate({
             invoiceNumber: formData.invoiceNumber,
             supplierId: parseInt(formData.supplierId),
             issueDate: new Date(formData.invoiceDate),
@@ -381,7 +375,7 @@ export function DocumentUploadWizard({
           });
           break;
         case "suppliers":
-          result = await trpc.suppliers.create.mutate({
+          result = await trpcClient.suppliers.create.mutate({
             name: formData.name,
             code: formData.taxId,
             contactPerson: formData.contactPerson,

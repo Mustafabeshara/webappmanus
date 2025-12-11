@@ -56,8 +56,8 @@ class ModuleInterconnectionManager {
       connectionType: 'data_flow',
       dataMapping: [
         { sourceField: 'catalog_document', targetField: 'product_data' },
-        { sourceField: 'supplier_id', targetField: 'supplie
-       { sourceField: 'price_list', targetField: 'pricing_data' }
+        { sourceField: 'supplier_id', targetField: 'supplier_id' },
+        { sourceField: 'price_list', targetField: 'pricing_data' }
       ]
     });
 

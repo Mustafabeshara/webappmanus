@@ -525,12 +525,13 @@ export default function AIInsights() {
                 color: "purple",
               },
             ].map((rec, idx) => {
-              const colorClasses = {
+              const colorMap = {
                 green: { border: "border-l-green-500", bg: "bg-green-100", text: "text-green-600", title: "text-green-800", btn: "bg-green-100 text-green-700 hover:bg-green-200" },
                 blue: { border: "border-l-blue-500", bg: "bg-blue-100", text: "text-blue-600", title: "text-blue-800", btn: "bg-blue-100 text-blue-700 hover:bg-blue-200" },
                 yellow: { border: "border-l-yellow-500", bg: "bg-yellow-100", text: "text-yellow-600", title: "text-yellow-800", btn: "bg-yellow-100 text-yellow-700 hover:bg-yellow-200" },
                 purple: { border: "border-l-purple-500", bg: "bg-purple-100", text: "text-purple-600", title: "text-purple-800", btn: "bg-purple-100 text-purple-700 hover:bg-purple-200" },
-              }[rec.color] || colorClasses.blue;
+              };
+              const colorClasses = colorMap[rec.color as keyof typeof colorMap] || colorMap.blue;
 
               return (
                 <Card key={idx} className={`border-l-4 ${colorClasses.border} overflow-hidden hover:shadow-md transition-shadow`}>
