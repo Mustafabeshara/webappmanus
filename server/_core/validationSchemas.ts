@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import { commonSchemas } from "./inputValidation";
+import { commonSchemas } from "./input-validation";
 
 // ============================================
 // COMMON VALIDATION HELPERS

@@ -49,9 +49,27 @@ if (isProduction) {
   }
 }
 
+// Only use insecure defaults if explicitly opted in via ALLOW_INSECURE_DEV=true
+// This prevents accidental deployment with weak credentials
+const getSecretOrDevFallback = (
+  envVar: string | undefined,
+  devFallback: string
+): string => {
+  if (envVar) return envVar;
+  if (allowInsecureDev && !isProduction) {
+    console.warn(`[ENV] Using insecure dev fallback for secret`);
+    return devFallback;
+  }
+  // This should never happen if requireSecret ran correctly
+  throw new Error(`[ENV] Secret is required but not provided`);
+};
+
 export const ENV = {
   appId: process.env.VITE_APP_ID ?? "moh-tender-app",
-  cookieSecret: process.env.JWT_SECRET ?? "dev-insecure-secret",
+  cookieSecret: getSecretOrDevFallback(
+    process.env.JWT_SECRET,
+    "dev-insecure-secret-32-chars-min"
+  ),
   databaseUrl: process.env.DATABASE_URL ?? "",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
@@ -59,5 +77,8 @@ export const ENV = {
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   // Simple admin password authentication (no Manus OAuth required)
-  adminPassword: process.env.ADMIN_PASSWORD ?? "admin123",
+  adminPassword: getSecretOrDevFallback(
+    process.env.ADMIN_PASSWORD,
+    "dev-admin-pass-12"
+  ),
 };

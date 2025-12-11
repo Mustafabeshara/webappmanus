@@ -391,3 +391,73 @@ export const inputValidation = new InputValidationService();
 
 // Re-export as inputValidationService for backward compatibility with trpc.ts
 export const inputValidationService = inputValidation;
+
+// Common validation schemas using Zod
+export const commonSchemas = {
+  // Basic string validation with length limits
+  safeString: (maxLength = 255) =>
+    z
+      .string()
+      .min(1, "Field is required")
+      .max(maxLength, `Field must be ${maxLength} characters or less`)
+      .refine(
+        (val) => !inputValidationService.detectSqlInjection(val),
+        "Invalid characters detected"
+      )
+      .refine(
+        (val) => !inputValidationService.detectXssPayload(val),
+        "Invalid content detected"
+      ),
+
+  // Optional safe string
+  optionalSafeString: (maxLength = 255) =>
+    z
+      .string()
+      .max(maxLength, `Field must be ${maxLength} characters or less`)
+      .refine(
+        (val) => !val || !inputValidationService.detectSqlInjection(val),
+        "Invalid characters detected"
+      )
+      .refine(
+        (val) => !val || !inputValidationService.detectXssPayload(val),
+        "Invalid content detected"
+      )
+      .optional(),
+
+  // Email validation
+  email: z
+    .string()
+    .email({ message: "Invalid email format" })
+    .max(320, "Email must be 320 characters or less")
+    .refine(
+      (val) => !inputValidationService.detectSqlInjection(val),
+      "Invalid characters detected"
+    ),
+
+  // Safe number (positive integer)
+  positiveInt: z
+    .number()
+    .int({ message: "Must be a whole number" })
+    .positive({ message: "Must be a positive number" }),
+
+  // Safe ID
+  id: z.number().int().positive("ID must be a positive integer"),
+
+  // Date validation
+  date: z.coerce.date(),
+
+  // Optional date
+  optionalDate: z.coerce.date().optional().nullable(),
+
+  // Money amount (in cents)
+  money: z
+    .number()
+    .int({ message: "Amount must be in cents (whole number)" })
+    .min(0, { message: "Amount cannot be negative" }),
+
+  // Percentage (0-100)
+  percentage: z
+    .number()
+    .min(0, { message: "Percentage cannot be negative" })
+    .max(100, { message: "Percentage cannot exceed 100" }),
+};

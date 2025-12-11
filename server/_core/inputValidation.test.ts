@@ -8,7 +8,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { commonSchemas, inputValidationService } from "./inputValidation";
+import { commonSchemas, inputValidationService } from "./input-validation";
 
 describe("Input Validation Service - Property Tests", () => {
   describe("Property 1: Input Sanitization", () => {

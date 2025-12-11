@@ -44,11 +44,13 @@ class SDKServer {
 
   /**
    * Verify password with enhanced security
+   * IMPORTANT: Always requires a user with stored password hash
    */
   async verifyPassword(password: string, user?: User): Promise<boolean> {
-    // For backward compatibility, check against ENV.adminPassword if no user provided
+    // User is required - no anonymous password checks allowed
     if (!user) {
-      return password === ENV.adminPassword;
+      console.error("[Auth] verifyPassword called without user - this is a bug");
+      return false;
     }
 
     // Check if user account is locked
@@ -58,16 +60,25 @@ class SDKServer {
       );
     }
 
-    // If user has no password hash, fall back to ENV.adminPassword (migration period)
+    // User MUST have password hash - no ENV fallback for security
     if (!user.passwordHash || !user.passwordSalt) {
-      const isValid = password === ENV.adminPassword;
-      if (!isValid) {
-        await this.handleFailedLogin(user.id);
-      }
-      return isValid;
+      console.error(
+        "[Auth] User has no password hash - account needs migration"
+      );
+      // Log security event for missing hash
+      await createSecurityEvent({
+        type: "unauthorized_access",
+        severity: "high",
+        description: "Login attempt on account without password hash",
+        userId: user.id,
+        ipAddress: "unknown",
+        resolved: false,
+        createdAt: new Date(),
+      });
+      return false;
     }
 
-    // Verify against stored hash
+    // Verify against stored hash - NO ENV.adminPassword fallback
     const isValid = await passwordSecurity.verifyPassword(
       password,
       user.passwordHash,

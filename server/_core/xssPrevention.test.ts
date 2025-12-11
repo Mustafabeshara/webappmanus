@@ -7,7 +7,7 @@
 
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { inputValidationService } from "./inputValidation";
+import { inputValidationService } from "./input-validation";
 
 describe("XSS Prevention - Property Tests", () => {
   describe("Property 2: XSS Prevention", () => {
