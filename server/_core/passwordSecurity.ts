@@ -29,6 +29,8 @@ export interface PasswordValidationResult {
   isValid: boolean;
   errors: string[];
   score: number; // 0-100 password strength score
+  isBreached?: boolean; // Whether password was found in breach database
+  breachCount?: number; // Number of times password appeared in breaches
 }
 
 export interface AccountLockoutInfo {
@@ -39,7 +41,10 @@ export interface AccountLockoutInfo {
 }
 
 // In-memory store for login attempts (should be Redis in production)
-const loginAttempts = new Map<string, { count: number; lastAttempt: Date; lockoutUntil: Date | null }>();
+const loginAttempts = new Map<
+  string,
+  { count: number; lastAttempt: Date; lockoutUntil: Date | null }
+>();
 
 class PasswordSecurityService {
   /**
@@ -61,15 +66,90 @@ class PasswordSecurityService {
   }
 
   /**
+   * Check if password has been breached using HaveIBeenPwned API
+   */
+  async checkPasswordBreach(
+    password: string
+  ): Promise<{ isBreached: boolean; count: number }> {
+    try {
+      // Hash the password with SHA-1 (required by HaveIBeenPwned API)
+      const sha1Hash = crypto
+        .createHash("sha1")
+        .update(password)
+        .digest("hex")
+        .toUpperCase();
+      const prefix = sha1Hash.substring(0, 5);
+      const suffix = sha1Hash.substring(5);
+
+      // Query HaveIBeenPwned API with k-anonymity model
+      const response = await fetch(
+        `https://api.pwnedpasswords.com/range/${prefix}`,
+        {
+          method: "GET",
+          headers: {
+            "User-Agent": "WebAppManus-Security-Audit",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        // If API is unavailable, log warning but don't fail validation
+        auditLogger.logSecurityEvent({
+          type: "system_warning",
+          severity: "medium",
+          description:
+            "HaveIBeenPwned API unavailable for password breach check",
+          details: { status: response.status },
+        });
+        return { isBreached: false, count: 0 };
+      }
+
+      const data = await response.text();
+      const lines = data.split("\n");
+
+      for (const line of lines) {
+        const [hashSuffix, count] = line.split(":");
+        if (hashSuffix === suffix) {
+          return { isBreached: true, count: parseInt(count, 10) };
+        }
+      }
+
+      return { isBreached: false, count: 0 };
+    } catch (error) {
+      // Log error but don't fail validation if breach check fails
+      auditLogger.logSecurityEvent({
+        type: "system_error",
+        severity: "medium",
+        description: "Error checking password breach status",
+        details: {
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+      });
+      return { isBreached: false, count: 0 };
+    }
+  }
+
+  /**
    * Validate password against security policy
    */
   validatePassword(password: string): PasswordValidationResult {
     const errors: string[] = [];
     let score = 0;
 
+    // Handle null/undefined inputs
+    if (!password || typeof password !== "string") {
+      return {
+        isValid: false,
+        errors: ["Password is required and must be a string"],
+        score: 0,
+      };
+    }
+
     // Length checks
     if (password.length < PASSWORD_POLICY.MIN_LENGTH) {
-      errors.push(`Password must be at least ${PASSWORD_POLICY.MIN_LENGTH} characters long`);
+      errors.push(
+        `Password must be at least ${PASSWORD_POLICY.MIN_LENGTH} characters long`
+      );
     } else {
       score += 20;
       if (password.length >= 16) score += 10;
@@ -77,7 +157,9 @@ class PasswordSecurityService {
     }
 
     if (password.length > PASSWORD_POLICY.MAX_LENGTH) {
-      errors.push(`Password must not exceed ${PASSWORD_POLICY.MAX_LENGTH} characters`);
+      errors.push(
+        `Password must not exceed ${PASSWORD_POLICY.MAX_LENGTH} characters`
+      );
     }
 
     // Uppercase check
@@ -102,9 +184,16 @@ class PasswordSecurityService {
     }
 
     // Special character check
-    const specialCharRegex = new RegExp(`[${PASSWORD_POLICY.SPECIAL_CHARS.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}]`);
-    if (PASSWORD_POLICY.REQUIRE_SPECIAL_CHARS && !specialCharRegex.test(password)) {
-      errors.push("Password must contain at least one special character (!@#$%^&*...)");
+    const specialCharRegex = new RegExp(
+      `[${PASSWORD_POLICY.SPECIAL_CHARS.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}]`
+    );
+    if (
+      PASSWORD_POLICY.REQUIRE_SPECIAL_CHARS &&
+      !specialCharRegex.test(password)
+    ) {
+      errors.push(
+        "Password must contain at least one special character (!@#$%^&*...)"
+      );
     } else if (specialCharRegex.test(password)) {
       score += 15;
     }
@@ -112,7 +201,9 @@ class PasswordSecurityService {
     // Check for common patterns (reduces score)
     if (this.hasCommonPatterns(password)) {
       score -= 20;
-      errors.push("Password contains common patterns that make it easier to guess");
+      errors.push(
+        "Password contains common patterns that make it easier to guess"
+      );
     }
 
     // Check for sequential characters
@@ -154,7 +245,7 @@ class PasswordSecurityService {
     ];
 
     const lowerPassword = password.toLowerCase();
-    return commonPatterns.some((pattern) => lowerPassword.includes(pattern));
+    return commonPatterns.some(pattern => lowerPassword.includes(pattern));
   }
 
   /**
@@ -187,6 +278,31 @@ class PasswordSecurityService {
    */
   private hasRepeatedChars(password: string): boolean {
     return /(.)\1{3,}/.test(password);
+  }
+
+  /**
+   * Comprehensive password validation including breach check
+   */
+  async validatePasswordWithBreachCheck(
+    password: string
+  ): Promise<PasswordValidationResult> {
+    const basicValidation = this.validatePassword(password);
+
+    // Check for breaches
+    const breachResult = await this.checkPasswordBreach(password);
+
+    if (breachResult.isBreached) {
+      basicValidation.errors.push(
+        `Password has been found in ${breachResult.count} data breach(es). Please choose a different password.`
+      );
+      basicValidation.isValid = false;
+      basicValidation.score = Math.max(0, basicValidation.score - 30); // Significant penalty for breached passwords
+    }
+
+    basicValidation.isBreached = breachResult.isBreached;
+    basicValidation.breachCount = breachResult.count;
+
+    return basicValidation;
   }
 
   /**
@@ -231,7 +347,9 @@ class PasswordSecurityService {
 
     // Check if we should lock the account
     if (current.count >= PASSWORD_POLICY.MAX_LOGIN_ATTEMPTS) {
-      current.lockoutUntil = new Date(now.getTime() + PASSWORD_POLICY.LOCKOUT_DURATION_MS);
+      current.lockoutUntil = new Date(
+        now.getTime() + PASSWORD_POLICY.LOCKOUT_DURATION_MS
+      );
 
       // Log security event
       auditLogger.logSecurityEvent({
@@ -254,7 +372,10 @@ class PasswordSecurityService {
       isLocked: current.lockoutUntil !== null && current.lockoutUntil > now,
       failedAttempts: current.count,
       lockoutUntil: current.lockoutUntil,
-      remainingAttempts: Math.max(0, PASSWORD_POLICY.MAX_LOGIN_ATTEMPTS - current.count),
+      remainingAttempts: Math.max(
+        0,
+        PASSWORD_POLICY.MAX_LOGIN_ATTEMPTS - current.count
+      ),
     };
   }
 
@@ -289,7 +410,10 @@ class PasswordSecurityService {
       isLocked: existing.lockoutUntil !== null && existing.lockoutUntil > now,
       failedAttempts: existing.count,
       lockoutUntil: existing.lockoutUntil,
-      remainingAttempts: Math.max(0, PASSWORD_POLICY.MAX_LOGIN_ATTEMPTS - existing.count),
+      remainingAttempts: Math.max(
+        0,
+        PASSWORD_POLICY.MAX_LOGIN_ATTEMPTS - existing.count
+      ),
     };
   }
 
@@ -305,7 +429,9 @@ class PasswordSecurityService {
    */
   isPasswordExpired(lastPasswordChange: Date): boolean {
     const expiryDate = new Date(lastPasswordChange);
-    expiryDate.setDate(expiryDate.getDate() + PASSWORD_POLICY.PASSWORD_EXPIRY_DAYS);
+    expiryDate.setDate(
+      expiryDate.getDate() + PASSWORD_POLICY.PASSWORD_EXPIRY_DAYS
+    );
     return new Date() > expiryDate;
   }
 
@@ -361,7 +487,9 @@ class PasswordSecurityService {
     }
 
     requirements.push("No common passwords or patterns");
-    requirements.push(`Cannot reuse last ${PASSWORD_POLICY.PASSWORD_HISTORY_COUNT} passwords`);
+    requirements.push(
+      `Cannot reuse last ${PASSWORD_POLICY.PASSWORD_HISTORY_COUNT} passwords`
+    );
 
     return requirements;
   }
