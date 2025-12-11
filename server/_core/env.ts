@@ -1,27 +1,31 @@
 const isProduction = process.env.NODE_ENV === "production";
+const allowInsecureDev = process.env.ALLOW_INSECURE_DEV === "true";
 
 function requireSecret(
   name: string,
   value: string | undefined | null,
   minLength = 16
 ) {
-  if (!isProduction) {
+  // Only allow insecure fallbacks if explicitly opted in via ALLOW_INSECURE_DEV=true
+  if (allowInsecureDev && !isProduction) {
     if (!value) {
       console.warn(
-        `[ENV] Missing ${name}; using insecure dev fallback. Do NOT use in production.`
+        `[ENV] WARNING: Missing ${name}; using insecure dev fallback. Set ALLOW_INSECURE_DEV=false or provide proper secrets.`
       );
     }
     return;
   }
 
+  // In all other cases (production OR dev without explicit opt-in), require proper secrets
   if (!value || value.length < minLength) {
     throw new Error(
-      `[ENV] ${name} is required in production and must be at least ${minLength} characters.`
+      `[ENV] ${name} is required and must be at least ${minLength} characters. ` +
+      `Set ALLOW_INSECURE_DEV=true to use insecure defaults in development.`
     );
   }
 }
 
-// Validate critical secrets early
+// Validate critical secrets early - now enforced in ALL environments unless explicitly opted out
 requireSecret("JWT_SECRET", process.env.JWT_SECRET, 32);
 requireSecret("ADMIN_PASSWORD", process.env.ADMIN_PASSWORD, 12);
 
@@ -34,6 +38,13 @@ if (isProduction) {
   if (process.env.ADMIN_PASSWORD === "admin123") {
     throw new Error(
       "[ENV] Default admin password must be changed in production"
+    );
+  }
+
+  // Prevent accidental insecure dev mode in production
+  if (allowInsecureDev) {
+    throw new Error(
+      "[ENV] ALLOW_INSECURE_DEV cannot be true in production"
     );
   }
 }

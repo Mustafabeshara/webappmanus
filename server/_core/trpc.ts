@@ -3,17 +3,17 @@ import { TRPCError, initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { auditLogger } from "./auditLogger";
 import type { TrpcContext } from "./context";
-import { csrfProtectionService } from "./csrfProtection";
-import { inputValidationService } from "./inputValidation";
+import { csrfProtectionService } from "./csrf-protection";
+import { inputValidationService } from "./input-validation";
 import {
   RATE_LIMITS,
   getClientId,
   isRateLimited,
   type RateLimitConfig,
-} from "./rateLimit";
+} from "./rate-limiting";
 
 // Re-export rate limit config for convenience
-export { RATE_LIMITS } from "./rateLimit";
+export { RATE_LIMITS } from "./rate-limiting";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,

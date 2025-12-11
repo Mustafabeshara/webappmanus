@@ -33,6 +33,8 @@ import {
   opportunities,
   participantBidItems,
   passwordHistory,
+  priceHistory,
+  productSpecifications,
   products,
   purchaseOrderItems,
   purchaseOrders,
@@ -42,7 +44,10 @@ import {
   securityEvents,
   sessions,
   settings,
+  supplierPrices,
   suppliers,
+  taskDependencies,
+  taskEscalations,
   tasks,
   templateItems,
   tenderItems,
@@ -51,6 +56,9 @@ import {
   tenders,
   userPermissions,
   users,
+  workflowInstances,
+  workflowSteps,
+  workflowTemplates,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -112,6 +120,16 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     } else if (user.openId === ENV.ownerOpenId) {
       values.role = "admin";
       updateSet.role = "admin";
+    }
+
+    // Handle password hash and salt for admin accounts
+    if (user.passwordHash !== undefined) {
+      values.passwordHash = user.passwordHash;
+      updateSet.passwordHash = user.passwordHash;
+    }
+    if (user.passwordSalt !== undefined) {
+      values.passwordSalt = user.passwordSalt;
+      updateSet.passwordSalt = user.passwordSalt;
     }
 
     if (!values.lastSignedIn) {
@@ -540,88 +558,136 @@ export async function getSupplierPrice(supplierId: number, productId: number) {
   const db = await getDb();
   if (!db) return null;
 
-  // Placeholder implementation - would need supplier_prices table
-  console.log("Getting supplier price for:", supplierId, productId);
-  return null;
+  const result = await db
+    .select()
+    .from(supplierPrices)
+    .where(
+      and(
+        eq(supplierPrices.supplierId, supplierId),
+        eq(supplierPrices.productId, productId)
+      )
+    )
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
 }
 
-export async function updateSupplierPrice(id: number, data: any) {
+export async function updateSupplierPrice(
+  id: number,
+  data: Partial<typeof supplierPrices.$inferInsert>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Placeholder implementation
-  console.log("Updating supplier price:", id, data);
+  await db.update(supplierPrices).set(data).where(eq(supplierPrices.id, id));
 }
 
-export async function createSupplierPrice(data: any) {
+export async function createSupplierPrice(
+  data: typeof supplierPrices.$inferInsert
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Placeholder implementation
-  console.log("Creating supplier price:", data);
-  return 1; // Mock ID
+  const [result] = await db.insert(supplierPrices).values(data);
+  return Number((result as any).insertId);
 }
 
-export async function createPriceHistory(data: any) {
+export async function createPriceHistory(
+  data: typeof priceHistory.$inferInsert
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Placeholder implementation
-  console.log("Creating price history:", data);
+  const [result] = await db.insert(priceHistory).values(data);
+  return { insertId: (result as any).insertId };
 }
 
 export async function getProductSupplierPrices(productId: number) {
   const db = await getDb();
   if (!db) return [];
 
-  // Placeholder implementation
-  return [];
+  return db
+    .select()
+    .from(supplierPrices)
+    .where(eq(supplierPrices.productId, productId))
+    .orderBy(asc(supplierPrices.price));
 }
 
 export async function getProductSpecifications(productId: number) {
   const db = await getDb();
   if (!db) return [];
 
-  // Placeholder implementation
-  return [];
-}
-
-export async function updateProductSpecification(id: number, data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  // Placeholder implementation
-  console.log("Updating product specification:", id, data);
-}
-
-export async function createProductSpecification(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  // Placeholder implementation
-  console.log("Creating product specification:", data);
-}
-
-export async function getSupplierOrders(supplierId: number, dateRange?: any) {
-  const db = await getDb();
-  if (!db) return [];
-
-  // Use purchase orders as supplier orders
   return db
     .select()
-    .from(purchaseOrders)
-    .where(eq(purchaseOrders.supplierId, supplierId));
+    .from(productSpecifications)
+    .where(eq(productSpecifications.productId, productId))
+    .orderBy(asc(productSpecifications.displayOrder));
 }
 
-export async function getSupplierDeliveries(
+export async function updateProductSpecification(
+  id: number,
+  data: Partial<typeof productSpecifications.$inferInsert>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(productSpecifications)
+    .set(data)
+    .where(eq(productSpecifications.id, id));
+}
+
+export async function createProductSpecification(
+  data: typeof productSpecifications.$inferInsert
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db.insert(productSpecifications).values(data);
+  return { insertId: (result as any).insertId };
+}
+
+export async function getSupplierOrders(
   supplierId: number,
-  dateRange?: any
+  dateRange?: { start?: Date; end?: Date }
 ) {
   const db = await getDb();
   if (!db) return [];
 
-  // Placeholder implementation - would need to join deliveries with suppliers
-  return [];
+  const conditions = [eq(purchaseOrders.supplierId, supplierId)];
+
+  if (dateRange?.start) {
+    conditions.push(gte(purchaseOrders.createdAt, dateRange.start));
+  }
+  if (dateRange?.end) {
+    conditions.push(lte(purchaseOrders.createdAt, dateRange.end));
+  }
+
+  return db
+    .select()
+    .from(purchaseOrders)
+    .where(and(...conditions))
+    .orderBy(desc(purchaseOrders.createdAt));
+}
+
+export async function getSupplierDeliveries(
+  supplierId: number,
+  dateRange?: { start?: Date; end?: Date }
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  // Get deliveries linked to purchase orders from this supplier
+  const supplierOrders = await getSupplierOrders(supplierId, dateRange);
+  const orderIds = supplierOrders.map((o) => o.id);
+
+  if (orderIds.length === 0) return [];
+
+  return db
+    .select()
+    .from(deliveries)
+    .where(inArray(deliveries.purchaseOrderId, orderIds))
+    .orderBy(desc(deliveries.createdAt));
 }
 
 export async function findProductByNameOrCode(name: string, code: string) {
@@ -1794,101 +1860,164 @@ export async function deleteTask(id: number) {
 // TASK MANAGEMENT ADVANCED FUNCTIONS
 // ============================================
 
-export async function createTaskDependency(dependency: {
-  taskId: number;
-  dependsOnTaskId: number;
-  dependencyType: string;
-  lagDays?: number;
-  isBlocking: boolean;
-  createdAt: Date;
-}) {
+export async function createTaskDependency(
+  dependency: typeof taskDependencies.$inferInsert
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // For now, store as JSON in task notes or create a simple dependency table
-  // This is a placeholder implementation
-  console.log("Task dependency created:", dependency);
+  const [result] = await db.insert(taskDependencies).values(dependency);
+  return { insertId: (result as any).insertId };
 }
 
 export async function getTaskDependencies(taskId: number) {
   const db = await getDb();
   if (!db) return [];
 
-  // Placeholder implementation
-  return [];
+  return db
+    .select()
+    .from(taskDependencies)
+    .where(eq(taskDependencies.taskId, taskId));
 }
 
 export async function getTaskDependents(taskId: number) {
   const db = await getDb();
   if (!db) return [];
 
-  // Placeholder implementation
-  return [];
+  // Get tasks that depend on this task
+  return db
+    .select()
+    .from(taskDependencies)
+    .where(eq(taskDependencies.dependsOnTaskId, taskId));
 }
 
-export async function createWorkflowTemplate(template: {
-  name: string;
-  description?: string;
-  category: string;
-  isActive: boolean;
-  createdBy: number;
-  createdAt: Date;
-}) {
+export async function createWorkflowTemplate(
+  template: typeof workflowTemplates.$inferInsert
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Placeholder implementation - would need workflow_templates table
-  console.log("Workflow template created:", template);
-  return 1; // Mock ID
+  const [result] = await db.insert(workflowTemplates).values(template);
+  return Number((result as any).insertId);
 }
 
 export async function getWorkflowTemplateById(id: number) {
   const db = await getDb();
   if (!db) return null;
 
-  // Placeholder implementation
-  return null;
+  const result = await db
+    .select()
+    .from(workflowTemplates)
+    .where(eq(workflowTemplates.id, id))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
 }
 
-export async function createWorkflowStep(step: any) {
+export async function getAllWorkflowTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(workflowTemplates)
+    .where(eq(workflowTemplates.isActive, true))
+    .orderBy(asc(workflowTemplates.name));
+}
+
+export async function createWorkflowStep(
+  step: typeof workflowSteps.$inferInsert
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Placeholder implementation
-  console.log("Workflow step created:", step);
+  const [result] = await db.insert(workflowSteps).values(step);
+  return { insertId: (result as any).insertId };
 }
 
 export async function getWorkflowSteps(templateId: number) {
   const db = await getDb();
   if (!db) return [];
 
-  // Placeholder implementation
-  return [];
+  return db
+    .select()
+    .from(workflowSteps)
+    .where(eq(workflowSteps.templateId, templateId))
+    .orderBy(asc(workflowSteps.stepNumber));
 }
 
-export async function createWorkflowInstance(instance: any) {
+export async function createWorkflowInstance(
+  instance: typeof workflowInstances.$inferInsert
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Placeholder implementation
-  console.log("Workflow instance created:", instance);
-  return 1; // Mock ID
+  const [result] = await db.insert(workflowInstances).values(instance);
+  return Number((result as any).insertId);
 }
 
-export async function updateWorkflowInstance(id: number, updates: any) {
+export async function updateWorkflowInstance(
+  id: number,
+  updates: Partial<typeof workflowInstances.$inferInsert>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Placeholder implementation
-  console.log("Workflow instance updated:", id, updates);
+  await db
+    .update(workflowInstances)
+    .set(updates)
+    .where(eq(workflowInstances.id, id));
+}
+
+export async function getWorkflowInstanceById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(workflowInstances)
+    .where(eq(workflowInstances.id, id))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
 }
 
 export async function getWorkflowInstanceTasks(instanceId: number) {
   const db = await getDb();
   if (!db) return [];
 
-  // Placeholder implementation
-  return [];
+  // Get tasks related to this workflow instance via entityType/entityId
+  const instance = await getWorkflowInstanceById(instanceId);
+  if (!instance) return [];
+
+  // Return tasks that are related to the entity this workflow is for
+  return db
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.relatedEntityType, instance.entityType),
+        eq(tasks.relatedEntityId, instance.entityId)
+      )
+    )
+    .orderBy(asc(tasks.createdAt));
+}
+
+export async function getActiveWorkflowInstances(entityType?: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(workflowInstances.status, "active")];
+
+  if (entityType) {
+    conditions.push(eq(workflowInstances.entityType, entityType));
+  }
+
+  return db
+    .select()
+    .from(workflowInstances)
+    .where(and(...conditions))
+    .orderBy(desc(workflowInstances.startedAt));
 }
 
 export async function getOverdueTasks() {
@@ -1911,16 +2040,58 @@ export async function getActiveTaskEscalation(taskId: number, level: number) {
   const db = await getDb();
   if (!db) return null;
 
-  // Placeholder implementation
-  return null;
+  const result = await db
+    .select()
+    .from(taskEscalations)
+    .where(
+      and(
+        eq(taskEscalations.taskId, taskId),
+        eq(taskEscalations.escalationLevel, level),
+        sql`${taskEscalations.resolvedAt} IS NULL`
+      )
+    )
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
 }
 
-export async function createTaskEscalation(escalation: any) {
+export async function createTaskEscalation(
+  escalation: typeof taskEscalations.$inferInsert
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  // Placeholder implementation
-  console.log("Task escalation created:", escalation);
+  const [result] = await db.insert(taskEscalations).values(escalation);
+  return { insertId: (result as any).insertId };
+}
+
+export async function resolveTaskEscalation(
+  id: number,
+  resolvedBy: number,
+  resolution: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(taskEscalations)
+    .set({
+      resolvedAt: new Date(),
+      resolvedBy,
+      resolution,
+    })
+    .where(eq(taskEscalations.id, id));
+}
+
+export async function getTaskEscalations(taskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(taskEscalations)
+    .where(eq(taskEscalations.taskId, taskId))
+    .orderBy(desc(taskEscalations.createdAt));
 }
 
 export async function createTaskNotification(notification: any) {
@@ -1936,6 +2107,25 @@ export async function createTaskNotification(notification: any) {
     entityType: "task",
     entityId: notification.taskId,
     priority: "normal",
+  });
+}
+
+export async function createTaskComment(comment: {
+  taskId: number;
+  userId: number;
+  content: string;
+  isSystemComment?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Store task comments as audit log entries
+  await db.insert(auditLogs).values({
+    userId: comment.userId,
+    entityType: "task",
+    entityId: comment.taskId,
+    action: comment.isSystemComment ? "system_comment" : "comment",
+    changes: JSON.stringify({ content: comment.content }),
   });
 }
 
@@ -2353,5 +2543,5 @@ export async function getFileUploadById(id: number) {
 }
 
 // Re-export drizzle operators and tables for use in security modules
-export { sessions };
+export { sessions, securityEvents };
 export { eq, and, or, lt, gt, lte, gte, desc, asc };

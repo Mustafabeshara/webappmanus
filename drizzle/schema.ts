@@ -1082,6 +1082,147 @@ export const fileUploads = mysqlTable("file_uploads", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+// =============================================================================
+// SUPPLIER PRICING AND CATALOG TABLES
+// =============================================================================
+
+/**
+ * Supplier-specific pricing for products
+ */
+export const supplierPrices = mysqlTable("supplier_prices", {
+  id: int("id").autoincrement().primaryKey(),
+  supplierId: int("supplierId").notNull(),
+  productId: int("productId").notNull(),
+  price: int("price").notNull(), // in cents
+  currency: varchar("currency", { length: 3 }).default("SAR").notNull(),
+  minOrderQuantity: int("minOrderQuantity").default(1),
+  leadTimeDays: int("leadTimeDays"),
+  validFrom: date("validFrom").notNull(),
+  validTo: date("validTo"),
+  isPreferred: boolean("isPreferred").default(false).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Price history for audit trail and analytics
+ */
+export const priceHistory = mysqlTable("price_history", {
+  id: int("id").autoincrement().primaryKey(),
+  supplierPriceId: int("supplierPriceId").notNull(),
+  supplierId: int("supplierId").notNull(),
+  productId: int("productId").notNull(),
+  oldPrice: int("oldPrice").notNull(), // in cents
+  newPrice: int("newPrice").notNull(), // in cents
+  changeReason: varchar("changeReason", { length: 255 }),
+  changedBy: int("changedBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/**
+ * Product specifications (technical details, compliance info)
+ */
+export const productSpecifications = mysqlTable("product_specifications", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("productId").notNull(),
+  specKey: varchar("specKey", { length: 100 }).notNull(), // e.g., "dimensions", "weight", "certifications"
+  specValue: text("specValue").notNull(),
+  unit: varchar("unit", { length: 50 }), // e.g., "cm", "kg", "units"
+  displayOrder: int("displayOrder").default(0),
+  isPublic: boolean("isPublic").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// =============================================================================
+// WORKFLOW AND TASK MANAGEMENT TABLES
+// =============================================================================
+
+/**
+ * Workflow templates for automation
+ */
+export const workflowTemplates = mysqlTable("workflow_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  triggerType: varchar("triggerType", { length: 50 }).notNull(), // manual, document_upload, deadline, etc.
+  entityType: varchar("entityType", { length: 50 }), // tender, invoice, delivery, etc.
+  isActive: boolean("isActive").default(true).notNull(),
+  config: text("config"), // JSON configuration for the workflow
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Steps within a workflow template
+ */
+export const workflowSteps = mysqlTable("workflow_steps", {
+  id: int("id").autoincrement().primaryKey(),
+  templateId: int("templateId").notNull(),
+  stepNumber: int("stepNumber").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  assigneeRole: varchar("assigneeRole", { length: 100 }), // role or user ID
+  assigneeUserId: int("assigneeUserId"),
+  dueDaysFromStart: int("dueDaysFromStart"), // days from workflow start
+  dueDaysFromPrevious: int("dueDaysFromPrevious"), // days from previous step
+  requiresApproval: boolean("requiresApproval").default(false).notNull(),
+  autoProgressCondition: text("autoProgressCondition"), // JSON condition for auto-progress
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/**
+ * Running workflow instances
+ */
+export const workflowInstances = mysqlTable("workflow_instances", {
+  id: int("id").autoincrement().primaryKey(),
+  templateId: int("templateId").notNull(),
+  entityType: varchar("entityType", { length: 50 }).notNull(),
+  entityId: int("entityId").notNull(),
+  currentStepId: int("currentStepId"),
+  status: mysqlEnum("status", ["active", "paused", "completed", "cancelled"])
+    .default("active")
+    .notNull(),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+  context: text("context"), // JSON context data
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Task dependencies for complex workflows
+ */
+export const taskDependencies = mysqlTable("task_dependencies", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  dependsOnTaskId: int("dependsOnTaskId").notNull(),
+  dependencyType: mysqlEnum("dependencyType", ["blocks", "requires"])
+    .default("blocks")
+    .notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/**
+ * Task escalations for overdue items
+ */
+export const taskEscalations = mysqlTable("task_escalations", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  escalationLevel: int("escalationLevel").default(1).notNull(),
+  escalatedTo: int("escalatedTo").notNull(), // user ID
+  escalatedFrom: int("escalatedFrom"), // original assignee
+  reason: varchar("reason", { length: 255 }).notNull(),
+  dueDate: date("dueDate"),
+  resolvedAt: timestamp("resolvedAt"),
+  resolvedBy: int("resolvedBy"),
+  resolution: text("resolution"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -1127,3 +1268,23 @@ export type CommissionAssignment = typeof commissionAssignments.$inferSelect;
 export type CommissionEntry = typeof commissionEntries.$inferSelect;
 export type Employee = typeof employees.$inferSelect;
 export type LeaveRequest = typeof leaveRequests.$inferSelect;
+
+// New table types
+export type SupplierPrice = typeof supplierPrices.$inferSelect;
+export type InsertSupplierPrice = typeof supplierPrices.$inferInsert;
+export type PriceHistoryEntry = typeof priceHistory.$inferSelect;
+export type InsertPriceHistory = typeof priceHistory.$inferInsert;
+export type ProductSpecification = typeof productSpecifications.$inferSelect;
+export type InsertProductSpecification = typeof productSpecifications.$inferInsert;
+export type WorkflowTemplate = typeof workflowTemplates.$inferSelect;
+export type InsertWorkflowTemplate = typeof workflowTemplates.$inferInsert;
+export type WorkflowStep = typeof workflowSteps.$inferSelect;
+export type InsertWorkflowStep = typeof workflowSteps.$inferInsert;
+export type WorkflowInstance = typeof workflowInstances.$inferSelect;
+export type InsertWorkflowInstance = typeof workflowInstances.$inferInsert;
+export type TaskDependency = typeof taskDependencies.$inferSelect;
+export type InsertTaskDependency = typeof taskDependencies.$inferInsert;
+export type TaskEscalation = typeof taskEscalations.$inferSelect;
+export type InsertTaskEscalation = typeof taskEscalations.$inferInsert;
+export type SecurityEvent = typeof securityEvents.$inferSelect;
+export type InsertSecurityEvent = typeof securityEvents.$inferInsert;

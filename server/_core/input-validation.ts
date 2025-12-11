@@ -388,3 +388,6 @@ export async function createSecurityEvent(event: {
 }
 
 export const inputValidation = new InputValidationService();
+
+// Re-export as inputValidationService for backward compatibility with trpc.ts
+export const inputValidationService = inputValidation;

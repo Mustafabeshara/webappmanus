@@ -251,6 +251,66 @@ class CsrfProtectionService {
     const token = this.generateTokenForResponse(sessionId);
     res.setHeader("X-CSRF-Token", token);
   }
+
+  // =============================================================================
+  // TRPC COMPATIBILITY METHODS (for use in trpc.ts middleware)
+  // =============================================================================
+
+  /**
+   * Get CSRF token from TRPC context headers
+   * Compatible with csrfProtectionService.getTokenFromHeaders
+   */
+  getTokenFromHeaders(ctx: { req: Request }): string | undefined {
+    return this.extractCsrfToken(ctx.req) || undefined;
+  }
+
+  /**
+   * Get CSRF token from TRPC context cookies
+   * Compatible with csrfProtectionService.getTokenFromCookies
+   */
+  getTokenFromCookies(ctx: { req: Request }): string | undefined {
+    const cookieHeader = ctx.req.headers.cookie;
+    if (!cookieHeader) return undefined;
+
+    // Parse cookies and look for CSRF token cookie
+    const cookies = cookieHeader.split(";").reduce(
+      (acc, cookie) => {
+        const [key, value] = cookie.trim().split("=");
+        if (key && value) {
+          acc[key] = decodeURIComponent(value);
+        }
+        return acc;
+      },
+      {} as Record<string, string>
+    );
+
+    return cookies["csrf-token"] || cookies["_csrf"] || undefined;
+  }
+
+  /**
+   * Validate CSRF token for TRPC context
+   * Compatible with csrfProtectionService.validateToken
+   */
+  validateToken(
+    tokenFromHeader: string | undefined,
+    tokenFromCookie: string | undefined,
+    ctx: { user?: { sessionId?: string } }
+  ): boolean {
+    const token = tokenFromHeader || tokenFromCookie;
+    if (!token) return false;
+
+    // Get session ID from context
+    const sessionId = ctx.user?.sessionId;
+    if (!sessionId) {
+      // For unauthenticated requests, just check token format validity
+      return token.length > 0;
+    }
+
+    return this.validateCsrfToken(token, sessionId);
+  }
 }
 
 export const csrfProtection = new CsrfProtectionService();
+
+// Re-export as csrfProtectionService for backward compatibility with trpc.ts
+export const csrfProtectionService = csrfProtection;

@@ -356,3 +356,107 @@ setInterval(
   },
   1000 * 60 * 5
 ); // Clean up every 5 minutes
+
+// =============================================================================
+// BACKWARD COMPATIBILITY EXPORTS (for trpc.ts and oauth.ts)
+// =============================================================================
+
+// Simple in-memory rate limit store for backward compatibility
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+
+/**
+ * Get client identifier for rate limiting (compatible with old rateLimit.ts)
+ */
+export function getClientId(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    const ip = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(",")[0];
+    return ip.trim();
+  }
+  return req.ip || "unknown";
+}
+
+/**
+ * Check if request is rate limited (compatible with old rateLimit.ts)
+ */
+export function isRateLimited(
+  key: string,
+  config: RateLimitConfig
+): { limited: boolean; remaining: number; resetIn: number } {
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+
+  // First request or window expired
+  if (!entry || now >= entry.resetTime) {
+    rateLimitStore.set(key, {
+      count: 1,
+      resetTime: now + config.windowMs,
+    });
+    return { limited: false, remaining: config.maxRequests - 1, resetIn: config.windowMs };
+  }
+
+  // Increment count
+  entry.count++;
+  rateLimitStore.set(key, entry);
+
+  const limited = entry.count > config.maxRequests;
+  const remaining = Math.max(0, config.maxRequests - entry.count);
+  const resetIn = entry.resetTime - now;
+
+  return { limited, remaining, resetIn };
+}
+
+// Predefined rate limit configurations
+export const RATE_LIMITS = {
+  // OAuth/Auth endpoints: 10 requests per minute
+  auth: {
+    windowMs: 60_000,
+    maxRequests: 10,
+    message: "Too many authentication attempts. Please try again later.",
+  },
+  // File uploads: 20 uploads per minute
+  upload: {
+    windowMs: 60_000,
+    maxRequests: 20,
+    message: "Too many file uploads. Please wait before uploading more files.",
+  },
+  // General mutations: 100 requests per minute
+  mutation: {
+    windowMs: 60_000,
+    maxRequests: 100,
+    message: "Too many requests. Please slow down.",
+  },
+  // Sensitive operations (delete, admin): 30 per minute
+  sensitive: {
+    windowMs: 60_000,
+    maxRequests: 30,
+    message: "Too many sensitive operations. Please try again later.",
+  },
+} as const;
+
+/**
+ * Express middleware for rate limiting (compatible with old rateLimit.ts)
+ */
+export function expressRateLimit(config: RateLimitConfig) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const clientId = getClientId(req);
+    const key = `${clientId}:${req.url}`;
+    const { limited, remaining, resetIn } = isRateLimited(key, config);
+
+    // Set rate limit headers
+    res.setHeader("X-RateLimit-Limit", config.maxRequests);
+    res.setHeader("X-RateLimit-Remaining", remaining);
+    res.setHeader("X-RateLimit-Reset", Math.ceil(resetIn / 1000));
+
+    if (limited) {
+      res.status(429).json({
+        error: "RATE_LIMITED",
+        message: config.message || "Too many requests",
+        retryAfterMs: resetIn,
+      });
+      return;
+    }
+
+    next();
+  };
+}

@@ -1,5 +1,10 @@
 import { vi, beforeEach } from "vitest";
 
+// Set up test environment variables BEFORE any imports
+process.env.JWT_SECRET = "test-jwt-secret-must-be-at-least-32-characters-long";
+process.env.ADMIN_PASSWORD = "test-admin-password";
+process.env.ALLOW_INSECURE_DEV = "true";
+
 // In-memory storage for mocked data
 let mockTenders: any[] = [];
 let mockTenderTemplates: any[] = [];
