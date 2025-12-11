@@ -3,6 +3,7 @@ import { TRPCError, initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { auditLogger } from "./auditLogger";
 import type { TrpcContext } from "./context";
+import { csrfProtectionService } from "./csrfProtection";
 import { inputValidationService } from "./inputValidation";
 import {
   RATE_LIMITS,
@@ -174,9 +175,15 @@ async function checkObjectForThreats(
 
 /**
  * CSRF protection middleware for state-changing operations
+ * Disabled in development for easier testing
  */
 const csrfProtectionMiddleware = t.middleware(async opts => {
   const { ctx, next } = opts;
+
+  // Skip CSRF validation in development
+  if (process.env.NODE_ENV !== "production") {
+    return next();
+  }
 
   // Get CSRF tokens from headers and cookies
   const tokenFromHeader = csrfProtectionService.getTokenFromHeaders(ctx);

@@ -50,6 +50,13 @@
       "when": 1765137439263,
       "tag": "0006_stale_moon_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1765412878706,
+      "tag": "0007_nebulous_magdalene",
+      "breakpoints": true
     }
   ]
 }
