@@ -293,6 +293,8 @@ async function extractWithJavaScript(
     // Parse extracted text to find tender information
     const result = parseTenderText(text, filename, options.department);
     console.log("[OCR JS] Parsed result - ref:", result.reference_number, "items:", result.items?.length);
+    console.log("[OCR JS] Closing date extracted:", result.closing_date);
+    console.log("[OCR JS] First 500 chars of text:", text.substring(0, 500));
 
     return {
       success: true,
@@ -409,10 +411,30 @@ function parseTenderText(
 
   // Extract closing date - try multiple patterns
   const closingDatePatterns = [
-    /CLOSING\s*DATE\s*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    // Standard formats
+    /CLOSING\s*DATE\s*[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
     /(?:Closing\s*Date|Close\s*Date|Last\s*Date|Deadline)[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
     /(?:close[sd]?\s*(?:on|by)?|deadline)[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
-    /ــــخ اﻹغـﻼق[:\s]*([\d]{4}[/\-.][\d]{1,2}[/\-.][\d]{1,2})/i, // Arabic closing date
+    // ISO format YYYY-MM-DD
+    /CLOSING\s*DATE\s*[:\s]*([\d]{4}[/\-.][\d]{1,2}[/\-.][\d]{1,2})/i,
+    /(?:Closing\s*Date|Close\s*Date|Last\s*Date|Deadline)[:\s]*([\d]{4}[/\-.][\d]{1,2}[/\-.][\d]{1,2})/i,
+    // Date after CLOSING DATE on next line or with colon
+    /CLOSING\s*DATE\s*\n\s*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    /CLOSING\s*DATE\s*\n\s*([\d]{4}[/\-.][\d]{1,2}[/\-.][\d]{1,2})/i,
+    // Format: "Closing: DD/MM/YYYY" or "Close: DD/MM/YYYY"
+    /(?:Closing|Close)\s*:\s*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    // Tender closes on DD/MM/YYYY
+    /tender\s+closes?\s+(?:on\s+)?([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    // Submission deadline: DD/MM/YYYY
+    /submission\s*deadline\s*[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    // Due date: DD/MM/YYYY
+    /due\s*date\s*[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    // Arabic closing date formats
+    /تاريخ\s*الإغلاق\s*[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    /تاريخ\s*الاغلاق\s*[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    /ــــخ اﻹغـﻼق[:\s]*([\d]{4}[/\-.][\d]{1,2}[/\-.][\d]{1,2})/i,
+    // Generic date near "closing" keyword (looser match)
+    /closing[^\d]{0,20}([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
   ];
 
   let closingDate = "";
@@ -421,6 +443,27 @@ function parseTenderText(
     if (match) {
       closingDate = match[1].replace(/-/g, "/").replace(/\./g, "/");
       break;
+    }
+  }
+
+  // If still no closing date found, try to find any date that looks like a deadline
+  // by scanning for dates near keywords
+  if (!closingDate) {
+    const datePattern = /([\d]{1,2})[/\-\.]([\d]{1,2})[/\-\.]([\d]{2,4})/g;
+    const keywordPattern = /closing|deadline|due|last\s*date|submission/i;
+    const lines = text.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (keywordPattern.test(line)) {
+        // Check this line and next 2 lines for a date
+        const searchText = lines.slice(i, i + 3).join(' ');
+        const dateMatch = searchText.match(datePattern);
+        if (dateMatch) {
+          closingDate = dateMatch[0].replace(/-/g, "/").replace(/\./g, "/");
+          break;
+        }
+      }
     }
   }
 

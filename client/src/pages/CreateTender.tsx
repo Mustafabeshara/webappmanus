@@ -101,9 +101,22 @@ export default function CreateTender() {
         // If deadline was extracted
         if (data.extraction.closing_date) {
           try {
-            const parts = data.extraction.closing_date.split('/');
-            if (parts.length === 3) {
-              const dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}T12:00`;
+            let dateStr = '';
+            const closingDate = data.extraction.closing_date;
+
+            // Handle ISO format (YYYY-MM-DD) from backend
+            if (closingDate.includes('-') && closingDate.length === 10) {
+              dateStr = `${closingDate}T12:00`;
+            }
+            // Handle DD/MM/YYYY format (legacy)
+            else if (closingDate.includes('/')) {
+              const parts = closingDate.split('/');
+              if (parts.length === 3) {
+                dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}T12:00`;
+              }
+            }
+
+            if (dateStr) {
               setFormData(prev => ({ ...prev, submissionDeadline: dateStr }));
             }
           } catch {
