@@ -13,6 +13,9 @@ const ADMIN_OPEN_ID = "admin-primary"; // Single fixed admin account
 /**
  * Initialize or get the single admin account with hashed password
  * This replaces the per-login account creation that was flooding the DB
+ *
+ * IMPORTANT: If ADMIN_PASSWORD env var changes, the stored hash will be
+ * updated on next login attempt (password rotation support)
  */
 async function ensureAdminAccount(): Promise<{ id: number; openId: string } | null> {
   try {
@@ -42,6 +45,38 @@ async function ensureAdminAccount(): Promise<{ id: number; openId: string } | nu
   } catch (error) {
     console.error("[Auth] Failed to ensure admin account:", error);
     return null;
+  }
+}
+
+/**
+ * Check if admin password needs rotation and update hash if ENV changed
+ * Called when login fails - if ENV password validates but stored hash doesn't,
+ * the ENV password was rotated and we need to update the stored hash
+ */
+async function checkAndRotateAdminPassword(user: any): Promise<boolean> {
+  // Only applies to admin account
+  if (user.openId !== ADMIN_OPEN_ID) return false;
+
+  // If user has no hash, we can't determine if rotation is needed
+  if (!user.passwordHash || !user.passwordSalt) return false;
+
+  try {
+    // Hash the current ENV password and compare
+    const { hash: newHash, salt: newSalt } = await passwordSecurity.hashPassword(ENV.adminPassword);
+
+    // Update the stored hash to match current ENV password
+    await db.updateUser(user.id, {
+      passwordHash: newHash,
+      passwordSalt: newSalt,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    });
+
+    console.log("[Auth] Admin password hash rotated to match ENV");
+    return true;
+  } catch (error) {
+    console.error("[Auth] Failed to rotate admin password:", error);
+    return false;
   }
 }
 
@@ -88,7 +123,25 @@ export function registerOAuthRoutes(app: Express) {
       }
 
       // Verify password against stored hash (uses sdk.verifyPassword which handles per-user lockouts)
-      const isValid = await sdk.verifyPassword(password, user);
+      let isValid = await sdk.verifyPassword(password, user);
+
+      // If validation failed and this is the admin account, check if ENV password was rotated
+      // This handles the case where ADMIN_PASSWORD env var changed but stored hash is old
+      if (!isValid && user.openId === ADMIN_OPEN_ID) {
+        // Check if the provided password matches the current ENV password
+        // (which would mean we need to rotate the stored hash)
+        if (password === ENV.adminPassword) {
+          // ENV password matches input but stored hash doesn't - password was rotated
+          const rotated = await checkAndRotateAdminPassword(user);
+          if (rotated) {
+            // Re-validate with new hash (should pass now)
+            const updatedUser = await db.getUserById(user.id);
+            if (updatedUser) {
+              isValid = await sdk.verifyPassword(password, updatedUser);
+            }
+          }
+        }
+      }
 
       if (!isValid) {
         res.status(401).json({ error: "Invalid password" });
