@@ -325,6 +325,43 @@ export const inventory = mysqlTable("inventory", {
 });
 
 /**
+ * Product sales history for forecasting
+ */
+export const productSales = mysqlTable("product_sales", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("productId").notNull(),
+  quantity: int("quantity").notNull(),
+  unitPrice: int("unitPrice").notNull(), // in cents at time of sale
+  totalAmount: int("totalAmount").notNull(), // in cents
+  saleDate: timestamp("saleDate").notNull(),
+  channel: varchar("channel", { length: 50 }), // tender, direct, contract, other
+  tenderId: int("tenderId"),
+  invoiceId: int("invoiceId"),
+  customerId: int("customerId"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/**
+ * Product forecasts (cached predictions)
+ */
+export const productForecasts = mysqlTable("product_forecasts", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("productId").notNull(),
+  forecastDate: timestamp("forecastDate").notNull(), // when forecast was generated
+  forecastPeriod: varchar("forecastPeriod", { length: 20 }).notNull(), // e.g., "2024-01"
+  predictedQuantity: int("predictedQuantity").notNull(),
+  predictedRevenue: int("predictedRevenue").notNull(), // in cents
+  confidence: int("confidence").notNull(), // 0-100
+  trend: varchar("trend", { length: 20 }), // increasing, decreasing, stable, seasonal
+  factors: text("factors"), // JSON array of factors
+  actualQuantity: int("actualQuantity"), // filled in after period ends
+  actualRevenue: int("actualRevenue"), // filled in after period ends
+  accuracy: int("accuracy"), // calculated after actual data available
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/**
  * Tender templates for reusable blueprints
  */
 export const tenderTemplates = mysqlTable("tender_templates", {
@@ -1056,6 +1093,8 @@ export type Supplier = typeof suppliers.$inferSelect;
 export type Customer = typeof customers.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Inventory = typeof inventory.$inferSelect;
+export type ProductSale = typeof productSales.$inferSelect;
+export type ProductForecast = typeof productForecasts.$inferSelect;
 export type TenderTemplate = typeof tenderTemplates.$inferSelect;
 export type Tender = typeof tenders.$inferSelect;
 export type TenderItem = typeof tenderItems.$inferSelect;

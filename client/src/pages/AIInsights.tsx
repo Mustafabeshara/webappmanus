@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { TenderMatchingDashboard } from "@/components/TenderMatchingDashboard";
 import { SemanticSearch } from "@/components/SemanticSearch";
 import { NLPSearchBar } from "@/components/NLPSearchBar";
+import { ProductForecast } from "@/components/ProductForecast";
 import {
   Brain,
   Target,
@@ -131,11 +132,16 @@ export default function AIInsights() {
 
       {/* Main Content Tabs - Enhanced */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 h-auto p-1 bg-muted/50">
+        <TabsList className="grid w-full grid-cols-6 h-auto p-1 bg-muted/50">
           <TabsTrigger value="matching" className="flex items-center gap-2 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Target className="h-4 w-4" />
             <span className="hidden sm:inline">Tender Matching</span>
             <span className="sm:hidden">Match</span>
+          </TabsTrigger>
+          <TabsTrigger value="forecasting" className="flex items-center gap-2 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <TrendingUp className="h-4 w-4" />
+            <span className="hidden sm:inline">Forecasting</span>
+            <span className="sm:hidden">Forecast</span>
           </TabsTrigger>
           <TabsTrigger value="nlp" className="flex items-center gap-2 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <MessageSquare className="h-4 w-4" />
@@ -162,6 +168,11 @@ export default function AIInsights() {
         {/* Tender Matching Tab */}
         <TabsContent value="matching" className="mt-6">
           <TenderMatchingDashboard />
+        </TabsContent>
+
+        {/* Product Forecasting Tab */}
+        <TabsContent value="forecasting" className="mt-6">
+          <ProductForecast />
         </TabsContent>
 
         {/* NLP Query Tab - Enhanced */}
