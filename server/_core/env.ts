@@ -1,21 +1,42 @@
 const isProduction = process.env.NODE_ENV === "production";
 
-function requireSecret(name: string, value: string | undefined | null, minLength = 16) {
+function requireSecret(
+  name: string,
+  value: string | undefined | null,
+  minLength = 16
+) {
   if (!isProduction) {
     if (!value) {
-      console.warn(`[ENV] Missing ${name}; using insecure dev fallback. Do NOT use in production.`);
+      console.warn(
+        `[ENV] Missing ${name}; using insecure dev fallback. Do NOT use in production.`
+      );
     }
     return;
   }
 
   if (!value || value.length < minLength) {
-    throw new Error(`[ENV] ${name} is required in production and must be at least ${minLength} characters.`);
+    throw new Error(
+      `[ENV] ${name} is required in production and must be at least ${minLength} characters.`
+    );
   }
 }
 
 // Validate critical secrets early
-requireSecret("JWT_SECRET", process.env.JWT_SECRET);
-requireSecret("ADMIN_PASSWORD", process.env.ADMIN_PASSWORD, 8);
+requireSecret("JWT_SECRET", process.env.JWT_SECRET, 32);
+requireSecret("ADMIN_PASSWORD", process.env.ADMIN_PASSWORD, 12);
+
+// Additional security validations for production
+if (isProduction) {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("[ENV] DATABASE_URL is required in production");
+  }
+
+  if (process.env.ADMIN_PASSWORD === "admin123") {
+    throw new Error(
+      "[ENV] Default admin password must be changed in production"
+    );
+  }
+}
 
 export const ENV = {
   appId: process.env.VITE_APP_ID ?? "moh-tender-app",
