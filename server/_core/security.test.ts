@@ -443,3 +443,240 @@ describe("Security Integration", () => {
     expect(sanitized).toBe("Hello World");
   });
 });
+
+// ============================================
+// AUTH FLOW & LOCKOUT TESTS
+// ============================================
+
+describe("Auth Flow & Lockout", () => {
+  describe("Password Hash Verification Flow", () => {
+    it("should verify password only against stored hash", async () => {
+      const password = "MySecurePassword123!";
+      const wrongPassword = "WrongPassword456!";
+
+      // Hash the password
+      const { hash, salt } = await passwordSecurity.hashPassword(password);
+
+      // Correct password should verify
+      const validResult = await passwordSecurity.verifyPassword(password, hash, salt);
+      expect(validResult).toBe(true);
+
+      // Wrong password should fail
+      const invalidResult = await passwordSecurity.verifyPassword(wrongPassword, hash, salt);
+      expect(invalidResult).toBe(false);
+    });
+
+    it("should not verify against plaintext comparison", async () => {
+      const password = "TestPassword123!";
+      const { hash, salt } = await passwordSecurity.hashPassword(password);
+
+      // Hash and salt should not equal the password
+      expect(hash).not.toBe(password);
+      expect(salt).not.toBe(password);
+
+      // Verification should use crypto, not string comparison
+      const isValid = await passwordSecurity.verifyPassword(password, hash, salt);
+      expect(isValid).toBe(true);
+    });
+
+    it("should require both hash and salt for verification", async () => {
+      const password = "TestPassword123!";
+      const { hash, salt } = await passwordSecurity.hashPassword(password);
+
+      // Missing salt should fail
+      const resultNoSalt = await passwordSecurity.verifyPassword(password, hash, "");
+      expect(resultNoSalt).toBe(false);
+
+      // Missing hash should fail
+      const resultNoHash = await passwordSecurity.verifyPassword(password, "", salt);
+      expect(resultNoHash).toBe(false);
+    });
+  });
+
+  describe("Rate Limiting for Auth", () => {
+    it("should have strict rate limits for auth endpoints", () => {
+      expect(RATE_LIMITS.auth.maxRequests).toBeLessThanOrEqual(10);
+      expect(RATE_LIMITS.auth.windowMs).toBeGreaterThanOrEqual(60000); // At least 1 minute
+    });
+
+    it("should track failed attempts per client", () => {
+      const clientKey = "auth-test-client-" + Date.now();
+
+      // First few requests should pass
+      const result1 = isRateLimited(clientKey, RATE_LIMITS.auth);
+      expect(result1.limited).toBe(false);
+
+      // Simulate multiple requests
+      for (let i = 0; i < RATE_LIMITS.auth.maxRequests - 1; i++) {
+        isRateLimited(clientKey, RATE_LIMITS.auth);
+      }
+
+      // Should be rate limited after exceeding max
+      const finalResult = isRateLimited(clientKey, RATE_LIMITS.auth);
+      expect(finalResult.limited).toBe(true);
+    });
+
+    it("should provide retry-after information when limited", () => {
+      const clientKey = "retry-test-client-" + Date.now();
+      const config = { maxRequests: 1, windowMs: 60000 };
+
+      isRateLimited(clientKey, config);
+      const result = isRateLimited(clientKey, config);
+
+      expect(result.limited).toBe(true);
+      expect(result.resetIn).toBeGreaterThan(0);
+      expect(result.resetIn).toBeLessThanOrEqual(60000);
+    });
+  });
+
+  describe("Password Rotation Support", () => {
+    it("should generate different hashes for same password (salt randomization)", async () => {
+      const password = "RotationTest123!";
+
+      const hash1 = await passwordSecurity.hashPassword(password);
+      const hash2 = await passwordSecurity.hashPassword(password);
+
+      // Different salts mean different hashes
+      expect(hash1.hash).not.toBe(hash2.hash);
+      expect(hash1.salt).not.toBe(hash2.salt);
+
+      // But both should verify correctly
+      const valid1 = await passwordSecurity.verifyPassword(password, hash1.hash, hash1.salt);
+      const valid2 = await passwordSecurity.verifyPassword(password, hash2.hash, hash2.salt);
+      expect(valid1).toBe(true);
+      expect(valid2).toBe(true);
+    });
+
+    it("should allow updating password hash", async () => {
+      const oldPassword = "OldPassword123!";
+      const newPassword = "NewPassword456!";
+
+      // Hash old password
+      const oldHash = await passwordSecurity.hashPassword(oldPassword);
+
+      // Hash new password (simulating rotation)
+      const newHash = await passwordSecurity.hashPassword(newPassword);
+
+      // Old password should not verify with new hash
+      const oldWithNew = await passwordSecurity.verifyPassword(oldPassword, newHash.hash, newHash.salt);
+      expect(oldWithNew).toBe(false);
+
+      // New password should verify with new hash
+      const newWithNew = await passwordSecurity.verifyPassword(newPassword, newHash.hash, newHash.salt);
+      expect(newWithNew).toBe(true);
+
+      // Old password should still verify with old hash
+      const oldWithOld = await passwordSecurity.verifyPassword(oldPassword, oldHash.hash, oldHash.salt);
+      expect(oldWithOld).toBe(true);
+    });
+  });
+});
+
+// ============================================
+// ENV SECRET ENFORCEMENT TESTS
+// ============================================
+
+describe("Environment Secret Enforcement", () => {
+  it("should have JWT_SECRET configured in test environment", () => {
+    expect(process.env.JWT_SECRET).toBeDefined();
+    expect(process.env.JWT_SECRET!.length).toBeGreaterThanOrEqual(32);
+  });
+
+  it("should have ADMIN_PASSWORD configured in test environment", () => {
+    expect(process.env.ADMIN_PASSWORD).toBeDefined();
+    expect(process.env.ADMIN_PASSWORD!.length).toBeGreaterThanOrEqual(12);
+  });
+
+  it("should have ALLOW_INSECURE_DEV flag set for tests", () => {
+    // Tests run with insecure dev mode to allow test secrets
+    expect(process.env.ALLOW_INSECURE_DEV).toBe("true");
+  });
+
+  it("should reject weak passwords in validation", () => {
+    // Test that password validation catches weak passwords
+    const weakPasswords = [
+      "123456",
+      "password",
+      "abc",
+      "12345678",
+      "qwerty",
+    ];
+
+    for (const weak of weakPasswords) {
+      const result = passwordSecurity.validatePassword(weak);
+      expect(result.isValid).toBe(false);
+    }
+  });
+
+  it("should accept strong passwords in validation", () => {
+    const strongPasswords = [
+      "SecurePass123!",
+      "MyP@ssw0rd!2024",
+      "C0mpl3x!P@ss",
+    ];
+
+    for (const strong of strongPasswords) {
+      const result = passwordSecurity.validatePassword(strong);
+      expect(result.isValid).toBe(true);
+    }
+  });
+});
+
+// ============================================
+// SECURITY EVENT LOGGING TESTS
+// ============================================
+
+describe("Security Event Handling", () => {
+  it("should detect SQL injection patterns", () => {
+    const sqlInjectionPatterns = [
+      "'; DROP TABLE users; --",
+      "1 OR 1=1",
+      "UNION SELECT * FROM users",
+    ];
+
+    for (const pattern of sqlInjectionPatterns) {
+      const detected = inputValidation.detectSqlInjection(pattern);
+      expect(detected).toBe(true);
+    }
+  });
+
+  it("should not flag safe strings as SQL injection", () => {
+    const safeStrings = [
+      "Hello World",
+      "John Doe",
+      "user@example.com",
+      "Product description here",
+    ];
+
+    for (const safe of safeStrings) {
+      const detected = inputValidation.detectSqlInjection(safe);
+      expect(detected).toBe(false);
+    }
+  });
+
+  it("should detect XSS patterns", () => {
+    const xssPatterns = [
+      "<script>alert('xss')</script>",
+      "javascript:alert(1)",
+      "<img onerror=alert(1)>",
+    ];
+
+    for (const pattern of xssPatterns) {
+      const detected = inputValidation.detectXssPayload(pattern);
+      expect(detected).toBe(true);
+    }
+  });
+
+  it("should not flag safe HTML as XSS", () => {
+    const safeStrings = [
+      "Hello <b>World</b>",
+      "Check out my website",
+      "Normal text content",
+    ];
+
+    for (const safe of safeStrings) {
+      const detected = inputValidation.detectXssPayload(safe);
+      expect(detected).toBe(false);
+    }
+  });
+});
