@@ -36,6 +36,7 @@ import RequirementDetails from "./pages/RequirementDetails";
 import Commissions from "./pages/Commissions";
 import HR from "./pages/HR";
 import SupplierCatalog from "./pages/SupplierCatalog";
+import DocumentCenter from "./pages/DocumentCenter";
 
 function Router() {
   return (
@@ -290,6 +291,15 @@ function Router() {
         {() => (
           <DashboardLayout>
             <SupplierCatalog />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      {/* Document Center */}
+      <Route path={"/documents"}>
+        {() => (
+          <DashboardLayout>
+            <DocumentCenter />
           </DashboardLayout>
         )}
       </Route>
