@@ -13,18 +13,18 @@ Business management system for tender tracking, budgets, invoices, expenses, and
 ## Directory Structure
 ```
 webappmanus/
-├── client/                 # React frontend
+├── ient/                 # React frontend
 │   ├── src/
 │   │   ├── components/     # Reusable UI components
 │   │   │   └── ui/         # shadcn/ui base components
 │   │   ├── pages/          # Route pages
-│   │   ├── lib/            # Utilities (trpc client, utils)
+│   │   ├── lib/            # Utilities (trpc ient, utils)
 │   │   └── hooks/          # Custom React hooks
 ├── server/                 # Express backend
 │   ├── routes/             # tRPC routers
 │   ├── db/                 # Drizzle schema and migrations
 │   └── ocr/                # PDF text extraction
-├── shared/                 # Shared types between client/server
+├── shared/                 # Shared types between ient/server
 └── db/                     # Database configuration
 ```
 
