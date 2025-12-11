@@ -35,7 +35,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Plus,
   DollarSign,
@@ -48,7 +48,6 @@ import {
 } from "lucide-react";
 
 export default function Commissions() {
-  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("rules");
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
@@ -111,17 +110,10 @@ export default function Commissions() {
         minThreshold: "",
         maxThreshold: "",
       });
-      toast({
-        title: "Success",
-        description: "Commission rule created successfully",
-      });
+      toast.success("Commission rule created successfully");
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create commission rule",
-        variant: "destructive",
-      });
+      toast.error(error.message || "Failed to create commission rule");
     },
   });
 
@@ -132,17 +124,10 @@ export default function Commissions() {
       queryClient.invalidateQueries({ queryKey: ["commissions", "assignments"] });
       setIsAssignDialogOpen(false);
       setAssignment({ userId: "", ruleId: "" });
-      toast({
-        title: "Success",
-        description: "Commission rule assigned successfully",
-      });
+      toast.success("Commission rule assigned successfully");
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to assign commission rule",
-        variant: "destructive",
-      });
+      toast.error(error.message || "Failed to assign commission rule");
     },
   });
 
@@ -151,17 +136,10 @@ export default function Commissions() {
       trpc.commissions.updateEntry.mutate(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["commissions", "entries"] });
-      toast({
-        title: "Success",
-        description: "Commission entry updated successfully",
-      });
+      toast.success("Commission entry updated successfully");
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update commission entry",
-        variant: "destructive",
-      });
+      toast.error(error.message || "Failed to update commission entry");
     },
   });
 
@@ -178,11 +156,7 @@ export default function Commissions() {
 
   const handleAssignRule = () => {
     if (!assignment.userId || !assignment.ruleId) {
-      toast({
-        title: "Error",
-        description: "Please select both a user and a rule",
-        variant: "destructive",
-      });
+      toast.error("Please select both a user and a rule");
       return;
     }
     assignRuleMutation.mutate({

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -22,6 +22,7 @@ import {
   employees,
   expenses,
   extractionResults,
+  fileUploads,
   files,
   forecasts,
   inventory,
@@ -31,11 +32,15 @@ import {
   notifications,
   opportunities,
   participantBidItems,
+  passwordHistory,
   products,
   purchaseOrderItems,
   purchaseOrders,
+  rateLimitViolations,
   requirementItems,
   requirementsRequests,
+  securityEvents,
+  sessions,
   settings,
   suppliers,
   tasks,
@@ -2081,3 +2086,272 @@ export async function updateLeaveRequest(
   if (!db) throw new Error("Database not available");
   await db.update(leaveRequests).set(data).where(eq(leaveRequests.id, id));
 }
+// ============================================
+// SECURITY EVENTS
+// ============================================
+
+export async function createSecurityEvent(
+  event: typeof securityEvents.$inferInsert
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db.insert(securityEvents).values(event);
+  return { insertId: result.insertId };
+}
+
+export async function getSecurityEvents(filters?: {
+  type?: string;
+  severity?: string;
+  userId?: number;
+  resolved?: boolean;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions: any[] = [];
+
+  if (filters?.type) {
+    conditions.push(eq(securityEvents.type, filters.type as any));
+  }
+  if (filters?.severity) {
+    conditions.push(eq(securityEvents.severity, filters.severity as any));
+  }
+  if (filters?.userId) {
+    conditions.push(eq(securityEvents.userId, filters.userId));
+  }
+  if (filters?.resolved !== undefined) {
+    conditions.push(eq(securityEvents.resolved, filters.resolved));
+  }
+  if (filters?.startDate) {
+    conditions.push(gte(securityEvents.createdAt, filters.startDate));
+  }
+  if (filters?.endDate) {
+    conditions.push(lte(securityEvents.createdAt, filters.endDate));
+  }
+
+  let query = db.select().from(securityEvents);
+
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+
+  return query
+    .orderBy(desc(securityEvents.createdAt))
+    .limit(filters?.limit || 100)
+    .offset(filters?.offset || 0);
+}
+
+export async function updateSecurityEvent(
+  id: number,
+  data: Partial<typeof securityEvents.$inferInsert>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(securityEvents).set(data).where(eq(securityEvents.id, id));
+}
+
+// ============================================
+// SESSIONS
+// ============================================
+
+export async function createSession(session: typeof sessions.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db.insert(sessions).values(session);
+  return { insertId: result.insertId };
+}
+
+export async function getSessionBySessionId(sessionId: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.sessionId, sessionId))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateSession(
+  sessionId: string,
+  data: Partial<typeof sessions.$inferInsert>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(sessions).set(data).where(eq(sessions.sessionId, sessionId));
+}
+
+export async function getUserSessions(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.userId, userId),
+        eq(sessions.isActive, true),
+        gt(sessions.expiresAt, new Date())
+      )
+    )
+    .orderBy(desc(sessions.lastAccessedAt));
+}
+
+export async function invalidateSession(sessionId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(sessions)
+    .set({ isActive: false })
+    .where(eq(sessions.sessionId, sessionId));
+}
+
+export async function invalidateAllUserSessions(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(sessions)
+    .set({ isActive: false })
+    .where(eq(sessions.userId, userId));
+}
+
+export async function cleanupExpiredSessions() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const now = new Date();
+  await db
+    .update(sessions)
+    .set({ isActive: false })
+    .where(and(eq(sessions.isActive, true), lt(sessions.expiresAt, now)));
+}
+
+// ============================================
+// PASSWORD HISTORY
+// ============================================
+
+export async function createPasswordHistory(
+  history: typeof passwordHistory.$inferInsert
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db.insert(passwordHistory).values(history);
+  return { insertId: result.insertId };
+}
+
+export async function getUserPasswordHistory(
+  userId: number,
+  limit: number = 10
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(passwordHistory)
+    .where(eq(passwordHistory.userId, userId))
+    .orderBy(desc(passwordHistory.createdAt))
+    .limit(limit);
+}
+
+// ============================================
+// RATE LIMIT VIOLATIONS
+// ============================================
+
+export async function createRateLimitViolation(
+  violation: typeof rateLimitViolations.$inferInsert
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db.insert(rateLimitViolations).values(violation);
+  return { insertId: result.insertId };
+}
+
+export async function getRateLimitViolation(
+  identifier: string,
+  endpoint: string
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(rateLimitViolations)
+    .where(
+      and(
+        eq(rateLimitViolations.identifier, identifier),
+        eq(rateLimitViolations.endpoint, endpoint)
+      )
+    )
+    .orderBy(desc(rateLimitViolations.createdAt))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateRateLimitViolation(
+  id: number,
+  data: Partial<typeof rateLimitViolations.$inferInsert>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(rateLimitViolations)
+    .set(data)
+    .where(eq(rateLimitViolations.id, id));
+}
+
+// ============================================
+// FILE UPLOADS SECURITY
+// ============================================
+
+export async function createFileUpload(
+  upload: typeof fileUploads.$inferInsert
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db.insert(fileUploads).values(upload);
+  return { insertId: result.insertId };
+}
+
+export async function updateFileUpload(
+  id: number,
+  data: Partial<typeof fileUploads.$inferInsert>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(fileUploads).set(data).where(eq(fileUploads.id, id));
+}
+
+export async function getFileUploadById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(fileUploads)
+    .where(eq(fileUploads.id, id))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+// Re-export drizzle operators and tables for use in security modules
+export { sessions };
+export { eq, and, or, lt, gt, lte, gte, desc, asc };

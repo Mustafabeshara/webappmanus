@@ -72,9 +72,21 @@ export function registerOAuthRoutes(app: Express) {
       });
       console.log("[Auth] User upserted successfully");
 
-      const sessionToken = await sdk.createSessionToken(openId, {
-        name: "Admin",
-      });
+      // Get user to retrieve userId for session creation
+      const user = await db.getUserByOpenId(openId);
+      if (!user) {
+        throw new Error("Failed to create or retrieve user");
+      }
+
+      const ipAddress = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+      const userAgent = req.headers["user-agent"];
+      const sessionToken = await sdk.createSessionToken(
+        user.id,
+        openId,
+        "Admin",
+        ipAddress,
+        userAgent
+      );
       console.log("[Auth] Session token created");
 
       const cookieOptions = getSessionCookieOptions(req);

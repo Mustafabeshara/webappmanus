@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Plus,
   Users,
@@ -50,7 +50,6 @@ import {
 } from "lucide-react";
 
 export default function HR() {
-  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("employees");
   const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false);
   const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
@@ -109,17 +108,10 @@ export default function HR() {
         hireDate: "",
         status: "active",
       });
-      toast({
-        title: "Success",
-        description: "Employee created successfully",
-      });
+      toast.success("Employee created successfully");
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create employee",
-        variant: "destructive",
-      });
+      toast.error(error.message || "Failed to create employee");
     },
   });
 
@@ -130,17 +122,10 @@ export default function HR() {
     }) => trpc.hr.employees.update.mutate(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hr", "employees"] });
-      toast({
-        title: "Success",
-        description: "Employee updated successfully",
-      });
+      toast.success("Employee updated successfully");
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update employee",
-        variant: "destructive",
-      });
+      toast.error(error.message || "Failed to update employee");
     },
   });
 
@@ -162,17 +147,10 @@ export default function HR() {
         endDate: "",
         reason: "",
       });
-      toast({
-        title: "Success",
-        description: "Leave request created successfully",
-      });
+      toast.success("Leave request created successfully");
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create leave request",
-        variant: "destructive",
-      });
+      toast.error(error.message || "Failed to create leave request");
     },
   });
 
@@ -181,17 +159,10 @@ export default function HR() {
       trpc.hr.leave.update.mutate(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hr", "leave"] });
-      toast({
-        title: "Success",
-        description: "Leave request updated successfully",
-      });
+      toast.success("Leave request updated successfully");
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update leave request",
-        variant: "destructive",
-      });
+      toast.error(error.message || "Failed to update leave request");
     },
   });
 
@@ -209,11 +180,7 @@ export default function HR() {
 
   const handleCreateLeave = () => {
     if (!newLeave.employeeId || !newLeave.startDate || !newLeave.endDate) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
+      toast.error("Please fill in all required fields");
       return;
     }
     createLeaveMutation.mutate({
