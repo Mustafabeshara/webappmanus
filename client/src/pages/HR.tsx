@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { trpc } from "@/lib/trpc";
 import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -75,27 +74,12 @@ export default function HR() {
   });
 
   // Queries
-  const { data: employees = [], isLoading: employeesLoading } = useQuery({
-    queryKey: ["hr", "employees"],
-    queryFn: () => trpc.hr.employees.list.query(),
-  });
+  const { data: employees = [], isLoading: employeesLoading } = trpc.hr.employees.list.useQuery();
 
-  const { data: leaveRequests = [], isLoading: leaveLoading } = useQuery({
-    queryKey: ["hr", "leave"],
-    queryFn: () => trpc.hr.leave.list.query(),
-  });
+  const { data: leaveRequests = [], isLoading: leaveLoading } = trpc.hr.leave.list.useQuery();
 
   // Mutations
-  const createEmployeeMutation = useMutation({
-    mutationFn: (data: {
-      firstName?: string;
-      lastName?: string;
-      email?: string;
-      phone?: string;
-      title?: string;
-      hireDate?: string;
-      status?: "active" | "on_leave" | "terminated";
-    }) => trpc.hr.employees.create.mutate(data),
+  const createEmployeeMutation = trpc.hr.employees.create.useMutation({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hr", "employees"] });
       setIsEmployeeDialogOpen(false);
@@ -115,11 +99,7 @@ export default function HR() {
     },
   });
 
-  const updateEmployeeMutation = useMutation({
-    mutationFn: (data: {
-      id: number;
-      status?: "active" | "on_leave" | "terminated";
-    }) => trpc.hr.employees.update.mutate(data),
+  const updateEmployeeMutation = trpc.hr.employees.update.useMutation({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hr", "employees"] });
       toast.success("Employee updated successfully");
@@ -129,14 +109,7 @@ export default function HR() {
     },
   });
 
-  const createLeaveMutation = useMutation({
-    mutationFn: (data: {
-      employeeId: number;
-      type: "vacation" | "sick" | "personal" | "unpaid";
-      startDate: string;
-      endDate: string;
-      reason?: string;
-    }) => trpc.hr.leave.create.mutate(data),
+  const createLeaveMutation = trpc.hr.leave.create.useMutation({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hr", "leave"] });
       setIsLeaveDialogOpen(false);
@@ -154,9 +127,7 @@ export default function HR() {
     },
   });
 
-  const updateLeaveMutation = useMutation({
-    mutationFn: (data: { id: number; status: "pending" | "approved" | "rejected" }) =>
-      trpc.hr.leave.update.mutate(data),
+  const updateLeaveMutation = trpc.hr.leave.update.useMutation({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hr", "leave"] });
       toast.success("Leave request updated successfully");

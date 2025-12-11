@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -99,16 +98,10 @@ export function TenderMatchingDashboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Fetch tenders
-  const { data: tenders = [], isLoading: tendersLoading } = useQuery({
-    queryKey: ["tenders"],
-    queryFn: () => trpc.tenders.list.query(),
-  });
+  const { data: tenders = [], isLoading: tendersLoading } = trpc.tenders.list.useQuery();
 
   // Fetch products
-  const { data: products = [], isLoading: productsLoading } = useQuery({
-    queryKey: ["products"],
-    queryFn: () => trpc.products.list.query(),
-  });
+  const { data: products = [], isLoading: productsLoading } = trpc.products.list.useQuery();
 
   // Mock tender matches (in production, this would come from AI analysis)
   const tenderMatches: TenderMatch[] = useMemo(() => {

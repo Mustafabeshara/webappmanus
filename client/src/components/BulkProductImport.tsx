@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { trpc } from "@/lib/trpc";
+import { useQueryClient } from "@tanstack/react-query";
+import { trpc, trpcClient } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -93,10 +93,7 @@ export function BulkProductImport({
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   // Fetch suppliers
-  const { data: suppliers = [] } = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: () => trpc.suppliers.list.query(),
-  });
+  const { data: suppliers = [] } = trpc.suppliers.list.useQuery();
 
   // Get unique categories from products
   const categories = Array.from(
@@ -192,14 +189,14 @@ export function BulkProductImport({
 
       try {
         // Check if product with SKU already exists
-        const existingProducts = await trpc.products.list.query();
+        const existingProducts = await trpcClient.products.list.query();
         const existing = existingProducts.find(
           (p: any) => p.sku === product.sku
         );
 
         if (existing) {
           // Update existing product
-          await trpc.products.update.mutate({
+          await trpcClient.products.update.mutate({
             id: existing.id,
             name: product.name,
             description: product.description || product.shortDescription || "",
@@ -210,7 +207,7 @@ export function BulkProductImport({
           results.updated++;
         } else {
           // Create new product
-          await trpc.products.create.mutate({
+          await trpcClient.products.create.mutate({
             name: product.name,
             description: product.description || product.shortDescription || "",
             sku: product.sku || `SKU-${Date.now()}-${i}`,

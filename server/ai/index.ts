@@ -17,6 +17,20 @@ export type { BudgetData, ExpenseData, ForecastResult, BudgetVariance } from './
 export { analyzeExpenses } from './expense-analysis';
 export type { ExpenseItem, ExpenseAnalysisResult, CategorySuggestion, AnomalyDetection } from './expense-analysis';
 
+// Product Forecasting
+export {
+  generateProductForecast,
+  generateBulkForecast,
+} from './product-forecasting';
+export type {
+  ProductSalesData,
+  SalesRecord,
+  DemandForecast,
+  ProductForecastResult,
+  ProductInsight,
+  BulkForecastResult,
+} from './product-forecasting';
+
 export { AI_CONFIG, isAIConfigured, getAvailableProviders } from './config';
 
 // Phase 4: Vector Database Integration

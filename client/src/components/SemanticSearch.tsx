@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -78,22 +77,13 @@ export function SemanticSearch({
   const debouncedQuery = useDebounce(query, 300);
 
   // Fetch products for search
-  const { data: products = [] } = useQuery({
-    queryKey: ["products"],
-    queryFn: () => trpc.products.list.query(),
-  });
+  const { data: products = [] } = trpc.products.list.useQuery();
 
   // Fetch tenders for search
-  const { data: tenders = [] } = useQuery({
-    queryKey: ["tenders"],
-    queryFn: () => trpc.tenders.list.query(),
-  });
+  const { data: tenders = [] } = trpc.tenders.list.useQuery();
 
   // Fetch suppliers for search
-  const { data: suppliers = [] } = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: () => trpc.suppliers.list.query(),
-  });
+  const { data: suppliers = [] } = trpc.suppliers.list.useQuery();
 
   // Load recent searches from localStorage
   useEffect(() => {

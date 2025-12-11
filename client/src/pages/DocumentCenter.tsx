@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { DocumentUploadWizard } from "@/components/DocumentUploadWizard";
+import { ComprehensiveDocumentUpload } from "@/components/ComprehensiveDocumentUpload";
 import {
   Search,
   FileText,
@@ -107,13 +107,11 @@ export default function DocumentCenter() {
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [selectedDocument, setSelectedDocument] = useState<DocumentFile | null>(null);
   const [showUploadWizard, setShowUploadWizard] = useState(false);
+  const [showComprehensiveUpload, setShowComprehensiveUpload] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<DocumentFile | null>(null);
 
   // Fetch all files
-  const { data: files = [], isLoading, refetch } = useQuery({
-    queryKey: ["all-files"],
-    queryFn: () => trpc.files.getAll.query(),
-  });
+  const { data: files = [], isLoading, refetch } = trpc.files.getAll.useQuery();
 
   // Filter documents
   const filteredDocuments = useMemo(() => {
@@ -242,10 +240,16 @@ export default function DocumentCenter() {
             Manage, view, and extract data from all your documents
           </p>
         </div>
-        <Button onClick={() => setShowUploadWizard(true)}>
-          <Upload className="h-4 w-4 mr-2" />
-          Upload Document
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowUploadWizard(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Quick Upload
+          </Button>
+          <Button onClick={() => setShowComprehensiveUpload(true)}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            Smart Upload
+          </Button>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -635,6 +639,16 @@ export default function DocumentCenter() {
         onSuccess={() => {
           refetch();
           toast.success("Document uploaded successfully!");
+        }}
+      />
+
+      {/* Comprehensive Upload Dialog */}
+      <ComprehensiveDocumentUpload
+        open={showComprehensiveUpload}
+        onOpenChange={setShowComprehensiveUpload}
+        onSuccess={() => {
+          refetch();
+          toast.success("Document uploaded and processed successfully!");
         }}
       />
     </div>

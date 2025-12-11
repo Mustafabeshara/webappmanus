@@ -463,7 +463,7 @@ function CreateTaskForm({ users, onSubmit, isLoading, createdTaskId }: any) {
 
     onSubmit({
       ...formData,
-      assignedTo: formData.assignedTo ? parseInt(formData.assignedTo) : undefined,
+      assignedTo: formData.assignedTo && formData.assignedTo !== "none" ? parseInt(formData.assignedTo) : undefined,
     });
   };
 
@@ -540,7 +540,7 @@ function CreateTaskForm({ users, onSubmit, isLoading, createdTaskId }: any) {
               <SelectValue placeholder="Select user" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Unassigned</SelectItem>
+              <SelectItem value="none">Unassigned</SelectItem>
               {users.map((u: any) => (
                 <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
               ))}

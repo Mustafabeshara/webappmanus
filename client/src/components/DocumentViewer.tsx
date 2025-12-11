@@ -64,7 +64,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
     loadDocument();
   }, [documentId]);
 
-  const loadDocume async () => {
+  const loadDocument = async () => {
     try {
       setLoading(true);
       // API call to fetch document details
