@@ -33,6 +33,9 @@ import Login from "./pages/Login";
 import Notifications from "./pages/Notifications";
 import Requirements from "./pages/Requirements";
 import RequirementDetails from "./pages/RequirementDetails";
+import Commissions from "./pages/Commissions";
+import HR from "./pages/HR";
+import SupplierCatalog from "./pages/SupplierCatalog";
 
 function Router() {
   return (
@@ -260,6 +263,33 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Notifications />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      {/* Commissions */}
+      <Route path={"/commissions"}>
+        {() => (
+          <DashboardLayout>
+            <Commissions />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      {/* HR */}
+      <Route path={"/hr"}>
+        {() => (
+          <DashboardLayout>
+            <HR />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      {/* Supplier Catalog */}
+      <Route path={"/catalog"}>
+        {() => (
+          <DashboardLayout>
+            <SupplierCatalog />
           </DashboardLayout>
         )}
       </Route>

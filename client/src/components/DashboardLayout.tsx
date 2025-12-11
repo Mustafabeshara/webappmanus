@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, FileText, DollarSign, Package, Users, TrendingUp, Truck, FolderOpen, BarChart3, Settings, Building2, ShoppingCart, Receipt, UserCircle, ClipboardList, Bell, Shield, CheckSquare, Files } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, FileText, DollarSign, Package, Users, TrendingUp, Truck, FolderOpen, BarChart3, Settings, Building2, ShoppingCart, Receipt, UserCircle, ClipboardList, Bell, Shield, CheckSquare, Files, Percent, UserCog, BookOpen } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -49,6 +49,7 @@ const menuGroups = [
     items: [
       { icon: Package, label: "Inventory", path: "/inventory" },
       { icon: Building2, label: "Suppliers", path: "/suppliers" },
+      { icon: BookOpen, label: "Catalog", path: "/catalog" },
       { icon: Users, label: "Customers", path: "/customers" },
       { icon: ShoppingCart, label: "Purchase Orders", path: "/purchase-orders" },
       { icon: Truck, label: "Deliveries", path: "/deliveries" },
@@ -59,6 +60,7 @@ const menuGroups = [
     items: [
       { icon: TrendingUp, label: "Invoices", path: "/invoices" },
       { icon: Receipt, label: "Expenses", path: "/expenses" },
+      { icon: Percent, label: "Commissions", path: "/commissions" },
     ],
   },
   {
@@ -72,6 +74,7 @@ const menuGroups = [
     label: "Admin",
     items: [
       { icon: UserCircle, label: "Users", path: "/users" },
+      { icon: UserCog, label: "HR", path: "/hr" },
       { icon: Shield, label: "Audit Logs", path: "/audit-logs" },
       { icon: Settings, label: "Settings", path: "/settings" },
     ],
