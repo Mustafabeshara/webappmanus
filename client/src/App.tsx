@@ -37,6 +37,7 @@ import Commissions from "./pages/Commissions";
 import HR from "./pages/HR";
 import SupplierCatalog from "./pages/SupplierCatalog";
 import DocumentCenter from "./pages/DocumentCenter";
+import AIInsights from "./pages/AIInsights";
 
 function Router() {
   return (
@@ -300,6 +301,15 @@ function Router() {
         {() => (
           <DashboardLayout>
             <DocumentCenter />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      {/* AI Insights */}
+      <Route path={"/ai-insights"}>
+        {() => (
+          <DashboardLayout>
+            <AIInsights />
           </DashboardLayout>
         )}
       </Route>
