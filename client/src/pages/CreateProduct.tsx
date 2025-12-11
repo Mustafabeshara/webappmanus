@@ -69,7 +69,7 @@ export default function CreateProduct() {
       name: formData.name,
       description: formData.description || undefined,
       category: formData.category || undefined,
-      manufacturerId: formData.manufacturerId ? parseInt(formData.manufacturerId) : undefined,
+      manufacturerId: formData.manufacturerId && formData.manufacturerId !== "none" ? parseInt(formData.manufacturerId) : undefined,
       unitPrice: Math.round(price * 100),
       unit: formData.unit,
       specifications: formData.specifications || undefined,
@@ -160,7 +160,7 @@ export default function CreateProduct() {
                     <SelectValue placeholder="Optional" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Unspecified</SelectItem>
+                    <SelectItem value="none">Unspecified</SelectItem>
                     {suppliers.map((supplier: any) => (
                       <SelectItem key={supplier.id} value={supplier.id.toString()}>
                         {supplier.name} (#{supplier.id})
