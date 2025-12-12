@@ -69,6 +69,17 @@ class PasswordSecurityService {
       return false;
     }
 
+    // Early reject hashes that are not the expected hex length to avoid timingSafeEqual errors
+    const expectedHexLength = this.KEY_LENGTH * 2; // hex string length for KEY_LENGTH bytes
+    const isValidHexHash =
+      typeof storedHash === "string" &&
+      /^[0-9a-fA-F]+$/.test(storedHash) &&
+      storedHash.length === expectedHexLength;
+
+    if (!isValidHexHash) {
+      return false;
+    }
+
     try {
       const derivedKey = (await scryptAsync(
         password,

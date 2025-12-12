@@ -1,9 +1,8 @@
 // Local file storage helpers - no external dependencies required
 // Files are stored locally and served via Express static middleware
 
-import { promises as fs } from 'fs';
-import path from 'path';
-import crypto from 'crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 
 // Storage directory - use /tmp for Railway compatibility or local uploads folder
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(process.cwd(), 'uploads');

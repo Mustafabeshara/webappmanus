@@ -25,7 +25,8 @@ export function getSessionCookieOptions(
   req: Request
 ): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure"> {
   const secure = isSecureRequest(req) || process.env.NODE_ENV === "production";
-  const sameSite: CookieOptions["sameSite"] = secure ? "lax" : "lax";
+  // Cross-site cookies require SameSite=None and Secure=true
+  const sameSite: CookieOptions["sameSite"] = secure ? "none" : "lax";
 
   return {
     httpOnly: true,

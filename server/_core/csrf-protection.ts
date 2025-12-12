@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { ENV } from "./env";
 import { createSecurityEvent } from "./input-validation";
@@ -78,8 +78,8 @@ class CsrfProtectionService {
       }
 
       // Check if token has expired
-      const tokenTime = parseInt(timestamp, 10);
-      if (isNaN(tokenTime) || Date.now() - tokenTime > this.TOKEN_EXPIRY_MS) {
+      const tokenTime = Number.parseInt(timestamp, 10);
+      if (Number.isNaN(tokenTime) || Date.now() - tokenTime > this.TOKEN_EXPIRY_MS) {
         return false;
       }
 
@@ -107,7 +107,9 @@ class CsrfProtectionService {
 
     let result = 0;
     for (let i = 0; i < a.length; i++) {
-      result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+      const ca = a.codePointAt(i) ?? 0;
+      const cb = b.codePointAt(i) ?? 0;
+      result |= ca ^ cb;
     }
 
     return result === 0;
@@ -232,7 +234,7 @@ class CsrfProtectionService {
     }
 
     return (
-      req.connection.remoteAddress || req.socket.remoteAddress || "unknown"
+      req.socket.remoteAddress || "unknown"
     );
   }
 

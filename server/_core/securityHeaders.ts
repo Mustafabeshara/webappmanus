@@ -6,55 +6,55 @@
  * content sniffing, and other attacks.
  */
 
-import helmet from "helmet";
 import type { Express } from "express";
+import helmet from "helmet";
 
 /**
- * Content Security Policy directives
+ * Build Content Security Policy directives
+ * - Development: allow inline/eval for Vite HMR convenience
+ * - Production: remove unsafe-inline/unsafe-eval for stronger XSS protection
  */
-const CSP_DIRECTIVES = {
-  defaultSrc: ["'self'"],
-  scriptSrc: [
+function buildCspDirectives() {
+  const isProd = process.env.NODE_ENV === "production";
+  const base = {
+    defaultSrc: ["'self'"],
+    styleSrc: [
+      "'self'",
+      "'unsafe-inline'", // Often needed for runtime CSS-in-JS; acceptable with strict scriptSrc
+      "https://fonts.googleapis.com",
+    ],
+    imgSrc: ["'self'", "data:", "blob:", "https:", "*.amazonaws.com"],
+    fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+    connectSrc: ["'self'", "https://*.amazonaws.com", "wss:", "ws:"],
+    frameSrc: ["'none'"],
+    objectSrc: ["'none'"],
+    mediaSrc: ["'self'", "blob:"],
+    workerSrc: ["'self'", "blob:"],
+    childSrc: ["'self'", "blob:"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"],
+    baseUri: ["'self'"],
+    upgradeInsecureRequests: isProd ? [] : null,
+  } as const;
+
+  const devScriptSrc = [
     "'self'",
-    "'unsafe-inline'", // Required for Vite HMR in development
-    "'unsafe-eval'", // Required for some libraries
+    "'unsafe-inline'",
+    "'unsafe-eval'",
     "https://cdn.jsdelivr.net",
     "https://unpkg.com",
-  ],
-  styleSrc: [
+  ];
+  const prodScriptSrc = [
     "'self'",
-    "'unsafe-inline'", // Required for styled-components, emotion, etc.
-    "https://fonts.googleapis.com",
-  ],
-  imgSrc: [
-    "'self'",
-    "data:",
-    "blob:",
-    "https:",
-    "*.amazonaws.com", // S3 images
-  ],
-  fontSrc: [
-    "'self'",
-    "https://fonts.gstatic.com",
-    "data:",
-  ],
-  connectSrc: [
-    "'self'",
-    "https://api.openai.com",
-    "https://*.amazonaws.com",
-    "wss:", // WebSocket connections
-    "ws:", // Dev WebSocket
-  ],
-  frameSrc: ["'none'"],
-  objectSrc: ["'none'"],
-  mediaSrc: ["'self'", "blob:"],
-  workerSrc: ["'self'", "blob:"],
-  childSrc: ["'self'", "blob:"],
-  formAction: ["'self'"],
-  frameAncestors: ["'none'"],
-  baseUri: ["'self'"],
-  upgradeInsecureRequests: process.env.NODE_ENV === "production" ? [] : null,
-};
+    "https://cdn.jsdelivr.net",
+    "https://unpkg.com",
+  ];
+
+  return {
+    ...base,
+    scriptSrc: isProd ? prodScriptSrc : devScriptSrc,
+  };
+}
 
 /**
  * Configure security headers for the Express app
@@ -69,7 +69,7 @@ export function configureSecurityHeaders(app: Express): void {
       contentSecurityPolicy: isDev
         ? false // Disable in development for easier debugging
         : {
-            directives: CSP_DIRECTIVES,
+            directives: buildCspDirectives(),
             reportOnly: false,
           },
 
@@ -139,7 +139,10 @@ export function configureSecurityHeaders(app: Express): void {
 
     // Cache-Control for sensitive pages
     if (req.path.startsWith("/api/")) {
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader(
+        "Cache-Control",
+        "no-store, no-cache, must-revalidate, proxy-revalidate"
+      );
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
     }
@@ -151,7 +154,9 @@ export function configureSecurityHeaders(app: Express): void {
     next();
   });
 
-  console.log(`[SECURITY] Security headers configured (${isDev ? "development" : "production"} mode)`);
+  console.log(
+    `[SECURITY] Security headers configured (${isDev ? "development" : "production"} mode)`
+  );
 }
 
 /**
@@ -169,8 +174,8 @@ export const apiSecurityHeaders = {
   "X-Frame-Options": "DENY",
   "X-XSS-Protection": "1; mode=block",
   "Cache-Control": "no-store, no-cache, must-revalidate",
-  "Pragma": "no-cache",
-  "Expires": "0",
+  Pragma: "no-cache",
+  Expires: "0",
 };
 
 /**
