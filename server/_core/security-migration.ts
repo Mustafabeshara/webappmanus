@@ -152,15 +152,5 @@ export async function runSecurityMigration() {
   }
 }
 
-// Run migration if this file is executed directly
-if (require.main === module) {
-  runSecurityMigration()
-    .then(() => {
-      console.log("Migration completed");
-      process.exit(0);
-    })
-    .catch(error => {
-      console.error("Migration failed:", error);
-      process.exit(1);
-    });
-}
+// Note: This module is imported and called from index.ts on server startup
+// To run manually, use: npx tsx server/_core/security-migration.ts
