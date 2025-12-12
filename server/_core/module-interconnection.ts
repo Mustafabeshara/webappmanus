@@ -10,7 +10,7 @@ import { aiTenderIntelligence } from "./ai-tender-intelligence";
 export interface ModuleConnection {
   sourceModule: string;
   targetModule: string;
-  connectionType: 'data_flow' | 'notification' | 'trigger' | 'sync';
+  connectionType: "data_flow" | "notification" | "trigger" | "sync";
   dataMapping: DataMapping[];
   conditions?: ConnectionCondition[];
 }
@@ -24,7 +24,7 @@ export interface DataMapping {
 
 export interface ConnectionCondition {
   field: string;
-  operator: 'equals' | 'not_equals' | 'greater_than' | 'contains';
+  operator: "equals" | "not_equals" | "greater_than" | "contains";
   value: any;
 }
 
@@ -38,7 +38,10 @@ export interface ModuleEvent {
 
 class ModuleInterconnectionManager {
   private connections: Map<string, ModuleConnection[]> = new Map();
-  private eventListeners: Map<string, Function[]> = new Map();
+  private eventListeners: Map<
+    string,
+    Array<(event: ModuleEvent) => Promise<void> | void>
+  > = new Map();
 
   constructor() {
     this.initializeConnections();
@@ -51,65 +54,63 @@ class ModuleInterconnectionManager {
   private initializeConnections(): void {
     // Supplier → Product Catalog Connection
     this.addConnection({
-      sourceModule: 'supplier',
-      targetModule: 'product_catalog',
-      connectionType: 'data_flow',
+      sourceModule: "supplier",
+      targetModule: "product_catalog",
+      connectionType: "data_flow",
       dataMapping: [
-        { sourceField: 'catalog_document', targetField: 'product_data' },
-        { sourceField: 'supplier_id', targetField: 'supplier_id' },
-        { sourceField: 'price_list', targetField: 'pricing_data' }
-      ]
+        { sourceField: "catalog_document", targetField: "product_data" },
+        { sourceField: "supplier_id", targetField: "supplier_id" },
+        { sourceField: "price_list", targetField: "pricing_data" },
+      ],
     });
 
     // Product Catalog → Tender Matching Connection
     this.addConnection({
-      sourceModule: 'product_catalog',
-      targetModule: 'tender_matching',
-      connectionType: 'trigger',
+      sourceModule: "product_catalog",
+      targetModule: "tender_matching",
+      connectionType: "trigger",
       dataMapping: [
-        { sourceField: 'product_specs', targetField: 'matching_criteria' },
-        { sourceField: 'availability', targetField: 'delivery_capability' }
+        { sourceField: "product_specs", targetField: "matching_criteria" },
+        { sourceField: "availability", targetField: "delivery_capability" },
       ],
-      conditions: [
-        { field: 'status', operator: 'equals', value: 'active' }
-      ]
+      conditions: [{ field: "status", operator: "equals", value: "active" }],
     });
 
     // Tender → Notification Connection
     this.addConnection({
-      sourceModule: 'tender',
-      targetModule: 'notification',
-      connectionType: 'notification',
+      sourceModule: "tender",
+      targetModule: "notification",
+      connectionType: "notification",
       dataMapping: [
-        { sourceField: 'tender_id', targetField: 'reference_id' },
-        { sourceField: 'match_score', targetField: 'priority_score' }
+        { sourceField: "tender_id", targetField: "reference_id" },
+        { sourceField: "match_score", targetField: "priority_score" },
       ],
       conditions: [
-        { field: 'match_score', operator: 'greater_than', value: 0.7 }
-      ]
+        { field: "match_score", operator: "greater_than", value: 0.7 },
+      ],
     });
 
     // Invoice → Financial Analytics Connection
     this.addConnection({
-      sourceModule: 'invoice',
-      targetModule: 'financial_analytics',
-      connectionType: 'sync',
+      sourceModule: "invoice",
+      targetModule: "financial_analytics",
+      connectionType: "sync",
       dataMapping: [
-        { sourceField: 'total_amount', targetField: 'expense_amount' },
-        { sourceField: 'supplier_id', targetField: 'vendor_id' },
-        { sourceField: 'line_items', targetField: 'expense_categories' }
-      ]
+        { sourceField: "total_amount", targetField: "expense_amount" },
+        { sourceField: "supplier_id", targetField: "vendor_id" },
+        { sourceField: "line_items", targetField: "expense_categories" },
+      ],
     });
 
     // Document Upload → AI Processing Connection
     this.addConnection({
-      sourceModule: 'document_upload',
-      targetModule: 'ai_processing',
-      connectionType: 'trigger',
+      sourceModule: "document_upload",
+      targetModule: "ai_processing",
+      connectionType: "trigger",
       dataMapping: [
-        { sourceField: 'document_id', targetField: 'processing_queue' },
-        { sourceField: 'document_type', targetField: 'template_selection' }
-      ]
+        { sourceField: "document_id", targetField: "processing_queue" },
+        { sourceField: "document_type", targetField: "template_selection" },
+      ],
     });
   }
 
@@ -118,27 +119,27 @@ class ModuleInterconnectionManager {
    */
   private setupEventHandlers(): void {
     // Document processed → Auto-populate fields
-    this.addEventListener('document_processed', async (event: ModuleEvent) => {
+    this.addEventListener("document_processed", async (event: ModuleEvent) => {
       await this.handleDocumentProcessed(event);
     });
 
     // Product catalog updated → Trigger tender matching
-    this.addEventListener('catalog_updated', async (event: ModuleEvent) => {
+    this.addEventListener("catalog_updated", async (event: ModuleEvent) => {
       await this.handleCatalogUpdated(event);
     });
 
     // Tender published → Find matching suppliers
-    this.addEventListener('tender_published', async (event: ModuleEvent) => {
+    this.addEventListener("tender_published", async (event: ModuleEvent) => {
       await this.handleTenderPublished(event);
     });
 
     // Price list updated → Update product pricing
-    this.addEventListener('price_list_updated', async (event: ModuleEvent) => {
+    this.addEventListener("price_list_updated", async (event: ModuleEvent) => {
       await this.handlePriceListUpdated(event);
     });
 
     // Invoice processed → Update supplier performance
-    this.addEventListener('invoice_processed', async (event: ModuleEvent) => {
+    this.addEventListener("invoice_processed", async (event: ModuleEvent) => {
       await this.handleInvoiceProcessed(event);
     });
   }
@@ -157,7 +158,10 @@ class ModuleInterconnectionManager {
   /**
    * Add event listener
    */
-  private addEventListener(event: string, handler: Function): void {
+  private addEventListener(
+    event: string,
+    handler: (event: ModuleEvent) => Promise<void> | void
+  ): void {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, []);
     }
@@ -174,7 +178,10 @@ class ModuleInterconnectionManager {
       try {
         await handler(event);
       } catch (error) {
-        console.error(`[Module] Event handler failed for ${event.event}:`, error);
+        console.error(
+          `[Module] Event handler failed for ${event.event}:`,
+          error
+        );
       }
     }
   }
@@ -191,43 +198,49 @@ class ModuleInterconnectionManager {
 
       // Trigger specific workflows based on document type
       switch (documentType) {
-        case 'catalog':
+        case "catalog":
           await this.processCatalogDocument(documentId, extractedData);
           break;
-        case 'price_list':
+        case "price_list":
           await this.processPriceListDocument(documentId, extractedData);
           break;
-        case 'invoice':
+        case "invoice":
           await this.processInvoiceDocument(documentId, extractedData);
           break;
-        case 'tender':
+        case "tender":
           await this.processTenderDocument(documentId, extractedData);
           break;
       }
     } catch (error) {
-      console.error('[Module] Document processing failed:', error);
+      console.error("[Module] Document processing failed:", error);
     }
   }
 
   /**
    * Process catalog document
    */
-  private async processCatalogDocument(documentId: number, extractedData: any): Promise<void> {
+  private async processCatalogDocument(
+    documentId: number,
+    extractedData: any
+  ): Promise<void> {
     // Extract products from catalog
     if (extractedData.products?.value) {
       const products = this.parseProductTable(extractedData.products.value);
 
       for (const product of products) {
         // Create or update product in database
-        await this.createOrUpdateProduct(product, extractedData.supplierName?.value);
+        await this.createOrUpdateProduct(
+          product,
+          extractedData.supplierName?.value
+        );
       }
 
       // Emit catalog updated event
       await this.emitEvent({
-        module: 'product_catalog',
-        event: 'catalog_updated',
+        module: "product_catalog",
+        event: "catalog_updated",
         data: { documentId, productCount: products.length },
-        timestamp: new Date()
+        timestamp: new Date(),
       });
     }
   }
@@ -235,7 +248,10 @@ class ModuleInterconnectionManager {
   /**
    * Process price list document
    */
-  private async processPriceListDocument(documentId: number, extractedData: any): Promise<void> {
+  private async processPriceListDocument(
+    documentId: number,
+    extractedData: any
+  ): Promise<void> {
     if (extractedData.products?.value) {
       const priceData = this.parsePriceTable(extractedData.products.value);
 
@@ -246,10 +262,10 @@ class ModuleInterconnectionManager {
 
       // Emit price list updated event
       await this.emitEvent({
-        module: 'pricing',
-        event: 'price_list_updated',
+        module: "pricing",
+        event: "price_list_updated",
         data: { documentId, updatedItems: priceData.length },
-        timestamp: new Date()
+        timestamp: new Date(),
       });
     }
   }
@@ -263,7 +279,7 @@ class ModuleInterconnectionManager {
     try {
       // Get supplier from document
       const document = await db.getDocumentById(documentId);
-      if (!document || document.entityType !== 'supplier') return;
+      if (!document || document.entityType !== "supplier") return;
 
       // Trigger tender matching for this supplier
       const matchingRequest = {
@@ -273,18 +289,19 @@ class ModuleInterconnectionManager {
           priceWeight: 0.3,
           deliveryWeight: 0.1,
           complianceWeight: 0.2,
-          minimumMatchScore: 0.5
-        }
+          minimumMatchScore: 0.5,
+        },
       };
 
-      const matches = await aiTenderIntelligence.findMatchingTenders(matchingRequest);
+      const matches =
+        await aiTenderIntelligence.findMatchingTenders(matchingRequest);
 
       // Create notifications for high-value matches
       for (const match of matches.filter(m => m.matchScore > 0.8)) {
         await this.createTenderMatchNotification(document.entityId, match);
       }
     } catch (error) {
-      console.error('[Module] Catalog update handling failed:', error);
+      console.error("[Module] Catalog update handling failed:", error);
     }
   }
 
@@ -307,18 +324,22 @@ class ModuleInterconnectionManager {
             priceWeight: 0.3,
             deliveryWeight: 0.1,
             complianceWeight: 0.2,
-            minimumMatchScore: 0.6
-          }
+            minimumMatchScore: 0.6,
+          },
         };
 
-        const matches = await aiTenderIntelligence.findMatchingTenders(matchingRequest);
+        const matches =
+          await aiTenderIntelligence.findMatchingTenders(matchingRequest);
 
         if (matches.length > 0 && matches[0].matchScore > 0.7) {
-          await this.createTenderOpportunityNotification(supplier.id, matches[0]);
+          await this.createTenderOpportunityNotification(
+            supplier.id,
+            matches[0]
+          );
         }
       }
     } catch (error) {
-      console.error('[Module] Tender published handling failed:', error);
+      console.error("[Module] Tender published handling failed:", error);
     }
   }
 
@@ -337,11 +358,12 @@ class ModuleInterconnectionManager {
       }
 
       // Update budget forecasts if significant changes
-      if (priceChanges.averageChange > 0.1) { // 10% change
+      if (priceChanges.averageChange > 0.1) {
+        // 10% change
         await this.updateBudgetForecasts(priceChanges);
       }
     } catch (error) {
-      console.error('[Module] Price list update handling failed:', error);
+      console.error("[Module] Price list update handling failed:", error);
     }
   }
 
@@ -354,7 +376,10 @@ class ModuleInterconnectionManager {
     try {
       // Update supplier performance metrics
       if (extractedData.supplierName?.value) {
-        await this.updateSupplierPerformance(extractedData.supplierName.value, extractedData);
+        await this.updateSupplierPerformance(
+          extractedData.supplierName.value,
+          extractedData
+        );
       }
 
       // Update spending analytics
@@ -363,7 +388,7 @@ class ModuleInterconnectionManager {
       // Check for budget alerts
       await this.checkBudgetAlerts(extractedData);
     } catch (error) {
-      console.error('[Module] Invoice processing handling failed:', error);
+      console.error("[Module] Invoice processing handling failed:", error);
     }
   }
 
@@ -387,7 +412,10 @@ class ModuleInterconnectionManager {
   /**
    * Create or update product
    */
-  private async createOrUpdateProduct(productData: any, supplierName?: string): Promise<void> {
+  private async createOrUpdateProduct(
+    productData: any,
+    supplierName?: string
+  ): Promise<void> {
     // Implementation to create or update product in database
   }
 
@@ -401,14 +429,20 @@ class ModuleInterconnectionManager {
   /**
    * Create tender match notification
    */
-  private async createTenderMatchNotification(supplierId: number, match: any): Promise<void> {
+  private async createTenderMatchNotification(
+    supplierId: number,
+    match: any
+  ): Promise<void> {
     // Implementation to create notification
   }
 
   /**
    * Create tender opportunity notification
    */
-  private async createTenderOpportunityNotification(supplierId: number, match: any): Promise<void> {
+  private async createTenderOpportunityNotification(
+    supplierId: number,
+    match: any
+  ): Promise<void> {
     // Implementation to create opportunity notification
   }
 
@@ -426,7 +460,9 @@ class ModuleInterconnectionManager {
   /**
    * Create price change notifications
    */
-  private async createPriceChangeNotifications(priceChanges: any): Promise<void> {
+  private async createPriceChangeNotifications(
+    priceChanges: any
+  ): Promise<void> {
     // Implementation to create price change notifications
   }
 
@@ -440,7 +476,10 @@ class ModuleInterconnectionManager {
   /**
    * Update supplier performance
    */
-  private async updateSupplierPerformance(supplierName: string, invoiceData: any): Promise<void> {
+  private async updateSupplierPerformance(
+    supplierName: string,
+    invoiceData: any
+  ): Promise<void> {
     // Implementation to update supplier performance metrics
   }
 

@@ -1,3 +1,5 @@
+import { COOKIE_NAME } from "@shared/const";
+import { parse as parseCookieHeader } from "cookie";
 import type { NextFunction, Request, Response } from "express";
 import * as db from "../db";
 import { auditLogging } from "./audit-logging";
@@ -73,17 +75,28 @@ export function authenticateRequest() {
  */
 export function optionalAuthentication() {
   return async (req: Request, res: Response, next: NextFunction) => {
+    const ipAddress = getClientIp(req);
+    (req as any).ipAddress = ipAddress;
+
+    const cookies = parseCookieHeader(req.headers.cookie || "");
+    const hasSessionCookie = Boolean(cookies[COOKIE_NAME]);
+    const hasAuthHeader = Boolean(req.headers.authorization);
+    const hasAuth = hasSessionCookie || hasAuthHeader;
+
+    if (!hasAuth) {
+      return next();
+    }
+
     try {
       const user = await sdk.authenticateRequest(req);
       (req as any).user = user;
       (req as any).userId = user.id;
       (req as any).sessionId = user.sessionId || "";
-      (req as any).ipAddress = getClientIp(req);
+      return next();
     } catch (error) {
-      // Continue without authentication
-      (req as any).ipAddress = getClientIp(req);
+      console.warn("[Auth] Optional auth failed:", error);
+      return res.status(401).json({ error: "Invalid authentication" });
     }
-    next();
   };
 }
 
@@ -188,7 +201,7 @@ export function requireAdmin() {
       }
 
       const user = await db.getUserById(userId);
-      if (!user || user.role !== "admin") {
+      if (user?.role !== "admin") {
         await auditLogging.logAction({
           userId,
           action: "admin_access_denied",
@@ -316,7 +329,5 @@ function getClientIp(req: Request): string {
     return realIp;
   }
 
-  return (
-    req.socket?.remoteAddress || "unknown"
-  );
+  return req.socket?.remoteAddress || "unknown";
 }

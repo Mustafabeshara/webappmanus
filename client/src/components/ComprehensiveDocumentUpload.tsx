@@ -1,11 +1,19 @@
-import { useState, useCallback, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { trpc, trpcClient } from "@/lib/trpc";
+import { FileUpload } from "@/components/FileUpload";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -13,63 +21,59 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox";
-import { FileUpload } from "@/components/FileUpload";
-import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
+import { trpc, trpcClient } from "@/lib/trpc";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  FileText,
-  Upload,
-  Wand2,
-  CheckCircle2,
   AlertCircle,
-  Loader2,
-  ArrowRight,
   ArrowLeft,
-  Eye,
-  Edit3,
-  Sparkles,
-  Building2,
-  Package,
-  DollarSign,
-  Receipt,
-  ShoppingCart,
-  Wallet,
-  PiggyBank,
-  FileCode,
-  Calculator,
-  Shield,
-  Building,
-  History,
-  CheckSquare,
-  Landmark,
-  Users,
-  MapPin,
-  Pen,
-  FileSignature,
+  ArrowRight,
   Award,
   BadgeCheck,
-  Search,
+  Building,
+  Building2,
+  Calculator,
+  CheckCircle2,
+  CheckSquare,
+  DollarSign,
+  Edit3,
+  FileCode,
+  FileSignature,
+  FileText,
   Filter,
-  List,
   Grid3X3,
+  History,
+  Landmark,
+  List,
+  Loader2,
+  MapPin,
+  Package,
+  Pen,
+  PiggyBank,
+  Receipt,
+  Search,
+  Shield,
+  ShoppingCart,
+  Sparkles,
+  Upload,
+  Users,
+  Wallet,
+  Wand2,
 } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 // =============================================================================
 // TEMPLATE DEFINITIONS - Comprehensive Document Templates
 // =============================================================================
 
-type TemplateCategory = "data_upload" | "tender_submission" | "registration" | "supplier_compliance" | "financial";
+type TemplateCategory =
+  | "data_upload"
+  | "tender_submission"
+  | "registration"
+  | "supplier_compliance"
+  | "financial";
 
 interface DocumentTemplate {
   id: string;
@@ -88,7 +92,19 @@ interface TemplateField {
   name: string;
   label: string;
   labelAr?: string;
-  type: "text" | "number" | "date" | "currency" | "select" | "multiselect" | "file" | "table" | "boolean" | "email" | "phone" | "textarea";
+  type:
+    | "text"
+    | "number"
+    | "date"
+    | "currency"
+    | "select"
+    | "multiselect"
+    | "file"
+    | "table"
+    | "boolean"
+    | "email"
+    | "phone"
+    | "textarea";
   required: boolean;
   placeholder?: string;
   options?: string[];
@@ -111,20 +127,60 @@ interface ExtractionResult {
 
 // Icon mapping
 const iconMap: Record<string, any> = {
-  FileText, Building2, Package, DollarSign, Receipt, ShoppingCart, Wallet, PiggyBank,
-  FileCode, Calculator, Shield, Building, History, CheckSquare, Landmark, Users,
-  MapPin, Pen, FileSignature, Award, BadgeCheck,
+  FileText,
+  Building2,
+  Package,
+  DollarSign,
+  Receipt,
+  ShoppingCart,
+  Wallet,
+  PiggyBank,
+  FileCode,
+  Calculator,
+  Shield,
+  Building,
+  History,
+  CheckSquare,
+  Landmark,
+  Users,
+  MapPin,
+  Pen,
+  FileSignature,
+  Award,
+  BadgeCheck,
 };
 
 // Category labels
-const categoryLabels: Record<TemplateCategory, { label: string; labelAr: string; color: string }> = {
-  data_upload: { label: "Data Upload", labelAr: "تحميل البيانات", color: "bg-blue-100 text-blue-800" },
-  tender_submission: { label: "Tender Submission", labelAr: "تقديم المناقصات", color: "bg-green-100 text-green-800" },
-  registration: { label: "Registration", labelAr: "التسجيل", color: "bg-purple-100 text-purple-800" },
-  supplier_compliance: { label: "Supplier Compliance", labelAr: "امتثال الموردين", color: "bg-orange-100 text-orange-800" },
-  financial: { label: "Financial", labelAr: "المالية", color: "bg-yellow-100 text-yellow-800" },
+const categoryLabels: Record<
+  TemplateCategory,
+  { label: string; labelAr: string; color: string }
+> = {
+  data_upload: {
+    label: "Data Upload",
+    labelAr: "تحميل البيانات",
+    color: "bg-blue-100 text-blue-800",
+  },
+  tender_submission: {
+    label: "Tender Submission",
+    labelAr: "تقديم المناقصات",
+    color: "bg-green-100 text-green-800",
+  },
+  registration: {
+    label: "Registration",
+    labelAr: "التسجيل",
+    color: "bg-purple-100 text-purple-800",
+  },
+  supplier_compliance: {
+    label: "Supplier Compliance",
+    labelAr: "امتثال الموردين",
+    color: "bg-orange-100 text-orange-800",
+  },
+  financial: {
+    label: "Financial",
+    labelAr: "المالية",
+    color: "bg-yellow-100 text-yellow-800",
+  },
 };
-
 
 // =============================================================================
 // COMPREHENSIVE DOCUMENT TEMPLATES
@@ -138,20 +194,126 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     nameAr: "استيراد بيانات الموردين",
     category: "data_upload",
     subcategory: "suppliers",
-    description: "Upload supplier information including company details, contacts, and banking",
+    description:
+      "Upload supplier information including company details, contacts, and banking",
     icon: "Building2",
     fields: [
-      { id: "companyName", name: "companyName", label: "Company Name", labelAr: "اسم الشركة", type: "text", required: true, placeholder: "Enter company legal name" },
-      { id: "companyNameAr", name: "companyNameAr", label: "Company Name (Arabic)", type: "text", required: false },
-      { id: "commercialRegistration", name: "commercialRegistration", label: "CR Number", labelAr: "رقم السجل التجاري", type: "text", required: true, placeholder: "10 digits", validation: { pattern: "^[0-9]{10}$" } },
-      { id: "vatNumber", name: "vatNumber", label: "VAT Number", labelAr: "الرقم الضريبي", type: "text", required: true, placeholder: "15 digits", validation: { pattern: "^3[0-9]{13}3$" } },
-      { id: "contactPerson", name: "contactPerson", label: "Contact Person", type: "text", required: true },
-      { id: "email", name: "email", label: "Email", type: "email", required: true },
-      { id: "phone", name: "phone", label: "Phone", type: "phone", required: true, placeholder: "+966 XX XXX XXXX" },
-      { id: "address", name: "address", label: "Business Address", type: "textarea", required: true },
-      { id: "city", name: "city", label: "City", type: "select", required: true, options: ["Riyadh", "Jeddah", "Dammam", "Makkah", "Madinah", "Khobar", "Other"] },
-      { id: "country", name: "country", label: "Country", type: "select", required: true, options: ["Saudi Arabia", "UAE", "Kuwait", "Bahrain", "Qatar", "Oman", "Egypt", "Jordan", "USA", "Germany", "UK", "Other"] },
-      { id: "supplierType", name: "supplierType", label: "Supplier Type", type: "multiselect", required: true, options: ["Manufacturer", "Distributor", "Agent", "Service Provider", "Contractor"] },
+      {
+        id: "companyName",
+        name: "companyName",
+        label: "Company Name",
+        labelAr: "اسم الشركة",
+        type: "text",
+        required: true,
+        placeholder: "Enter company legal name",
+      },
+      {
+        id: "companyNameAr",
+        name: "companyNameAr",
+        label: "Company Name (Arabic)",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "commercialRegistration",
+        name: "commercialRegistration",
+        label: "CR Number",
+        labelAr: "رقم السجل التجاري",
+        type: "text",
+        required: true,
+        placeholder: "10 digits",
+        validation: { pattern: "^[0-9]{10}$" },
+      },
+      {
+        id: "vatNumber",
+        name: "vatNumber",
+        label: "VAT Number",
+        labelAr: "الرقم الضريبي",
+        type: "text",
+        required: true,
+        placeholder: "15 digits",
+        validation: { pattern: "^3[0-9]{13}3$" },
+      },
+      {
+        id: "contactPerson",
+        name: "contactPerson",
+        label: "Contact Person",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "email",
+        name: "email",
+        label: "Email",
+        type: "email",
+        required: true,
+      },
+      {
+        id: "phone",
+        name: "phone",
+        label: "Phone",
+        type: "phone",
+        required: true,
+        placeholder: "+966 XX XXX XXXX",
+      },
+      {
+        id: "address",
+        name: "address",
+        label: "Business Address",
+        type: "textarea",
+        required: true,
+      },
+      {
+        id: "city",
+        name: "city",
+        label: "City",
+        type: "select",
+        required: true,
+        options: [
+          "Riyadh",
+          "Jeddah",
+          "Dammam",
+          "Makkah",
+          "Madinah",
+          "Khobar",
+          "Other",
+        ],
+      },
+      {
+        id: "country",
+        name: "country",
+        label: "Country",
+        type: "select",
+        required: true,
+        options: [
+          "Saudi Arabia",
+          "UAE",
+          "Kuwait",
+          "Bahrain",
+          "Qatar",
+          "Oman",
+          "Egypt",
+          "Jordan",
+          "USA",
+          "Germany",
+          "UK",
+          "Other",
+        ],
+      },
+      {
+        id: "supplierType",
+        name: "supplierType",
+        label: "Supplier Type",
+        type: "multiselect",
+        required: true,
+        options: [
+          "Manufacturer",
+          "Distributor",
+          "Agent",
+          "Service Provider",
+          "Contractor",
+        ],
+      },
     ],
   },
   {
@@ -163,11 +325,44 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload product catalogs with specifications and pricing",
     icon: "Package",
     fields: [
-      { id: "supplierId", name: "supplierId", label: "Supplier", type: "select", required: true, options: [] },
-      { id: "catalogName", name: "catalogName", label: "Catalog Name/Version", type: "text", required: true, placeholder: "e.g., Medical Equipment Catalog 2024" },
-      { id: "effectiveDate", name: "effectiveDate", label: "Effective Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: false },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["SAR", "USD", "EUR", "AED", "GBP"] },
+      {
+        id: "supplierId",
+        name: "supplierId",
+        label: "Supplier",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "catalogName",
+        name: "catalogName",
+        label: "Catalog Name/Version",
+        type: "text",
+        required: true,
+        placeholder: "e.g., Medical Equipment Catalog 2024",
+      },
+      {
+        id: "effectiveDate",
+        name: "effectiveDate",
+        label: "Effective Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: false,
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["SAR", "USD", "EUR", "AED", "GBP"],
+      },
     ],
   },
   {
@@ -179,12 +374,57 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload supplier price lists with volume discounts",
     icon: "DollarSign",
     fields: [
-      { id: "supplierId", name: "supplierId", label: "Supplier", type: "select", required: true, options: [] },
-      { id: "priceListName", name: "priceListName", label: "Price List Name", type: "text", required: true },
-      { id: "effectiveDate", name: "effectiveDate", label: "Effective Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["SAR", "USD", "EUR", "AED"] },
-      { id: "paymentTerms", name: "paymentTerms", label: "Payment Terms", type: "select", required: false, options: ["Net 30", "Net 60", "Net 90", "Cash on Delivery", "Letter of Credit"] },
+      {
+        id: "supplierId",
+        name: "supplierId",
+        label: "Supplier",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "priceListName",
+        name: "priceListName",
+        label: "Price List Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "effectiveDate",
+        name: "effectiveDate",
+        label: "Effective Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["SAR", "USD", "EUR", "AED"],
+      },
+      {
+        id: "paymentTerms",
+        name: "paymentTerms",
+        label: "Payment Terms",
+        type: "select",
+        required: false,
+        options: [
+          "Net 30",
+          "Net 60",
+          "Net 90",
+          "Cash on Delivery",
+          "Letter of Credit",
+        ],
+      },
     ],
   },
   {
@@ -193,19 +433,84 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     nameAr: "معالجة الفواتير",
     category: "financial",
     subcategory: "invoices",
-    description: "Upload and process supplier invoices with line item extraction",
+    description:
+      "Upload and process supplier invoices with line item extraction",
     icon: "Receipt",
     fields: [
-      { id: "invoiceNumber", name: "invoiceNumber", label: "Invoice Number", labelAr: "رقم الفاتورة", type: "text", required: true },
-      { id: "invoiceDate", name: "invoiceDate", label: "Invoice Date", type: "date", required: true },
-      { id: "dueDate", name: "dueDate", label: "Due Date", type: "date", required: true },
-      { id: "supplierId", name: "supplierId", label: "Supplier", type: "select", required: true, options: [] },
-      { id: "supplierVatNumber", name: "supplierVatNumber", label: "Supplier VAT Number", type: "text", required: true },
-      { id: "poNumber", name: "poNumber", label: "PO Reference", type: "text", required: false },
-      { id: "subtotal", name: "subtotal", label: "Subtotal", type: "currency", required: true },
-      { id: "vatAmount", name: "vatAmount", label: "VAT Amount (15%)", type: "currency", required: true },
-      { id: "totalAmount", name: "totalAmount", label: "Total Amount", labelAr: "المبلغ الإجمالي", type: "currency", required: true },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["SAR", "USD", "EUR", "AED"] },
+      {
+        id: "invoiceNumber",
+        name: "invoiceNumber",
+        label: "Invoice Number",
+        labelAr: "رقم الفاتورة",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "invoiceDate",
+        name: "invoiceDate",
+        label: "Invoice Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "dueDate",
+        name: "dueDate",
+        label: "Due Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "supplierId",
+        name: "supplierId",
+        label: "Supplier",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "supplierVatNumber",
+        name: "supplierVatNumber",
+        label: "Supplier VAT Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "poNumber",
+        name: "poNumber",
+        label: "PO Reference",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "subtotal",
+        name: "subtotal",
+        label: "Subtotal",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "vatAmount",
+        name: "vatAmount",
+        label: "VAT Amount (15%)",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "totalAmount",
+        name: "totalAmount",
+        label: "Total Amount",
+        labelAr: "المبلغ الإجمالي",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["SAR", "USD", "EUR", "AED"],
+      },
     ],
   },
   {
@@ -217,14 +522,64 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload and process purchase orders",
     icon: "ShoppingCart",
     fields: [
-      { id: "poNumber", name: "poNumber", label: "PO Number", labelAr: "رقم أمر الشراء", type: "text", required: true },
-      { id: "poDate", name: "poDate", label: "PO Date", type: "date", required: true },
-      { id: "supplierId", name: "supplierId", label: "Supplier", type: "select", required: true, options: [] },
-      { id: "deliveryDate", name: "deliveryDate", label: "Expected Delivery Date", type: "date", required: true },
-      { id: "deliveryAddress", name: "deliveryAddress", label: "Delivery Address", type: "textarea", required: true },
-      { id: "subtotal", name: "subtotal", label: "Subtotal", type: "currency", required: true },
-      { id: "vatAmount", name: "vatAmount", label: "VAT Amount", type: "currency", required: true },
-      { id: "totalAmount", name: "totalAmount", label: "Total Amount", type: "currency", required: true },
+      {
+        id: "poNumber",
+        name: "poNumber",
+        label: "PO Number",
+        labelAr: "رقم أمر الشراء",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "poDate",
+        name: "poDate",
+        label: "PO Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "supplierId",
+        name: "supplierId",
+        label: "Supplier",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "deliveryDate",
+        name: "deliveryDate",
+        label: "Expected Delivery Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "deliveryAddress",
+        name: "deliveryAddress",
+        label: "Delivery Address",
+        type: "textarea",
+        required: true,
+      },
+      {
+        id: "subtotal",
+        name: "subtotal",
+        label: "Subtotal",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "vatAmount",
+        name: "vatAmount",
+        label: "VAT Amount",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "totalAmount",
+        name: "totalAmount",
+        label: "Total Amount",
+        type: "currency",
+        required: true,
+      },
     ],
   },
   {
@@ -236,15 +591,73 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload expense reports and receipts",
     icon: "Wallet",
     fields: [
-      { id: "reportTitle", name: "reportTitle", label: "Report Title", type: "text", required: true, placeholder: "e.g., Business Trip - Riyadh Q4 2024" },
-      { id: "employeeId", name: "employeeId", label: "Employee", type: "select", required: true, options: [] },
-      { id: "departmentId", name: "departmentId", label: "Department", type: "select", required: true, options: [] },
-      { id: "reportDate", name: "reportDate", label: "Report Date", type: "date", required: true },
-      { id: "periodStart", name: "periodStart", label: "Period Start", type: "date", required: true },
-      { id: "periodEnd", name: "periodEnd", label: "Period End", type: "date", required: true },
-      { id: "totalAmount", name: "totalAmount", label: "Total Amount", type: "currency", required: true },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["SAR", "USD", "EUR", "AED"] },
-      { id: "justification", name: "justification", label: "Business Justification", type: "textarea", required: true },
+      {
+        id: "reportTitle",
+        name: "reportTitle",
+        label: "Report Title",
+        type: "text",
+        required: true,
+        placeholder: "e.g., Business Trip - Riyadh Q4 2024",
+      },
+      {
+        id: "employeeId",
+        name: "employeeId",
+        label: "Employee",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "departmentId",
+        name: "departmentId",
+        label: "Department",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "reportDate",
+        name: "reportDate",
+        label: "Report Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "periodStart",
+        name: "periodStart",
+        label: "Period Start",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "periodEnd",
+        name: "periodEnd",
+        label: "Period End",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "totalAmount",
+        name: "totalAmount",
+        label: "Total Amount",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["SAR", "USD", "EUR", "AED"],
+      },
+      {
+        id: "justification",
+        name: "justification",
+        label: "Business Justification",
+        type: "textarea",
+        required: true,
+      },
     ],
   },
   {
@@ -256,17 +669,69 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload budget allocations and financial plans",
     icon: "PiggyBank",
     fields: [
-      { id: "budgetName", name: "budgetName", label: "Budget Name", type: "text", required: true, placeholder: "e.g., Medical Equipment FY2024" },
-      { id: "fiscalYear", name: "fiscalYear", label: "Fiscal Year", type: "select", required: true, options: ["2024", "2025", "2026"] },
-      { id: "departmentId", name: "departmentId", label: "Department", type: "select", required: true, options: [] },
-      { id: "categoryId", name: "categoryId", label: "Budget Category", type: "select", required: true, options: [] },
-      { id: "totalAmount", name: "totalAmount", label: "Total Budget Amount", type: "currency", required: true },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["SAR", "USD"] },
-      { id: "startDate", name: "startDate", label: "Start Date", type: "date", required: true },
-      { id: "endDate", name: "endDate", label: "End Date", type: "date", required: true },
+      {
+        id: "budgetName",
+        name: "budgetName",
+        label: "Budget Name",
+        type: "text",
+        required: true,
+        placeholder: "e.g., Medical Equipment FY2024",
+      },
+      {
+        id: "fiscalYear",
+        name: "fiscalYear",
+        label: "Fiscal Year",
+        type: "select",
+        required: true,
+        options: ["2024", "2025", "2026"],
+      },
+      {
+        id: "departmentId",
+        name: "departmentId",
+        label: "Department",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "categoryId",
+        name: "categoryId",
+        label: "Budget Category",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "totalAmount",
+        name: "totalAmount",
+        label: "Total Budget Amount",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["SAR", "USD"],
+      },
+      {
+        id: "startDate",
+        name: "startDate",
+        label: "Start Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "endDate",
+        name: "endDate",
+        label: "End Date",
+        type: "date",
+        required: true,
+      },
     ],
   },
-
 
   // TENDER SUBMISSION DOCUMENTS
   {
@@ -279,16 +744,88 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "FileText",
     requiredFor: ["tender"],
     fields: [
-      { id: "tenderNumber", name: "tenderNumber", label: "Tender Reference Number", labelAr: "رقم المناقصة", type: "text", required: true },
-      { id: "title", name: "title", label: "Tender Title", labelAr: "عنوان المناقصة", type: "text", required: true },
-      { id: "issuingOrganization", name: "issuingOrganization", label: "Issuing Organization", type: "text", required: true },
-      { id: "customerId", name: "customerId", label: "Customer", type: "select", required: true, options: [] },
-      { id: "tenderType", name: "tenderType", label: "Tender Type", type: "select", required: true, options: ["Open Tender", "Limited Tender", "Direct Purchase", "Framework Agreement", "Reverse Auction"] },
-      { id: "submissionDeadline", name: "submissionDeadline", label: "Submission Deadline", labelAr: "آخر موعد للتقديم", type: "date", required: true },
-      { id: "submissionTime", name: "submissionTime", label: "Submission Time", type: "text", required: false, placeholder: "e.g., 14:00" },
-      { id: "estimatedValue", name: "estimatedValue", label: "Estimated Value", type: "currency", required: false },
-      { id: "bidBondAmount", name: "bidBondAmount", label: "Bid Bond Amount", type: "currency", required: false },
-      { id: "bidBondPercentage", name: "bidBondPercentage", label: "Bid Bond %", type: "number", required: false },
+      {
+        id: "tenderNumber",
+        name: "tenderNumber",
+        label: "Tender Reference Number",
+        labelAr: "رقم المناقصة",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "title",
+        name: "title",
+        label: "Tender Title",
+        labelAr: "عنوان المناقصة",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "issuingOrganization",
+        name: "issuingOrganization",
+        label: "Issuing Organization",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "customerId",
+        name: "customerId",
+        label: "Customer",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "tenderType",
+        name: "tenderType",
+        label: "Tender Type",
+        type: "select",
+        required: true,
+        options: [
+          "Open Tender",
+          "Limited Tender",
+          "Direct Purchase",
+          "Framework Agreement",
+          "Reverse Auction",
+        ],
+      },
+      {
+        id: "submissionDeadline",
+        name: "submissionDeadline",
+        label: "Submission Deadline",
+        labelAr: "آخر موعد للتقديم",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "submissionTime",
+        name: "submissionTime",
+        label: "Submission Time",
+        type: "text",
+        required: false,
+        placeholder: "e.g., 14:00",
+      },
+      {
+        id: "estimatedValue",
+        name: "estimatedValue",
+        label: "Estimated Value",
+        type: "currency",
+        required: false,
+      },
+      {
+        id: "bidBondAmount",
+        name: "bidBondAmount",
+        label: "Bid Bond Amount",
+        type: "currency",
+        required: false,
+      },
+      {
+        id: "bidBondPercentage",
+        name: "bidBondPercentage",
+        label: "Bid Bond %",
+        type: "number",
+        required: false,
+      },
     ],
   },
   {
@@ -301,10 +838,36 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "FileCode",
     requiredFor: ["tender"],
     fields: [
-      { id: "tenderId", name: "tenderId", label: "Related Tender", type: "select", required: true, options: [] },
-      { id: "proposalVersion", name: "proposalVersion", label: "Version", type: "text", required: true, placeholder: "e.g., v1.0" },
-      { id: "executiveSummary", name: "executiveSummary", label: "Executive Summary", type: "textarea", required: true },
-      { id: "technicalApproach", name: "technicalApproach", label: "Technical Approach", type: "textarea", required: true },
+      {
+        id: "tenderId",
+        name: "tenderId",
+        label: "Related Tender",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "proposalVersion",
+        name: "proposalVersion",
+        label: "Version",
+        type: "text",
+        required: true,
+        placeholder: "e.g., v1.0",
+      },
+      {
+        id: "executiveSummary",
+        name: "executiveSummary",
+        label: "Executive Summary",
+        type: "textarea",
+        required: true,
+      },
+      {
+        id: "technicalApproach",
+        name: "technicalApproach",
+        label: "Technical Approach",
+        type: "textarea",
+        required: true,
+      },
     ],
   },
   {
@@ -317,13 +880,58 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "Calculator",
     requiredFor: ["tender"],
     fields: [
-      { id: "tenderId", name: "tenderId", label: "Related Tender", type: "select", required: true, options: [] },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["SAR", "USD", "EUR"] },
-      { id: "subtotal", name: "subtotal", label: "Subtotal (Before VAT)", type: "currency", required: true },
-      { id: "vatAmount", name: "vatAmount", label: "VAT (15%)", type: "currency", required: true },
-      { id: "grandTotal", name: "grandTotal", label: "Grand Total", type: "currency", required: true },
-      { id: "validityPeriod", name: "validityPeriod", label: "Price Validity Period", type: "text", required: true, placeholder: "e.g., 90 days" },
-      { id: "paymentTerms", name: "paymentTerms", label: "Payment Terms", type: "textarea", required: true },
+      {
+        id: "tenderId",
+        name: "tenderId",
+        label: "Related Tender",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["SAR", "USD", "EUR"],
+      },
+      {
+        id: "subtotal",
+        name: "subtotal",
+        label: "Subtotal (Before VAT)",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "vatAmount",
+        name: "vatAmount",
+        label: "VAT (15%)",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "grandTotal",
+        name: "grandTotal",
+        label: "Grand Total",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "validityPeriod",
+        name: "validityPeriod",
+        label: "Price Validity Period",
+        type: "text",
+        required: true,
+        placeholder: "e.g., 90 days",
+      },
+      {
+        id: "paymentTerms",
+        name: "paymentTerms",
+        label: "Payment Terms",
+        type: "textarea",
+        required: true,
+      },
     ],
   },
   {
@@ -336,15 +944,77 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "Shield",
     requiredFor: ["tender"],
     fields: [
-      { id: "tenderId", name: "tenderId", label: "Related Tender", type: "select", required: true, options: [] },
-      { id: "guaranteeNumber", name: "guaranteeNumber", label: "Guarantee Number", type: "text", required: true },
-      { id: "bankName", name: "bankName", label: "Issuing Bank", type: "text", required: true },
-      { id: "amount", name: "amount", label: "Guarantee Amount", type: "currency", required: true },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["SAR", "USD"] },
-      { id: "issueDate", name: "issueDate", label: "Issue Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
-      { id: "beneficiary", name: "beneficiary", label: "Beneficiary", type: "text", required: true },
-      { id: "guaranteeType", name: "guaranteeType", label: "Guarantee Type", type: "select", required: true, options: ["Bid Bond", "Performance Bond", "Advance Payment Guarantee", "Retention Guarantee"] },
+      {
+        id: "tenderId",
+        name: "tenderId",
+        label: "Related Tender",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "guaranteeNumber",
+        name: "guaranteeNumber",
+        label: "Guarantee Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "bankName",
+        name: "bankName",
+        label: "Issuing Bank",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "amount",
+        name: "amount",
+        label: "Guarantee Amount",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["SAR", "USD"],
+      },
+      {
+        id: "issueDate",
+        name: "issueDate",
+        label: "Issue Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "beneficiary",
+        name: "beneficiary",
+        label: "Beneficiary",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "guaranteeType",
+        name: "guaranteeType",
+        label: "Guarantee Type",
+        type: "select",
+        required: true,
+        options: [
+          "Bid Bond",
+          "Performance Bond",
+          "Advance Payment Guarantee",
+          "Retention Guarantee",
+        ],
+      },
     ],
   },
   {
@@ -357,12 +1027,63 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "Building",
     requiredFor: ["tender", "registration"],
     fields: [
-      { id: "companyName", name: "companyName", label: "Company Name", type: "text", required: true },
-      { id: "yearEstablished", name: "yearEstablished", label: "Year Established", type: "number", required: true },
-      { id: "employeeCount", name: "employeeCount", label: "Number of Employees", type: "number", required: false },
-      { id: "annualRevenue", name: "annualRevenue", label: "Annual Revenue", type: "currency", required: false },
-      { id: "businessLines", name: "businessLines", label: "Business Lines", type: "multiselect", required: true, options: ["Medical Equipment", "Pharmaceuticals", "Healthcare Services", "IT Solutions", "Construction", "Consulting"] },
-      { id: "certifications", name: "certifications", label: "Certifications", type: "multiselect", required: false, options: ["ISO 9001", "ISO 14001", "ISO 13485", "OHSAS 18001", "ISO 45001"] },
+      {
+        id: "companyName",
+        name: "companyName",
+        label: "Company Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "yearEstablished",
+        name: "yearEstablished",
+        label: "Year Established",
+        type: "number",
+        required: true,
+      },
+      {
+        id: "employeeCount",
+        name: "employeeCount",
+        label: "Number of Employees",
+        type: "number",
+        required: false,
+      },
+      {
+        id: "annualRevenue",
+        name: "annualRevenue",
+        label: "Annual Revenue",
+        type: "currency",
+        required: false,
+      },
+      {
+        id: "businessLines",
+        name: "businessLines",
+        label: "Business Lines",
+        type: "multiselect",
+        required: true,
+        options: [
+          "Medical Equipment",
+          "Pharmaceuticals",
+          "Healthcare Services",
+          "IT Solutions",
+          "Construction",
+          "Consulting",
+        ],
+      },
+      {
+        id: "certifications",
+        name: "certifications",
+        label: "Certifications",
+        type: "multiselect",
+        required: false,
+        options: [
+          "ISO 9001",
+          "ISO 14001",
+          "ISO 13485",
+          "OHSAS 18001",
+          "ISO 45001",
+        ],
+      },
     ],
   },
   {
@@ -375,8 +1096,20 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "History",
     requiredFor: ["tender"],
     fields: [
-      { id: "totalContractValue", name: "totalContractValue", label: "Total Contract Value (5 years)", type: "currency", required: false },
-      { id: "completionCertificates", name: "completionCertificates", label: "Completion Certificates Available", type: "boolean", required: true },
+      {
+        id: "totalContractValue",
+        name: "totalContractValue",
+        label: "Total Contract Value (5 years)",
+        type: "currency",
+        required: false,
+      },
+      {
+        id: "completionCertificates",
+        name: "completionCertificates",
+        label: "Completion Certificates Available",
+        type: "boolean",
+        required: true,
+      },
     ],
   },
   {
@@ -389,11 +1122,23 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "CheckSquare",
     requiredFor: ["tender"],
     fields: [
-      { id: "tenderId", name: "tenderId", label: "Related Tender", type: "select", required: true, options: [] },
-      { id: "compliancePercentage", name: "compliancePercentage", label: "Overall Compliance %", type: "number", required: false },
+      {
+        id: "tenderId",
+        name: "tenderId",
+        label: "Related Tender",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "compliancePercentage",
+        name: "compliancePercentage",
+        label: "Overall Compliance %",
+        type: "number",
+        required: false,
+      },
     ],
   },
-
 
   // REGISTRATION PROCESS DOCUMENTS
   {
@@ -406,14 +1151,81 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "FileText",
     requiredFor: ["supplier", "tender"],
     fields: [
-      { id: "crNumber", name: "crNumber", label: "CR Number", labelAr: "رقم السجل التجاري", type: "text", required: true, validation: { pattern: "^[0-9]{10}$" } },
-      { id: "companyName", name: "companyName", label: "Company Name", labelAr: "اسم الشركة", type: "text", required: true },
-      { id: "companyNameAr", name: "companyNameAr", label: "Company Name (Arabic)", type: "text", required: true },
-      { id: "legalForm", name: "legalForm", label: "Legal Form", type: "select", required: true, options: ["LLC", "Joint Stock", "Sole Proprietorship", "Partnership", "Branch of Foreign Company"] },
-      { id: "capital", name: "capital", label: "Paid-up Capital", type: "currency", required: true },
-      { id: "issueDate", name: "issueDate", label: "Issue Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
-      { id: "activities", name: "activities", label: "Business Activities", type: "multiselect", required: true, options: ["Import/Export", "Wholesale", "Retail", "Manufacturing", "Services", "Contracting", "Healthcare"] },
+      {
+        id: "crNumber",
+        name: "crNumber",
+        label: "CR Number",
+        labelAr: "رقم السجل التجاري",
+        type: "text",
+        required: true,
+        validation: { pattern: "^[0-9]{10}$" },
+      },
+      {
+        id: "companyName",
+        name: "companyName",
+        label: "Company Name",
+        labelAr: "اسم الشركة",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "companyNameAr",
+        name: "companyNameAr",
+        label: "Company Name (Arabic)",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "legalForm",
+        name: "legalForm",
+        label: "Legal Form",
+        type: "select",
+        required: true,
+        options: [
+          "LLC",
+          "Joint Stock",
+          "Sole Proprietorship",
+          "Partnership",
+          "Branch of Foreign Company",
+        ],
+      },
+      {
+        id: "capital",
+        name: "capital",
+        label: "Paid-up Capital",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "issueDate",
+        name: "issueDate",
+        label: "Issue Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "activities",
+        name: "activities",
+        label: "Business Activities",
+        type: "multiselect",
+        required: true,
+        options: [
+          "Import/Export",
+          "Wholesale",
+          "Retail",
+          "Manufacturing",
+          "Services",
+          "Contracting",
+          "Healthcare",
+        ],
+      },
       { id: "city", name: "city", label: "City", type: "text", required: true },
     ],
   },
@@ -427,10 +1239,37 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "Receipt",
     requiredFor: ["supplier", "tender"],
     fields: [
-      { id: "vatNumber", name: "vatNumber", label: "VAT Number", labelAr: "الرقم الضريبي", type: "text", required: true, validation: { pattern: "^3[0-9]{13}3$" } },
-      { id: "companyName", name: "companyName", label: "Company Name", type: "text", required: true },
-      { id: "registrationDate", name: "registrationDate", label: "Registration Date", type: "date", required: true },
-      { id: "status", name: "status", label: "Registration Status", type: "select", required: true, options: ["Active", "Suspended", "Cancelled"] },
+      {
+        id: "vatNumber",
+        name: "vatNumber",
+        label: "VAT Number",
+        labelAr: "الرقم الضريبي",
+        type: "text",
+        required: true,
+        validation: { pattern: "^3[0-9]{13}3$" },
+      },
+      {
+        id: "companyName",
+        name: "companyName",
+        label: "Company Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "registrationDate",
+        name: "registrationDate",
+        label: "Registration Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "status",
+        name: "status",
+        label: "Registration Status",
+        type: "select",
+        required: true,
+        options: ["Active", "Suspended", "Cancelled"],
+      },
     ],
   },
   {
@@ -443,11 +1282,42 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "FileText",
     requiredFor: ["supplier", "tender"],
     fields: [
-      { id: "certificateNumber", name: "certificateNumber", label: "Certificate Number", labelAr: "رقم الشهادة", type: "text", required: true },
-      { id: "companyName", name: "companyName", label: "Company Name", type: "text", required: true },
-      { id: "taxNumber", name: "taxNumber", label: "Tax Number", type: "text", required: true },
-      { id: "issueDate", name: "issueDate", label: "Issue Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
+      {
+        id: "certificateNumber",
+        name: "certificateNumber",
+        label: "Certificate Number",
+        labelAr: "رقم الشهادة",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "companyName",
+        name: "companyName",
+        label: "Company Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "taxNumber",
+        name: "taxNumber",
+        label: "Tax Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "issueDate",
+        name: "issueDate",
+        label: "Issue Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
     ],
   },
   {
@@ -460,12 +1330,50 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "Users",
     requiredFor: ["supplier", "tender"],
     fields: [
-      { id: "certificateNumber", name: "certificateNumber", label: "Certificate Number", type: "text", required: true },
-      { id: "establishmentNumber", name: "establishmentNumber", label: "Establishment Number", labelAr: "رقم المنشأة", type: "text", required: true },
-      { id: "companyName", name: "companyName", label: "Company Name", type: "text", required: true },
-      { id: "issueDate", name: "issueDate", label: "Issue Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
-      { id: "complianceStatus", name: "complianceStatus", label: "Compliance Status", type: "select", required: true, options: ["Compliant", "Non-Compliant", "Pending"] },
+      {
+        id: "certificateNumber",
+        name: "certificateNumber",
+        label: "Certificate Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "establishmentNumber",
+        name: "establishmentNumber",
+        label: "Establishment Number",
+        labelAr: "رقم المنشأة",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "companyName",
+        name: "companyName",
+        label: "Company Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "issueDate",
+        name: "issueDate",
+        label: "Issue Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "complianceStatus",
+        name: "complianceStatus",
+        label: "Compliance Status",
+        type: "select",
+        required: true,
+        options: ["Compliant", "Non-Compliant", "Pending"],
+      },
     ],
   },
   {
@@ -477,15 +1385,77 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload bank guarantees for vendor registration",
     icon: "Landmark",
     fields: [
-      { id: "guaranteeNumber", name: "guaranteeNumber", label: "Guarantee Number", type: "text", required: true },
-      { id: "bankName", name: "bankName", label: "Issuing Bank", type: "text", required: true },
-      { id: "bankBranch", name: "bankBranch", label: "Bank Branch", type: "text", required: false },
-      { id: "amount", name: "amount", label: "Guarantee Amount", type: "currency", required: true },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["SAR", "USD"] },
-      { id: "beneficiary", name: "beneficiary", label: "Beneficiary", type: "text", required: true },
-      { id: "issueDate", name: "issueDate", label: "Issue Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
-      { id: "guaranteeType", name: "guaranteeType", label: "Guarantee Type", type: "select", required: true, options: ["Bid Bond", "Performance Bond", "Advance Payment", "Retention", "Credit Facility"] },
+      {
+        id: "guaranteeNumber",
+        name: "guaranteeNumber",
+        label: "Guarantee Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "bankName",
+        name: "bankName",
+        label: "Issuing Bank",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "bankBranch",
+        name: "bankBranch",
+        label: "Bank Branch",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "amount",
+        name: "amount",
+        label: "Guarantee Amount",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["SAR", "USD"],
+      },
+      {
+        id: "beneficiary",
+        name: "beneficiary",
+        label: "Beneficiary",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "issueDate",
+        name: "issueDate",
+        label: "Issue Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "guaranteeType",
+        name: "guaranteeType",
+        label: "Guarantee Type",
+        type: "select",
+        required: true,
+        options: [
+          "Bid Bond",
+          "Performance Bond",
+          "Advance Payment",
+          "Retention",
+          "Credit Facility",
+        ],
+      },
     ],
   },
   {
@@ -497,13 +1467,63 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload insurance certificates",
     icon: "Shield",
     fields: [
-      { id: "policyNumber", name: "policyNumber", label: "Policy Number", type: "text", required: true },
-      { id: "insuranceCompany", name: "insuranceCompany", label: "Insurance Company", type: "text", required: true },
-      { id: "insuredParty", name: "insuredParty", label: "Insured Party", type: "text", required: true },
-      { id: "insuranceType", name: "insuranceType", label: "Insurance Type", type: "multiselect", required: true, options: ["General Liability", "Professional Liability", "Product Liability", "Workers Compensation", "Property Insurance", "Medical Malpractice"] },
-      { id: "coverageAmount", name: "coverageAmount", label: "Coverage Amount", type: "currency", required: true },
-      { id: "startDate", name: "startDate", label: "Coverage Start Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Coverage End Date", type: "date", required: true },
+      {
+        id: "policyNumber",
+        name: "policyNumber",
+        label: "Policy Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "insuranceCompany",
+        name: "insuranceCompany",
+        label: "Insurance Company",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "insuredParty",
+        name: "insuredParty",
+        label: "Insured Party",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "insuranceType",
+        name: "insuranceType",
+        label: "Insurance Type",
+        type: "multiselect",
+        required: true,
+        options: [
+          "General Liability",
+          "Professional Liability",
+          "Product Liability",
+          "Workers Compensation",
+          "Property Insurance",
+          "Medical Malpractice",
+        ],
+      },
+      {
+        id: "coverageAmount",
+        name: "coverageAmount",
+        label: "Coverage Amount",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "startDate",
+        name: "startDate",
+        label: "Coverage Start Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Coverage End Date",
+        type: "date",
+        required: true,
+      },
     ],
   },
   {
@@ -516,11 +1536,49 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "Pen",
     requiredFor: ["supplier"],
     fields: [
-      { id: "companyName", name: "companyName", label: "Company Name", type: "text", required: true },
-      { id: "authorizationScope", name: "authorizationScope", label: "Authorization Scope", type: "multiselect", required: true, options: ["Full Authority", "Contracts Only", "Financial Transactions", "Tender Submissions", "Banking", "Limited Authority"] },
-      { id: "effectiveDate", name: "effectiveDate", label: "Effective Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: false },
-      { id: "resolutionNumber", name: "resolutionNumber", label: "Board Resolution Number", type: "text", required: false },
+      {
+        id: "companyName",
+        name: "companyName",
+        label: "Company Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "authorizationScope",
+        name: "authorizationScope",
+        label: "Authorization Scope",
+        type: "multiselect",
+        required: true,
+        options: [
+          "Full Authority",
+          "Contracts Only",
+          "Financial Transactions",
+          "Tender Submissions",
+          "Banking",
+          "Limited Authority",
+        ],
+      },
+      {
+        id: "effectiveDate",
+        name: "effectiveDate",
+        label: "Effective Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: false,
+      },
+      {
+        id: "resolutionNumber",
+        name: "resolutionNumber",
+        label: "Board Resolution Number",
+        type: "text",
+        required: false,
+      },
     ],
   },
   {
@@ -533,16 +1591,53 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     icon: "MapPin",
     requiredFor: ["supplier"],
     fields: [
-      { id: "shortAddress", name: "shortAddress", label: "Short Address", labelAr: "العنوان المختصر", type: "text", required: true },
-      { id: "buildingNumber", name: "buildingNumber", label: "Building Number", type: "text", required: true },
-      { id: "streetName", name: "streetName", label: "Street Name", type: "text", required: true },
-      { id: "district", name: "district", label: "District", type: "text", required: true },
+      {
+        id: "shortAddress",
+        name: "shortAddress",
+        label: "Short Address",
+        labelAr: "العنوان المختصر",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "buildingNumber",
+        name: "buildingNumber",
+        label: "Building Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "streetName",
+        name: "streetName",
+        label: "Street Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "district",
+        name: "district",
+        label: "District",
+        type: "text",
+        required: true,
+      },
       { id: "city", name: "city", label: "City", type: "text", required: true },
-      { id: "postalCode", name: "postalCode", label: "Postal Code", type: "text", required: true, validation: { pattern: "^[0-9]{5}$" } },
-      { id: "additionalNumber", name: "additionalNumber", label: "Additional Number", type: "text", required: true },
+      {
+        id: "postalCode",
+        name: "postalCode",
+        label: "Postal Code",
+        type: "text",
+        required: true,
+        validation: { pattern: "^[0-9]{5}$" },
+      },
+      {
+        id: "additionalNumber",
+        name: "additionalNumber",
+        label: "Additional Number",
+        type: "text",
+        required: true,
+      },
     ],
   },
-
 
   // SUPPLIER COMPLIANCE DOCUMENTS
   {
@@ -554,19 +1649,116 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload supplier contracts and agreements",
     icon: "FileSignature",
     fields: [
-      { id: "contractNumber", name: "contractNumber", label: "Contract Number", type: "text", required: true },
-      { id: "contractTitle", name: "contractTitle", label: "Contract Title", type: "text", required: true },
-      { id: "supplierId", name: "supplierId", label: "Supplier", type: "select", required: true, options: [] },
-      { id: "contractType", name: "contractType", label: "Contract Type", type: "select", required: true, options: ["Supply Agreement", "Distribution Agreement", "Service Contract", "Maintenance Contract", "Framework Agreement", "Exclusive Distribution"] },
-      { id: "startDate", name: "startDate", label: "Start Date", type: "date", required: true },
-      { id: "endDate", name: "endDate", label: "End Date", type: "date", required: true },
-      { id: "contractValue", name: "contractValue", label: "Contract Value", type: "currency", required: false },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["SAR", "USD", "EUR"] },
-      { id: "autoRenewal", name: "autoRenewal", label: "Auto Renewal", type: "boolean", required: true },
-      { id: "noticePeriod", name: "noticePeriod", label: "Notice Period (days)", type: "number", required: false },
-      { id: "territory", name: "territory", label: "Territory/Region", type: "multiselect", required: false, options: ["Saudi Arabia", "GCC", "Middle East", "Worldwide"] },
-      { id: "productCategories", name: "productCategories", label: "Product Categories", type: "multiselect", required: true, options: ["Medical Equipment", "Consumables", "Pharmaceuticals", "Services", "All Products"] },
-      { id: "exclusivity", name: "exclusivity", label: "Exclusivity", type: "select", required: true, options: ["Exclusive", "Non-Exclusive", "Semi-Exclusive"] },
+      {
+        id: "contractNumber",
+        name: "contractNumber",
+        label: "Contract Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "contractTitle",
+        name: "contractTitle",
+        label: "Contract Title",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "supplierId",
+        name: "supplierId",
+        label: "Supplier",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "contractType",
+        name: "contractType",
+        label: "Contract Type",
+        type: "select",
+        required: true,
+        options: [
+          "Supply Agreement",
+          "Distribution Agreement",
+          "Service Contract",
+          "Maintenance Contract",
+          "Framework Agreement",
+          "Exclusive Distribution",
+        ],
+      },
+      {
+        id: "startDate",
+        name: "startDate",
+        label: "Start Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "endDate",
+        name: "endDate",
+        label: "End Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "contractValue",
+        name: "contractValue",
+        label: "Contract Value",
+        type: "currency",
+        required: false,
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["SAR", "USD", "EUR"],
+      },
+      {
+        id: "autoRenewal",
+        name: "autoRenewal",
+        label: "Auto Renewal",
+        type: "boolean",
+        required: true,
+      },
+      {
+        id: "noticePeriod",
+        name: "noticePeriod",
+        label: "Notice Period (days)",
+        type: "number",
+        required: false,
+      },
+      {
+        id: "territory",
+        name: "territory",
+        label: "Territory/Region",
+        type: "multiselect",
+        required: false,
+        options: ["Saudi Arabia", "GCC", "Middle East", "Worldwide"],
+      },
+      {
+        id: "productCategories",
+        name: "productCategories",
+        label: "Product Categories",
+        type: "multiselect",
+        required: true,
+        options: [
+          "Medical Equipment",
+          "Consumables",
+          "Pharmaceuticals",
+          "Services",
+          "All Products",
+        ],
+      },
+      {
+        id: "exclusivity",
+        name: "exclusivity",
+        label: "Exclusivity",
+        type: "select",
+        required: true,
+        options: ["Exclusive", "Non-Exclusive", "Semi-Exclusive"],
+      },
     ],
   },
   {
@@ -578,16 +1770,84 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload manufacturer letter of authorization",
     icon: "Award",
     fields: [
-      { id: "loaNumber", name: "loaNumber", label: "LOA Reference Number", type: "text", required: false },
-      { id: "manufacturerName", name: "manufacturerName", label: "Manufacturer Name", type: "text", required: true },
-      { id: "manufacturerCountry", name: "manufacturerCountry", label: "Manufacturer Country", type: "text", required: true },
-      { id: "authorizedDistributor", name: "authorizedDistributor", label: "Authorized Distributor", type: "text", required: true },
-      { id: "authorizationType", name: "authorizationType", label: "Authorization Type", type: "select", required: true, options: ["Exclusive Distributor", "Non-Exclusive Distributor", "Authorized Agent", "Authorized Reseller", "Service Provider"] },
-      { id: "territory", name: "territory", label: "Territory", type: "multiselect", required: true, options: ["Saudi Arabia", "GCC", "Middle East", "MENA", "Worldwide"] },
-      { id: "issueDate", name: "issueDate", label: "Issue Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
-      { id: "signatoryName", name: "signatoryName", label: "Signatory Name", type: "text", required: false },
-      { id: "signatoryTitle", name: "signatoryTitle", label: "Signatory Title", type: "text", required: false },
+      {
+        id: "loaNumber",
+        name: "loaNumber",
+        label: "LOA Reference Number",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "manufacturerName",
+        name: "manufacturerName",
+        label: "Manufacturer Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "manufacturerCountry",
+        name: "manufacturerCountry",
+        label: "Manufacturer Country",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "authorizedDistributor",
+        name: "authorizedDistributor",
+        label: "Authorized Distributor",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "authorizationType",
+        name: "authorizationType",
+        label: "Authorization Type",
+        type: "select",
+        required: true,
+        options: [
+          "Exclusive Distributor",
+          "Non-Exclusive Distributor",
+          "Authorized Agent",
+          "Authorized Reseller",
+          "Service Provider",
+        ],
+      },
+      {
+        id: "territory",
+        name: "territory",
+        label: "Territory",
+        type: "multiselect",
+        required: true,
+        options: ["Saudi Arabia", "GCC", "Middle East", "MENA", "Worldwide"],
+      },
+      {
+        id: "issueDate",
+        name: "issueDate",
+        label: "Issue Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "signatoryName",
+        name: "signatoryName",
+        label: "Signatory Name",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "signatoryTitle",
+        name: "signatoryTitle",
+        label: "Signatory Title",
+        type: "text",
+        required: false,
+      },
     ],
   },
   {
@@ -599,14 +1859,64 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload Ministry of Commerce agency registration",
     icon: "Building2",
     fields: [
-      { id: "registrationNumber", name: "registrationNumber", label: "Registration Number", labelAr: "رقم التسجيل", type: "text", required: true },
-      { id: "agentName", name: "agentName", label: "Agent/Distributor Name", type: "text", required: true },
-      { id: "principalName", name: "principalName", label: "Principal/Manufacturer Name", type: "text", required: true },
-      { id: "principalCountry", name: "principalCountry", label: "Principal Country", type: "text", required: true },
-      { id: "agencyType", name: "agencyType", label: "Agency Type", type: "select", required: true, options: ["Commercial Agency", "Distribution Agreement", "Franchise"] },
-      { id: "productDescription", name: "productDescription", label: "Products/Services Covered", type: "textarea", required: true },
-      { id: "registrationDate", name: "registrationDate", label: "Registration Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
+      {
+        id: "registrationNumber",
+        name: "registrationNumber",
+        label: "Registration Number",
+        labelAr: "رقم التسجيل",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "agentName",
+        name: "agentName",
+        label: "Agent/Distributor Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "principalName",
+        name: "principalName",
+        label: "Principal/Manufacturer Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "principalCountry",
+        name: "principalCountry",
+        label: "Principal Country",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "agencyType",
+        name: "agencyType",
+        label: "Agency Type",
+        type: "select",
+        required: true,
+        options: ["Commercial Agency", "Distribution Agreement", "Franchise"],
+      },
+      {
+        id: "productDescription",
+        name: "productDescription",
+        label: "Products/Services Covered",
+        type: "textarea",
+        required: true,
+      },
+      {
+        id: "registrationDate",
+        name: "registrationDate",
+        label: "Registration Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
     ],
   },
   {
@@ -618,14 +1928,71 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload FDA certificates and 510(k) clearances",
     icon: "BadgeCheck",
     fields: [
-      { id: "fdaNumber", name: "fdaNumber", label: "FDA/510(k) Number", type: "text", required: true },
-      { id: "certificateType", name: "certificateType", label: "Certificate Type", type: "select", required: true, options: ["510(k) Clearance", "PMA Approval", "De Novo", "FDA Registration", "Establishment Registration", "Device Listing"] },
-      { id: "deviceName", name: "deviceName", label: "Device/Product Name", type: "text", required: true },
-      { id: "deviceClass", name: "deviceClass", label: "Device Class", type: "select", required: true, options: ["Class I", "Class II", "Class III"] },
-      { id: "productCode", name: "productCode", label: "Product Code", type: "text", required: false },
-      { id: "manufacturerName", name: "manufacturerName", label: "Manufacturer Name", type: "text", required: true },
-      { id: "clearanceDate", name: "clearanceDate", label: "Clearance/Approval Date", type: "date", required: true },
-      { id: "intendedUse", name: "intendedUse", label: "Intended Use", type: "textarea", required: true },
+      {
+        id: "fdaNumber",
+        name: "fdaNumber",
+        label: "FDA/510(k) Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "certificateType",
+        name: "certificateType",
+        label: "Certificate Type",
+        type: "select",
+        required: true,
+        options: [
+          "510(k) Clearance",
+          "PMA Approval",
+          "De Novo",
+          "FDA Registration",
+          "Establishment Registration",
+          "Device Listing",
+        ],
+      },
+      {
+        id: "deviceName",
+        name: "deviceName",
+        label: "Device/Product Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "deviceClass",
+        name: "deviceClass",
+        label: "Device Class",
+        type: "select",
+        required: true,
+        options: ["Class I", "Class II", "Class III"],
+      },
+      {
+        id: "productCode",
+        name: "productCode",
+        label: "Product Code",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "manufacturerName",
+        name: "manufacturerName",
+        label: "Manufacturer Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "clearanceDate",
+        name: "clearanceDate",
+        label: "Clearance/Approval Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "intendedUse",
+        name: "intendedUse",
+        label: "Intended Use",
+        type: "textarea",
+        required: true,
+      },
     ],
   },
   {
@@ -637,16 +2004,100 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload CE marking certificates",
     icon: "Shield",
     fields: [
-      { id: "certificateNumber", name: "certificateNumber", label: "Certificate Number", type: "text", required: true },
-      { id: "certificateType", name: "certificateType", label: "Certificate Type", type: "select", required: true, options: ["EC Certificate", "Declaration of Conformity", "Technical File Review", "Type Examination Certificate"] },
-      { id: "notifiedBody", name: "notifiedBody", label: "Notified Body", type: "text", required: true },
-      { id: "notifiedBodyNumber", name: "notifiedBodyNumber", label: "Notified Body Number", type: "text", required: true },
-      { id: "manufacturerName", name: "manufacturerName", label: "Manufacturer Name", type: "text", required: true },
-      { id: "productName", name: "productName", label: "Product/Device Name", type: "text", required: true },
-      { id: "directive", name: "directive", label: "Applicable Directive", type: "multiselect", required: true, options: ["MDR 2017/745", "MDD 93/42/EEC", "IVDR 2017/746", "IVDD 98/79/EC", "LVD 2014/35/EU", "EMC 2014/30/EU"] },
-      { id: "classification", name: "classification", label: "Device Classification", type: "select", required: true, options: ["Class I", "Class IIa", "Class IIb", "Class III", "Class A", "Class B", "Class C", "Class D"] },
-      { id: "issueDate", name: "issueDate", label: "Issue Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
+      {
+        id: "certificateNumber",
+        name: "certificateNumber",
+        label: "Certificate Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "certificateType",
+        name: "certificateType",
+        label: "Certificate Type",
+        type: "select",
+        required: true,
+        options: [
+          "EC Certificate",
+          "Declaration of Conformity",
+          "Technical File Review",
+          "Type Examination Certificate",
+        ],
+      },
+      {
+        id: "notifiedBody",
+        name: "notifiedBody",
+        label: "Notified Body",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "notifiedBodyNumber",
+        name: "notifiedBodyNumber",
+        label: "Notified Body Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "manufacturerName",
+        name: "manufacturerName",
+        label: "Manufacturer Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "productName",
+        name: "productName",
+        label: "Product/Device Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "directive",
+        name: "directive",
+        label: "Applicable Directive",
+        type: "multiselect",
+        required: true,
+        options: [
+          "MDR 2017/745",
+          "MDD 93/42/EEC",
+          "IVDR 2017/746",
+          "IVDD 98/79/EC",
+          "LVD 2014/35/EU",
+          "EMC 2014/30/EU",
+        ],
+      },
+      {
+        id: "classification",
+        name: "classification",
+        label: "Device Classification",
+        type: "select",
+        required: true,
+        options: [
+          "Class I",
+          "Class IIa",
+          "Class IIb",
+          "Class III",
+          "Class A",
+          "Class B",
+          "Class C",
+          "Class D",
+        ],
+      },
+      {
+        id: "issueDate",
+        name: "issueDate",
+        label: "Issue Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
     ],
   },
   {
@@ -658,14 +2109,71 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload ISO certification documents",
     icon: "Award",
     fields: [
-      { id: "certificateNumber", name: "certificateNumber", label: "Certificate Number", type: "text", required: true },
-      { id: "isoStandard", name: "isoStandard", label: "ISO Standard", type: "multiselect", required: true, options: ["ISO 9001:2015", "ISO 13485:2016", "ISO 14001:2015", "ISO 45001:2018", "ISO 27001:2022", "ISO 22000:2018", "ISO 14971:2019"] },
-      { id: "certificationBody", name: "certificationBody", label: "Certification Body", type: "text", required: true },
-      { id: "accreditationBody", name: "accreditationBody", label: "Accreditation Body", type: "text", required: false },
-      { id: "companyName", name: "companyName", label: "Certified Organization", type: "text", required: true },
-      { id: "scope", name: "scope", label: "Certification Scope", type: "textarea", required: true },
-      { id: "issueDate", name: "issueDate", label: "Issue Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
+      {
+        id: "certificateNumber",
+        name: "certificateNumber",
+        label: "Certificate Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "isoStandard",
+        name: "isoStandard",
+        label: "ISO Standard",
+        type: "multiselect",
+        required: true,
+        options: [
+          "ISO 9001:2015",
+          "ISO 13485:2016",
+          "ISO 14001:2015",
+          "ISO 45001:2018",
+          "ISO 27001:2022",
+          "ISO 22000:2018",
+          "ISO 14971:2019",
+        ],
+      },
+      {
+        id: "certificationBody",
+        name: "certificationBody",
+        label: "Certification Body",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "accreditationBody",
+        name: "accreditationBody",
+        label: "Accreditation Body",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "companyName",
+        name: "companyName",
+        label: "Certified Organization",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "scope",
+        name: "scope",
+        label: "Certification Scope",
+        type: "textarea",
+        required: true,
+      },
+      {
+        id: "issueDate",
+        name: "issueDate",
+        label: "Issue Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
     ],
   },
   {
@@ -677,16 +2185,85 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload SFDA medical device registration",
     icon: "BadgeCheck",
     fields: [
-      { id: "sfdaNumber", name: "sfdaNumber", label: "SFDA Registration Number", labelAr: "رقم تسجيل الهيئة", type: "text", required: true },
-      { id: "certificateType", name: "certificateType", label: "Certificate Type", type: "select", required: true, options: ["Marketing Authorization", "Device Listing", "Establishment License", "Import License", "Free Sale Certificate"] },
-      { id: "deviceName", name: "deviceName", label: "Device/Product Name", type: "text", required: true },
-      { id: "deviceNameAr", name: "deviceNameAr", label: "Device Name (Arabic)", type: "text", required: false },
-      { id: "riskClass", name: "riskClass", label: "Risk Classification", type: "select", required: true, options: ["Class A", "Class B", "Class C", "Class D"] },
-      { id: "manufacturerName", name: "manufacturerName", label: "Manufacturer Name", type: "text", required: true },
-      { id: "manufacturerCountry", name: "manufacturerCountry", label: "Country of Origin", type: "text", required: true },
-      { id: "localAgent", name: "localAgent", label: "Local Authorized Representative", type: "text", required: true },
-      { id: "issueDate", name: "issueDate", label: "Issue Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: true },
+      {
+        id: "sfdaNumber",
+        name: "sfdaNumber",
+        label: "SFDA Registration Number",
+        labelAr: "رقم تسجيل الهيئة",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "certificateType",
+        name: "certificateType",
+        label: "Certificate Type",
+        type: "select",
+        required: true,
+        options: [
+          "Marketing Authorization",
+          "Device Listing",
+          "Establishment License",
+          "Import License",
+          "Free Sale Certificate",
+        ],
+      },
+      {
+        id: "deviceName",
+        name: "deviceName",
+        label: "Device/Product Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "deviceNameAr",
+        name: "deviceNameAr",
+        label: "Device Name (Arabic)",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "riskClass",
+        name: "riskClass",
+        label: "Risk Classification",
+        type: "select",
+        required: true,
+        options: ["Class A", "Class B", "Class C", "Class D"],
+      },
+      {
+        id: "manufacturerName",
+        name: "manufacturerName",
+        label: "Manufacturer Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "manufacturerCountry",
+        name: "manufacturerCountry",
+        label: "Country of Origin",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "localAgent",
+        name: "localAgent",
+        label: "Local Authorized Representative",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "issueDate",
+        name: "issueDate",
+        label: "Issue Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: true,
+      },
     ],
   },
   {
@@ -698,21 +2275,93 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     description: "Upload manufacturer authorization letters for bids",
     icon: "FileSignature",
     fields: [
-      { id: "referenceNumber", name: "referenceNumber", label: "Reference Number", type: "text", required: false },
-      { id: "manufacturerName", name: "manufacturerName", label: "Manufacturer Name", type: "text", required: true },
-      { id: "manufacturerCountry", name: "manufacturerCountry", label: "Manufacturer Country", type: "text", required: true },
-      { id: "authorizedCompany", name: "authorizedCompany", label: "Authorized Company", type: "text", required: true },
-      { id: "authorizationPurpose", name: "authorizationPurpose", label: "Authorization Purpose", type: "select", required: true, options: ["Tender Participation", "General Distribution", "Service Provision", "After-Sales Support", "Project Specific"] },
-      { id: "tenderReference", name: "tenderReference", label: "Tender/Project Reference", type: "text", required: false },
-      { id: "customerName", name: "customerName", label: "End Customer Name", type: "text", required: false },
-      { id: "letterDate", name: "letterDate", label: "Letter Date", type: "date", required: true },
-      { id: "validUntil", name: "validUntil", label: "Valid Until", type: "date", required: false },
-      { id: "signatoryName", name: "signatoryName", label: "Signatory Name", type: "text", required: true },
-      { id: "signatoryTitle", name: "signatoryTitle", label: "Signatory Title", type: "text", required: true },
+      {
+        id: "referenceNumber",
+        name: "referenceNumber",
+        label: "Reference Number",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "manufacturerName",
+        name: "manufacturerName",
+        label: "Manufacturer Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "manufacturerCountry",
+        name: "manufacturerCountry",
+        label: "Manufacturer Country",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "authorizedCompany",
+        name: "authorizedCompany",
+        label: "Authorized Company",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "authorizationPurpose",
+        name: "authorizationPurpose",
+        label: "Authorization Purpose",
+        type: "select",
+        required: true,
+        options: [
+          "Tender Participation",
+          "General Distribution",
+          "Service Provision",
+          "After-Sales Support",
+          "Project Specific",
+        ],
+      },
+      {
+        id: "tenderReference",
+        name: "tenderReference",
+        label: "Tender/Project Reference",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "customerName",
+        name: "customerName",
+        label: "End Customer Name",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "letterDate",
+        name: "letterDate",
+        label: "Letter Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "validUntil",
+        name: "validUntil",
+        label: "Valid Until",
+        type: "date",
+        required: false,
+      },
+      {
+        id: "signatoryName",
+        name: "signatoryName",
+        label: "Signatory Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "signatoryTitle",
+        name: "signatoryTitle",
+        label: "Signatory Title",
+        type: "text",
+        required: true,
+      },
     ],
   },
 ];
-
 
 // =============================================================================
 // COMPONENT IMPLEMENTATION
@@ -726,7 +2375,11 @@ interface ComprehensiveDocumentUploadProps {
   onSuccess?: (result: any) => void;
 }
 
-type WizardStep = "select-template" | "upload-file" | "extract-data" | "review-confirm";
+type WizardStep =
+  | "select-template"
+  | "upload-file"
+  | "extract-data"
+  | "review-confirm";
 type ViewMode = "grid" | "list";
 
 export function ComprehensiveDocumentUpload({
@@ -737,15 +2390,22 @@ export function ComprehensiveDocumentUpload({
   onSuccess,
 }: ComprehensiveDocumentUploadProps) {
   const queryClient = useQueryClient();
-  
+
   // State
   const [currentStep, setCurrentStep] = useState<WizardStep>("select-template");
-  const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | "all">(defaultCategory || "all");
-  const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(
-    defaultTemplate ? DOCUMENT_TEMPLATES.find(t => t.id === defaultTemplate) || null : null
-  );
+  const [selectedCategory, setSelectedCategory] = useState<
+    TemplateCategory | "all"
+  >(defaultCategory || "all");
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<DocumentTemplate | null>(
+      defaultTemplate
+        ? DOCUMENT_TEMPLATES.find(t => t.id === defaultTemplate) || null
+        : null
+    );
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [extractedData, setExtractedData] = useState<ExtractionResult | null>(null);
+  const [extractedData, setExtractedData] = useState<ExtractionResult | null>(
+    null
+  );
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionProgress, setExtractionProgress] = useState(0);
@@ -760,8 +2420,10 @@ export function ComprehensiveDocumentUpload({
   // Filter templates based on category and search
   const filteredTemplates = useMemo(() => {
     return DOCUMENT_TEMPLATES.filter(t => {
-      const matchesCategory = selectedCategory === "all" || t.category === selectedCategory;
-      const matchesSearch = searchQuery === "" || 
+      const matchesCategory =
+        selectedCategory === "all" || t.category === selectedCategory;
+      const matchesSearch =
+        searchQuery === "" ||
         t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.subcategory.toLowerCase().includes(searchQuery.toLowerCase());
@@ -846,17 +2508,18 @@ export function ComprehensiveDocumentUpload({
 
       // Map template category to document type
       const documentTypeMap: Record<string, string> = {
-        "data_upload": "suppliers",
-        "financial": "invoices",
-        "tender_submission": "tenders",
-        "registration": "suppliers",
-        "supplier_compliance": "suppliers",
+        data_upload: "suppliers",
+        financial: "invoices",
+        tender_submission: "tenders",
+        registration: "suppliers",
+        supplier_compliance: "suppliers",
       };
 
       const response = await trpcClient.documents.extractFromBase64.mutate({
         fileData: base64,
         fileName: file.name,
-        documentType: documentTypeMap[selectedTemplate.category] as any || "tenders",
+        documentType:
+          (documentTypeMap[selectedTemplate.category] as any) || "tenders",
       });
 
       clearInterval(progressInterval);
@@ -898,9 +2561,23 @@ export function ComprehensiveDocumentUpload({
 
   // Get confidence badge
   const getConfidenceBadge = (confidence: number) => {
-    if (confidence >= 0.9) return <Badge className="bg-green-100 text-green-800">High ({Math.round(confidence * 100)}%)</Badge>;
-    if (confidence >= 0.7) return <Badge className="bg-yellow-100 text-yellow-800">Medium ({Math.round(confidence * 100)}%)</Badge>;
-    return <Badge className="bg-red-100 text-red-800">Low ({Math.round(confidence * 100)}%)</Badge>;
+    if (confidence >= 0.9)
+      return (
+        <Badge className="bg-green-100 text-green-800">
+          High ({Math.round(confidence * 100)}%)
+        </Badge>
+      );
+    if (confidence >= 0.7)
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800">
+          Medium ({Math.round(confidence * 100)}%)
+        </Badge>
+      );
+    return (
+      <Badge className="bg-red-100 text-red-800">
+        Low ({Math.round(confidence * 100)}%)
+      </Badge>
+    );
   };
 
   // Get icon component
@@ -909,7 +2586,6 @@ export function ComprehensiveDocumentUpload({
     return <IconComponent className="h-5 w-5" />;
   };
 
-
   // Render field based on type
   const renderField = (field: TemplateField) => {
     const value = formData[field.name] || "";
@@ -917,17 +2593,26 @@ export function ComprehensiveDocumentUpload({
     switch (field.type) {
       case "file":
         return null;
-      case "select":
+      case "select": {
         let options: { value: string; label: string }[] = [];
         if (field.name === "supplierId") {
-          options = suppliers.map((s: any) => ({ value: s.id.toString(), label: s.name }));
+          options = suppliers.map((s: any) => ({
+            value: s.id.toString(),
+            label: s.name,
+          }));
         } else if (field.name === "customerId") {
-          options = customers.map((c: any) => ({ value: c.id.toString(), label: c.name }));
+          options = customers.map((c: any) => ({
+            value: c.id.toString(),
+            label: c.name,
+          }));
         } else if (field.options) {
           options = field.options.map(o => ({ value: o, label: o }));
         }
         return (
-          <Select value={value} onValueChange={v => handleFieldChange(field.name, v)}>
+          <Select
+            value={value}
+            onValueChange={v => handleFieldChange(field.name, v)}
+          >
             <SelectTrigger>
               <SelectValue placeholder={`Select ${field.label}`} />
             </SelectTrigger>
@@ -940,7 +2625,8 @@ export function ComprehensiveDocumentUpload({
             </SelectContent>
           </Select>
         );
-      case "multiselect":
+      }
+      case "multiselect": {
         const multiOptions = field.options || [];
         const selectedValues = Array.isArray(value) ? value : [];
         return (
@@ -950,18 +2636,21 @@ export function ComprehensiveDocumentUpload({
                 <Checkbox
                   id={`${field.id}-${opt}`}
                   checked={selectedValues.includes(opt)}
-                  onCheckedChange={(checked) => {
+                  onCheckedChange={checked => {
                     const newValues = checked
                       ? [...selectedValues, opt]
                       : selectedValues.filter((v: string) => v !== opt);
                     handleFieldChange(field.name, newValues);
                   }}
                 />
-                <label htmlFor={`${field.id}-${opt}`} className="text-sm">{opt}</label>
+                <label htmlFor={`${field.id}-${opt}`} className="text-sm">
+                  {opt}
+                </label>
               </div>
             ))}
           </div>
         );
+      }
       case "date":
         return (
           <Input
@@ -996,9 +2685,13 @@ export function ComprehensiveDocumentUpload({
             <Checkbox
               id={field.id}
               checked={value === true}
-              onCheckedChange={(checked) => handleFieldChange(field.name, checked)}
+              onCheckedChange={checked =>
+                handleFieldChange(field.name, checked)
+              }
             />
-            <label htmlFor={field.id} className="text-sm">Yes</label>
+            <label htmlFor={field.id} className="text-sm">
+              Yes
+            </label>
           </div>
         );
       case "email":
@@ -1070,7 +2763,6 @@ export function ComprehensiveDocumentUpload({
     }
   };
 
-
   // Render step content
   const renderStepContent = () => {
     switch (currentStep) {
@@ -1090,7 +2782,12 @@ export function ComprehensiveDocumentUpload({
                   />
                 </div>
               </div>
-              <Select value={selectedCategory} onValueChange={(v) => setSelectedCategory(v as TemplateCategory | "all")}>
+              <Select
+                value={selectedCategory}
+                onValueChange={v =>
+                  setSelectedCategory(v as TemplateCategory | "all")
+                }
+              >
                 <SelectTrigger className="w-full sm:w-[200px]">
                   <Filter className="h-4 w-4 mr-2" />
                   <SelectValue placeholder="All Categories" />
@@ -1098,7 +2795,9 @@ export function ComprehensiveDocumentUpload({
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
                   {Object.entries(categoryLabels).map(([key, { label }]) => (
-                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1122,7 +2821,8 @@ export function ComprehensiveDocumentUpload({
 
             {/* Template Count */}
             <div className="text-sm text-muted-foreground">
-              Showing {filteredTemplates.length} of {DOCUMENT_TEMPLATES.length} templates
+              Showing {filteredTemplates.length} of {DOCUMENT_TEMPLATES.length}{" "}
+              templates
             </div>
 
             {/* Templates Grid/List */}
@@ -1133,7 +2833,9 @@ export function ComprehensiveDocumentUpload({
                     <Card
                       key={template.id}
                       className={`cursor-pointer transition-all hover:border-primary hover:shadow-md ${
-                        selectedTemplate?.id === template.id ? "border-primary ring-2 ring-primary/20" : ""
+                        selectedTemplate?.id === template.id
+                          ? "border-primary ring-2 ring-primary/20"
+                          : ""
                       }`}
                       onClick={() => handleTemplateSelect(template)}
                     >
@@ -1144,9 +2846,13 @@ export function ComprehensiveDocumentUpload({
                               {getIcon(template.icon)}
                             </div>
                             <div>
-                              <CardTitle className="text-sm leading-tight">{template.name}</CardTitle>
+                              <CardTitle className="text-sm leading-tight">
+                                {template.name}
+                              </CardTitle>
                               {template.nameAr && (
-                                <p className="text-xs text-muted-foreground mt-0.5">{template.nameAr}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {template.nameAr}
+                                </p>
                               )}
                             </div>
                           </div>
@@ -1156,7 +2862,10 @@ export function ComprehensiveDocumentUpload({
                         <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
                           {template.description}
                         </p>
-                        <Badge className={categoryLabels[template.category].color} variant="secondary">
+                        <Badge
+                          className={categoryLabels[template.category].color}
+                          variant="secondary"
+                        >
                           {categoryLabels[template.category].label}
                         </Badge>
                       </CardContent>
@@ -1165,38 +2874,51 @@ export function ComprehensiveDocumentUpload({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {Object.entries(templatesBySubcategory).map(([subcategory, templates]) => (
-                    <div key={subcategory}>
-                      <h4 className="text-sm font-medium text-muted-foreground capitalize mb-2 mt-4 first:mt-0">
-                        {subcategory.replace(/_/g, " ")}
-                      </h4>
-                      {templates.map(template => (
-                        <Card
-                          key={template.id}
-                          className={`cursor-pointer transition-all hover:border-primary mb-2 ${
-                            selectedTemplate?.id === template.id ? "border-primary ring-2 ring-primary/20" : ""
-                          }`}
-                          onClick={() => handleTemplateSelect(template)}
-                        >
-                          <CardContent className="p-3 flex items-center gap-3">
-                            <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                              {getIcon(template.icon)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-sm">{template.name}</span>
-                                <Badge className={categoryLabels[template.category].color} variant="secondary">
-                                  {categoryLabels[template.category].label}
-                                </Badge>
+                  {Object.entries(templatesBySubcategory).map(
+                    ([subcategory, templates]) => (
+                      <div key={subcategory}>
+                        <h4 className="text-sm font-medium text-muted-foreground capitalize mb-2 mt-4 first:mt-0">
+                          {subcategory.replace(/_/g, " ")}
+                        </h4>
+                        {templates.map(template => (
+                          <Card
+                            key={template.id}
+                            className={`cursor-pointer transition-all hover:border-primary mb-2 ${
+                              selectedTemplate?.id === template.id
+                                ? "border-primary ring-2 ring-primary/20"
+                                : ""
+                            }`}
+                            onClick={() => handleTemplateSelect(template)}
+                          >
+                            <CardContent className="p-3 flex items-center gap-3">
+                              <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                                {getIcon(template.icon)}
                               </div>
-                              <p className="text-xs text-muted-foreground truncate">{template.description}</p>
-                            </div>
-                            <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ))}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm">
+                                    {template.name}
+                                  </span>
+                                  <Badge
+                                    className={
+                                      categoryLabels[template.category].color
+                                    }
+                                    variant="secondary"
+                                  >
+                                    {categoryLabels[template.category].label}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {template.description}
+                                </p>
+                              </div>
+                              <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )
+                  )}
                 </div>
               )}
             </ScrollArea>
@@ -1213,9 +2935,13 @@ export function ComprehensiveDocumentUpload({
               <div>
                 <h3 className="font-medium">{selectedTemplate?.name}</h3>
                 {selectedTemplate?.nameAr && (
-                  <p className="text-sm text-muted-foreground">{selectedTemplate.nameAr}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedTemplate.nameAr}
+                  </p>
                 )}
-                <p className="text-sm text-muted-foreground">{selectedTemplate?.description}</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedTemplate?.description}
+                </p>
               </div>
             </div>
 
@@ -1270,12 +2996,19 @@ export function ComprehensiveDocumentUpload({
                         .map(field => {
                           const extracted = extractedData[field.name];
                           return (
-                            <div key={field.id} className="flex items-start justify-between p-3 bg-muted rounded-lg">
+                            <div
+                              key={field.id}
+                              className="flex items-start justify-between p-3 bg-muted rounded-lg"
+                            >
                               <div className="space-y-1">
-                                <p className="text-sm font-medium">{field.label}</p>
+                                <p className="text-sm font-medium">
+                                  {field.label}
+                                </p>
                                 <p className="text-sm">
                                   {extracted?.value || formData[field.name] || (
-                                    <span className="text-muted-foreground italic">Not extracted</span>
+                                    <span className="text-muted-foreground italic">
+                                      Not extracted
+                                    </span>
                                   )}
                                 </p>
                               </div>
@@ -1283,7 +3016,9 @@ export function ComprehensiveDocumentUpload({
                                 <div className="flex items-center gap-2">
                                   {getConfidenceBadge(extracted.confidence)}
                                   <Badge variant="outline" className="text-xs">
-                                    {extracted.source === "ai_inference" ? "AI" : "OCR"}
+                                    {extracted.source === "ai_inference"
+                                      ? "AI"
+                                      : "OCR"}
                                   </Badge>
                                 </div>
                               )}
@@ -1294,7 +3029,10 @@ export function ComprehensiveDocumentUpload({
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">
                       <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                      <p>No data was extracted. Please fill in the fields manually.</p>
+                      <p>
+                        No data was extracted. Please fill in the fields
+                        manually.
+                      </p>
                     </div>
                   )}
                 </ScrollArea>
@@ -1309,8 +3047,14 @@ export function ComprehensiveDocumentUpload({
                         <div key={field.id} className="space-y-2">
                           <Label htmlFor={field.id}>
                             {field.label}
-                            {field.labelAr && <span className="text-muted-foreground ml-2">({field.labelAr})</span>}
-                            {field.required && <span className="text-destructive ml-1">*</span>}
+                            {field.labelAr && (
+                              <span className="text-muted-foreground ml-2">
+                                ({field.labelAr})
+                              </span>
+                            )}
+                            {field.required && (
+                              <span className="text-destructive ml-1">*</span>
+                            )}
                           </Label>
                           {renderField(field)}
                         </div>
@@ -1329,7 +3073,9 @@ export function ComprehensiveDocumentUpload({
               <CheckCircle2 className="h-8 w-8 text-green-600" />
               <div>
                 <h3 className="font-medium text-green-900">Ready to Submit</h3>
-                <p className="text-sm text-green-700">Review the information below and confirm.</p>
+                <p className="text-sm text-green-700">
+                  Review the information below and confirm.
+                </p>
               </div>
             </div>
 
@@ -1341,20 +3087,31 @@ export function ComprehensiveDocumentUpload({
                 <ScrollArea className="h-[250px]">
                   <div className="space-y-3">
                     <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground">Document Type</span>
-                      <span className="font-medium">{selectedTemplate?.name}</span>
+                      <span className="text-muted-foreground">
+                        Document Type
+                      </span>
+                      <span className="font-medium">
+                        {selectedTemplate?.name}
+                      </span>
                     </div>
                     <div className="flex justify-between py-2 border-b">
                       <span className="text-muted-foreground">File</span>
-                      <span className="font-medium">{uploadedFiles[0]?.name || "No file"}</span>
+                      <span className="font-medium">
+                        {uploadedFiles[0]?.name || "No file"}
+                      </span>
                     </div>
                     {selectedTemplate?.fields
                       .filter(f => f.type !== "file" && formData[f.name])
                       .map(field => (
-                        <div key={field.id} className="flex justify-between py-2 border-b last:border-0">
-                          <span className="text-muted-foreground">{field.label}</span>
+                        <div
+                          key={field.id}
+                          className="flex justify-between py-2 border-b last:border-0"
+                        >
+                          <span className="text-muted-foreground">
+                            {field.label}
+                          </span>
                           <span className="font-medium text-right max-w-[200px] truncate">
-                            {Array.isArray(formData[field.name]) 
+                            {Array.isArray(formData[field.name])
                               ? formData[field.name].join(", ")
                               : formData[field.name]}
                           </span>
@@ -1369,14 +3126,15 @@ export function ComprehensiveDocumentUpload({
     }
   };
 
-
   // Navigation buttons
   const renderNavigation = () => {
     const canGoBack = currentStep !== "select-template";
     const canGoNext =
       (currentStep === "select-template" && selectedTemplate) ||
-      (currentStep === "upload-file" && uploadedFiles.length > 0 && !isExtracting) ||
-      (currentStep === "extract-data");
+      (currentStep === "upload-file" &&
+        uploadedFiles.length > 0 &&
+        !isExtracting) ||
+      currentStep === "extract-data";
 
     const handleNext = () => {
       if (currentStep === "select-template") {
@@ -1459,18 +3217,26 @@ export function ComprehensiveDocumentUpload({
 
             return (
               <div key={step.id} className="flex items-center">
-                <div className={`flex items-center gap-2 ${isActive ? "text-primary" : isCompleted ? "text-green-600" : "text-muted-foreground"}`}>
-                  <div className={`p-2 rounded-full ${isActive ? "bg-primary/10" : isCompleted ? "bg-green-100" : "bg-muted"}`}>
+                <div
+                  className={`flex items-center gap-2 ${isActive ? "text-primary" : isCompleted ? "text-green-600" : "text-muted-foreground"}`}
+                >
+                  <div
+                    className={`p-2 rounded-full ${isActive ? "bg-primary/10" : isCompleted ? "bg-green-100" : "bg-muted"}`}
+                  >
                     {isCompleted ? (
                       <CheckCircle2 className="h-4 w-4" />
                     ) : (
                       <Icon className="h-4 w-4" />
                     )}
                   </div>
-                  <span className="text-sm font-medium hidden sm:inline">{step.label}</span>
+                  <span className="text-sm font-medium hidden sm:inline">
+                    {step.label}
+                  </span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className={`w-8 md:w-16 h-0.5 mx-2 ${index < currentStepIndex ? "bg-green-500" : "bg-muted"}`} />
+                  <div
+                    className={`w-8 md:w-16 h-0.5 mx-2 ${index < currentStepIndex ? "bg-green-500" : "bg-muted"}`}
+                  />
                 )}
               </div>
             );
@@ -1478,9 +3244,7 @@ export function ComprehensiveDocumentUpload({
         </div>
 
         {/* Step content */}
-        <div className="flex-1 overflow-hidden">
-          {renderStepContent()}
-        </div>
+        <div className="flex-1 overflow-hidden">{renderStepContent()}</div>
 
         {/* Navigation */}
         {renderNavigation()}
@@ -1497,51 +3261,183 @@ export default ComprehensiveDocumentUpload;
 
 export function getTenderSubmissionChecklist() {
   return [
-    { document: "Tender Document (RFP/RFQ)", templateId: "tender-document-upload", required: true },
-    { document: "Technical Proposal", templateId: "technical-proposal-upload", required: true },
-    { document: "Financial Proposal", templateId: "financial-proposal-upload", required: true },
-    { document: "Bid Bond / Bank Guarantee", templateId: "bid-bond-upload", required: true },
-    { document: "Company Profile", templateId: "company-profile-upload", required: true },
-    { document: "Past Experience / References", templateId: "past-experience-upload", required: true },
-    { document: "Technical Compliance Statement", templateId: "technical-compliance-upload", required: true },
-    { document: "Commercial Registration", templateId: "commercial-registration-upload", required: true },
-    { document: "VAT Certificate", templateId: "vat-certificate-upload", required: true },
-    { document: "Zakat Certificate", templateId: "zakat-certificate-upload", required: true },
-    { document: "GOSI Certificate", templateId: "gosi-certificate-upload", required: true },
-    { document: "Manufacturer Authorization", templateId: "manufacturer-authorization-upload", required: false },
-    { document: "Letter of Authorization (LOA)", templateId: "loa-upload", required: false },
-    { document: "FDA/CE Certificates", templateId: "fda-certificate-upload", required: false },
-    { document: "SFDA Registration", templateId: "sfda-certificate-upload", required: false },
+    {
+      document: "Tender Document (RFP/RFQ)",
+      templateId: "tender-document-upload",
+      required: true,
+    },
+    {
+      document: "Technical Proposal",
+      templateId: "technical-proposal-upload",
+      required: true,
+    },
+    {
+      document: "Financial Proposal",
+      templateId: "financial-proposal-upload",
+      required: true,
+    },
+    {
+      document: "Bid Bond / Bank Guarantee",
+      templateId: "bid-bond-upload",
+      required: true,
+    },
+    {
+      document: "Company Profile",
+      templateId: "company-profile-upload",
+      required: true,
+    },
+    {
+      document: "Past Experience / References",
+      templateId: "past-experience-upload",
+      required: true,
+    },
+    {
+      document: "Technical Compliance Statement",
+      templateId: "technical-compliance-upload",
+      required: true,
+    },
+    {
+      document: "Commercial Registration",
+      templateId: "commercial-registration-upload",
+      required: true,
+    },
+    {
+      document: "VAT Certificate",
+      templateId: "vat-certificate-upload",
+      required: true,
+    },
+    {
+      document: "Zakat Certificate",
+      templateId: "zakat-certificate-upload",
+      required: true,
+    },
+    {
+      document: "GOSI Certificate",
+      templateId: "gosi-certificate-upload",
+      required: true,
+    },
+    {
+      document: "Manufacturer Authorization",
+      templateId: "manufacturer-authorization-upload",
+      required: false,
+    },
+    {
+      document: "Letter of Authorization (LOA)",
+      templateId: "loa-upload",
+      required: false,
+    },
+    {
+      document: "FDA/CE Certificates",
+      templateId: "fda-certificate-upload",
+      required: false,
+    },
+    {
+      document: "SFDA Registration",
+      templateId: "sfda-certificate-upload",
+      required: false,
+    },
   ];
 }
 
 export function getSupplierRegistrationChecklist() {
   return [
-    { document: "Commercial Registration", templateId: "commercial-registration-upload", required: true },
-    { document: "VAT Certificate", templateId: "vat-certificate-upload", required: true },
-    { document: "Zakat Certificate", templateId: "zakat-certificate-upload", required: true },
-    { document: "GOSI Certificate", templateId: "gosi-certificate-upload", required: true },
-    { document: "National Address", templateId: "saudi-post-address-upload", required: true },
-    { document: "Bank Guarantee", templateId: "bank-guarantee-upload", required: false },
-    { document: "Insurance Certificate", templateId: "insurance-certificate-upload", required: false },
-    { document: "Authorized Signatory", templateId: "authorized-signatory-upload", required: true },
-    { document: "Company Profile", templateId: "company-profile-upload", required: true },
-    { document: "ISO Certificates", templateId: "iso-certificate-upload", required: false },
+    {
+      document: "Commercial Registration",
+      templateId: "commercial-registration-upload",
+      required: true,
+    },
+    {
+      document: "VAT Certificate",
+      templateId: "vat-certificate-upload",
+      required: true,
+    },
+    {
+      document: "Zakat Certificate",
+      templateId: "zakat-certificate-upload",
+      required: true,
+    },
+    {
+      document: "GOSI Certificate",
+      templateId: "gosi-certificate-upload",
+      required: true,
+    },
+    {
+      document: "National Address",
+      templateId: "saudi-post-address-upload",
+      required: true,
+    },
+    {
+      document: "Bank Guarantee",
+      templateId: "bank-guarantee-upload",
+      required: false,
+    },
+    {
+      document: "Insurance Certificate",
+      templateId: "insurance-certificate-upload",
+      required: false,
+    },
+    {
+      document: "Authorized Signatory",
+      templateId: "authorized-signatory-upload",
+      required: true,
+    },
+    {
+      document: "Company Profile",
+      templateId: "company-profile-upload",
+      required: true,
+    },
+    {
+      document: "ISO Certificates",
+      templateId: "iso-certificate-upload",
+      required: false,
+    },
   ];
 }
 
 export function getSupplierComplianceChecklist() {
   return [
-    { document: "Supplier Contract", templateId: "supplier-contract-upload", required: true },
-    { document: "Letter of Authorization (LOA)", templateId: "loa-upload", required: true },
-    { document: "MOCI Agency Letter", templateId: "moci-letter-upload", required: false },
-    { document: "FDA Certificate", templateId: "fda-certificate-upload", required: false },
-    { document: "CE Marking Certificate", templateId: "ce-marking-upload", required: false },
-    { document: "ISO Certificate", templateId: "iso-certificate-upload", required: false },
-    { document: "SFDA Registration", templateId: "sfda-certificate-upload", required: true },
-    { document: "Manufacturer Authorization", templateId: "manufacturer-authorization-upload", required: false },
+    {
+      document: "Supplier Contract",
+      templateId: "supplier-contract-upload",
+      required: true,
+    },
+    {
+      document: "Letter of Authorization (LOA)",
+      templateId: "loa-upload",
+      required: true,
+    },
+    {
+      document: "MOCI Agency Letter",
+      templateId: "moci-letter-upload",
+      required: false,
+    },
+    {
+      document: "FDA Certificate",
+      templateId: "fda-certificate-upload",
+      required: false,
+    },
+    {
+      document: "CE Marking Certificate",
+      templateId: "ce-marking-upload",
+      required: false,
+    },
+    {
+      document: "ISO Certificate",
+      templateId: "iso-certificate-upload",
+      required: false,
+    },
+    {
+      document: "SFDA Registration",
+      templateId: "sfda-certificate-upload",
+      required: true,
+    },
+    {
+      document: "Manufacturer Authorization",
+      templateId: "manufacturer-authorization-upload",
+      required: false,
+    },
   ];
 }
 
-export { DOCUMENT_TEMPLATES, categoryLabels };
-export type { DocumentTemplate, TemplateField, TemplateCategory };
+export { categoryLabels, DOCUMENT_TEMPLATES };
+export type { DocumentTemplate, TemplateCategory, TemplateField };

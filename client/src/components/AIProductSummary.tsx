@@ -1,35 +1,32 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Sparkles,
-  RefreshCw,
-  Copy,
   Check,
   ChevronDown,
   ChevronRight,
+  Copy,
   FileText,
-  Loader2,
   Lightbulb,
+  Loader2,
+  RefreshCw,
+  Sparkles,
   Tag,
   Target,
   Zap,
 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 interface ProductSpec {
@@ -56,9 +53,9 @@ interface ProductSummary {
 }
 
 export function AIProductSummary({
-  productId,
+  productId: _productId,
   productName,
-  productDescription,
+  productDescription: _productDescription,
   productSpecs,
   productCategory,
   onSummaryGenerated,
@@ -82,7 +79,14 @@ export function AIProductSummary({
       const generatedSummary: ProductSummary = {
         shortDescription: `${productName} is a high-quality ${productCategory || "product"} designed for professional healthcare applications. It combines reliability with advanced features to meet demanding clinical requirements.`,
         marketingDescription: `Introducing ${productName} - the next generation solution for healthcare professionals. Built with precision engineering and designed for reliability, this ${productCategory || "product"} delivers exceptional performance in critical healthcare environments. With its intuitive design and robust construction, it helps healthcare facilities maintain the highest standards of patient care while optimizing operational efficiency.`,
-        technicalSummary: `${productName} features state-of-the-art technology with comprehensive specifications designed for healthcare compliance. ${productSpecs ? `Key specifications include: ${Object.entries(productSpecs).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(", ")}.` : ""} The product meets international quality standards and is backed by comprehensive technical support.`,
+        technicalSummary: `${productName} features state-of-the-art technology with comprehensive specifications designed for healthcare compliance. ${
+          productSpecs
+            ? `Key specifications include: ${Object.entries(productSpecs)
+                .slice(0, 3)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ")}.`
+            : ""
+        } The product meets international quality standards and is backed by comprehensive technical support.`,
         keyFeatures: [
           "Medical-grade materials and construction",
           "Compliant with international healthcare standards",
@@ -115,7 +119,7 @@ export function AIProductSummary({
       setSummary(generatedSummary);
       onSummaryGenerated?.(generatedSummary);
       toast.success("AI summary generated successfully!");
-    } catch (error) {
+    } catch (_error) {
       toast.error("Failed to generate summary. Please try again.");
     } finally {
       setIsGenerating(false);
@@ -154,11 +158,7 @@ export function AIProductSummary({
               </CardDescription>
             </div>
           </div>
-          <Button
-            onClick={generateSummary}
-            disabled={isGenerating}
-            size="sm"
-          >
+          <Button onClick={generateSummary} disabled={isGenerating} size="sm">
             {isGenerating ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -195,7 +195,9 @@ export function AIProductSummary({
         {isGenerating && (
           <div className="text-center py-8">
             <Loader2 className="h-12 w-12 mx-auto mb-4 animate-spin text-primary" />
-            <p className="text-muted-foreground">Analyzing product and generating content...</p>
+            <p className="text-muted-foreground">
+              Analyzing product and generating content...
+            </p>
           </div>
         )}
 
@@ -219,7 +221,7 @@ export function AIProductSummary({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={(e) => {
+                  onClick={e => {
                     e.stopPropagation();
                     copyToClipboard(summary.shortDescription, "short");
                   }}
@@ -232,7 +234,9 @@ export function AIProductSummary({
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-3 px-3">
-                <p className="text-sm leading-relaxed">{summary.shortDescription}</p>
+                <p className="text-sm leading-relaxed">
+                  {summary.shortDescription}
+                </p>
               </CollapsibleContent>
             </Collapsible>
 
@@ -254,7 +258,7 @@ export function AIProductSummary({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={(e) => {
+                  onClick={e => {
                     e.stopPropagation();
                     copyToClipboard(summary.marketingDescription, "marketing");
                   }}
@@ -267,7 +271,9 @@ export function AIProductSummary({
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-3 px-3">
-                <p className="text-sm leading-relaxed">{summary.marketingDescription}</p>
+                <p className="text-sm leading-relaxed">
+                  {summary.marketingDescription}
+                </p>
               </CollapsibleContent>
             </Collapsible>
 
@@ -368,7 +374,11 @@ export function AIProductSummary({
               </div>
               <div className="flex flex-wrap gap-2">
                 {summary.suggestedKeywords.map((keyword, idx) => (
-                  <Badge key={idx} variant="secondary" className="cursor-pointer hover:bg-primary/20">
+                  <Badge
+                    key={idx}
+                    variant="secondary"
+                    className="cursor-pointer hover:bg-primary/20"
+                  >
                     {keyword}
                   </Badge>
                 ))}

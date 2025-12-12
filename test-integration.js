@@ -1,3 +1,5 @@
+/* eslint-env node */
+/* global fetch, console */
 /**
  * Integration Test Script
  * Tests the security infrastructure, task management, and supplier catalog services
@@ -158,4 +160,4 @@ async function runTests() {
 }
 
 // Run the tests
-runTests().catch(console.error);
+await runTests();

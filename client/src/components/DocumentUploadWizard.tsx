@@ -1,11 +1,17 @@
-import { useState, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { trpc, trpcClient } from "@/lib/trpc";
+import { FileUpload } from "@/components/FileUpload";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -13,40 +19,39 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileUpload } from "@/components/FileUpload";
-import { toast } from "sonner";
+import { trpc, trpcClient } from "@/lib/trpc";
+import { useQueryClient } from "@tanstack/react-query";
 import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Edit3,
+  FileCheck,
   FileText,
+  Loader2,
+  Sparkles,
   Upload,
   Wand2,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  ArrowRight,
-  ArrowLeft,
-  Eye,
-  Edit3,
-  RefreshCw,
-  FileCheck,
-  Sparkles,
 } from "lucide-react";
+import { useCallback, useState } from "react";
+import { toast } from "sonner";
 
 // Document template types
 interface TemplateField {
   id: string;
   name: string;
   label: string;
-  type: "text" | "number" | "date" | "currency" | "select" | "multiselect" | "file" | "table";
+  type:
+    | "text"
+    | "number"
+    | "date"
+    | "currency"
+    | "select"
+    | "multiselect"
+    | "file"
+    | "table";
   required: boolean;
   placeholder?: string;
   options?: string[];
@@ -82,92 +87,339 @@ const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     id: "tender-upload",
     name: "Tender Document",
     module: "tenders",
-    description: "Upload tender documents with automatic extraction of requirements, deadlines, and specifications",
+    description:
+      "Upload tender documents with automatic extraction of requirements, deadlines, and specifications",
     icon: "FileText",
     fields: [
-      { id: "document", name: "document", label: "Tender Document", type: "file", required: true, placeholder: "Upload PDF, DOC, or image" },
-      { id: "tenderNumber", name: "tenderNumber", label: "Tender Reference Number", type: "text", required: true, placeholder: "e.g., RFP-2024-001" },
-      { id: "title", name: "title", label: "Tender Title", type: "text", required: true, placeholder: "Brief description of the tender" },
-      { id: "customerId", name: "customerId", label: "Customer/Organization", type: "select", required: true, options: [] },
-      { id: "submissionDeadline", name: "submissionDeadline", label: "Submission Deadline", type: "date", required: true },
-      { id: "estimatedValue", name: "estimatedValue", label: "Estimated Value", type: "currency", required: false, placeholder: "0.00" },
-      { id: "department", name: "department", label: "Department", type: "text", required: false, placeholder: "e.g., Ministry of Health" },
+      {
+        id: "document",
+        name: "document",
+        label: "Tender Document",
+        type: "file",
+        required: true,
+        placeholder: "Upload PDF, DOC, or image",
+      },
+      {
+        id: "tenderNumber",
+        name: "tenderNumber",
+        label: "Tender Reference Number",
+        type: "text",
+        required: true,
+        placeholder: "e.g., RFP-2024-001",
+      },
+      {
+        id: "title",
+        name: "title",
+        label: "Tender Title",
+        type: "text",
+        required: true,
+        placeholder: "Brief description of the tender",
+      },
+      {
+        id: "customerId",
+        name: "customerId",
+        label: "Customer/Organization",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "submissionDeadline",
+        name: "submissionDeadline",
+        label: "Submission Deadline",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "estimatedValue",
+        name: "estimatedValue",
+        label: "Estimated Value",
+        type: "currency",
+        required: false,
+        placeholder: "0.00",
+      },
+      {
+        id: "department",
+        name: "department",
+        label: "Department",
+        type: "text",
+        required: false,
+        placeholder: "e.g., Ministry of Health",
+      },
     ],
   },
   {
     id: "invoice-upload",
     name: "Invoice",
     module: "invoices",
-    description: "Process supplier invoices with automatic line item extraction and amount validation",
+    description:
+      "Process supplier invoices with automatic line item extraction and amount validation",
     icon: "Receipt",
     fields: [
-      { id: "invoiceDocument", name: "invoiceDocument", label: "Invoice Document", type: "file", required: true },
-      { id: "invoiceNumber", name: "invoiceNumber", label: "Invoice Number", type: "text", required: true },
-      { id: "supplierId", name: "supplierId", label: "Supplier", type: "select", required: true, options: [] },
-      { id: "invoiceDate", name: "invoiceDate", label: "Invoice Date", type: "date", required: true },
-      { id: "dueDate", name: "dueDate", label: "Due Date", type: "date", required: true },
-      { id: "totalAmount", name: "totalAmount", label: "Total Amount", type: "currency", required: true },
-      { id: "poNumber", name: "poNumber", label: "Purchase Order Number", type: "text", required: false },
+      {
+        id: "invoiceDocument",
+        name: "invoiceDocument",
+        label: "Invoice Document",
+        type: "file",
+        required: true,
+      },
+      {
+        id: "invoiceNumber",
+        name: "invoiceNumber",
+        label: "Invoice Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "supplierId",
+        name: "supplierId",
+        label: "Supplier",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "invoiceDate",
+        name: "invoiceDate",
+        label: "Invoice Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "dueDate",
+        name: "dueDate",
+        label: "Due Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "totalAmount",
+        name: "totalAmount",
+        label: "Total Amount",
+        type: "currency",
+        required: true,
+      },
+      {
+        id: "poNumber",
+        name: "poNumber",
+        label: "Purchase Order Number",
+        type: "text",
+        required: false,
+      },
     ],
   },
   {
     id: "catalog-upload",
     name: "Product Catalog",
     module: "products",
-    description: "Upload supplier catalogs to extract products with descriptions, specs, and pricing",
+    description:
+      "Upload supplier catalogs to extract products with descriptions, specs, and pricing",
     icon: "BookOpen",
     fields: [
-      { id: "catalogDocument", name: "catalogDocument", label: "Catalog Document", type: "file", required: true },
-      { id: "supplierId", name: "supplierId", label: "Supplier", type: "select", required: true, options: [] },
-      { id: "catalogName", name: "catalogName", label: "Catalog Name/Version", type: "text", required: true, placeholder: "e.g., 2024 Product Catalog v2.1" },
-      { id: "effectiveDate", name: "effectiveDate", label: "Effective Date", type: "date", required: true },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["USD", "EUR", "SAR", "AED", "GBP"] },
+      {
+        id: "catalogDocument",
+        name: "catalogDocument",
+        label: "Catalog Document",
+        type: "file",
+        required: true,
+      },
+      {
+        id: "supplierId",
+        name: "supplierId",
+        label: "Supplier",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "catalogName",
+        name: "catalogName",
+        label: "Catalog Name/Version",
+        type: "text",
+        required: true,
+        placeholder: "e.g., 2024 Product Catalog v2.1",
+      },
+      {
+        id: "effectiveDate",
+        name: "effectiveDate",
+        label: "Effective Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["USD", "EUR", "SAR", "AED", "GBP"],
+      },
     ],
   },
   {
     id: "pricelist-upload",
     name: "Price List",
     module: "pricing",
-    description: "Upload supplier price lists with OCR extraction of product pricing",
+    description:
+      "Upload supplier price lists with OCR extraction of product pricing",
     icon: "DollarSign",
     fields: [
-      { id: "priceListDocument", name: "priceListDocument", label: "Price List Document", type: "file", required: true },
-      { id: "supplierId", name: "supplierId", label: "Supplier", type: "select", required: true, options: [] },
-      { id: "priceListName", name: "priceListName", label: "Price List Name", type: "text", required: true },
-      { id: "effectiveDate", name: "effectiveDate", label: "Effective Date", type: "date", required: true },
-      { id: "expiryDate", name: "expiryDate", label: "Expiry Date", type: "date", required: false },
-      { id: "currency", name: "currency", label: "Currency", type: "select", required: true, options: ["USD", "EUR", "SAR", "AED"] },
+      {
+        id: "priceListDocument",
+        name: "priceListDocument",
+        label: "Price List Document",
+        type: "file",
+        required: true,
+      },
+      {
+        id: "supplierId",
+        name: "supplierId",
+        label: "Supplier",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "priceListName",
+        name: "priceListName",
+        label: "Price List Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "effectiveDate",
+        name: "effectiveDate",
+        label: "Effective Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expiryDate",
+        name: "expiryDate",
+        label: "Expiry Date",
+        type: "date",
+        required: false,
+      },
+      {
+        id: "currency",
+        name: "currency",
+        label: "Currency",
+        type: "select",
+        required: true,
+        options: ["USD", "EUR", "SAR", "AED"],
+      },
     ],
   },
   {
     id: "po-upload",
     name: "Purchase Order",
     module: "purchase_orders",
-    description: "Process purchase order documents with automatic data extraction",
+    description:
+      "Process purchase order documents with automatic data extraction",
     icon: "ShoppingCart",
     fields: [
-      { id: "poDocument", name: "poDocument", label: "Purchase Order Document", type: "file", required: true },
-      { id: "poNumber", name: "poNumber", label: "PO Number", type: "text", required: true },
-      { id: "supplierId", name: "supplierId", label: "Supplier", type: "select", required: true, options: [] },
-      { id: "orderDate", name: "orderDate", label: "Order Date", type: "date", required: true },
-      { id: "expectedDeliveryDate", name: "expectedDeliveryDate", label: "Expected Delivery Date", type: "date", required: false },
-      { id: "totalAmount", name: "totalAmount", label: "Total Amount", type: "currency", required: true },
+      {
+        id: "poDocument",
+        name: "poDocument",
+        label: "Purchase Order Document",
+        type: "file",
+        required: true,
+      },
+      {
+        id: "poNumber",
+        name: "poNumber",
+        label: "PO Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "supplierId",
+        name: "supplierId",
+        label: "Supplier",
+        type: "select",
+        required: true,
+        options: [],
+      },
+      {
+        id: "orderDate",
+        name: "orderDate",
+        label: "Order Date",
+        type: "date",
+        required: true,
+      },
+      {
+        id: "expectedDeliveryDate",
+        name: "expectedDeliveryDate",
+        label: "Expected Delivery Date",
+        type: "date",
+        required: false,
+      },
+      {
+        id: "totalAmount",
+        name: "totalAmount",
+        label: "Total Amount",
+        type: "currency",
+        required: true,
+      },
     ],
   },
   {
     id: "supplier-upload",
     name: "Supplier Registration",
     module: "suppliers",
-    description: "Register new suppliers with company documents and certifications",
+    description:
+      "Register new suppliers with company documents and certifications",
     icon: "Building2",
     fields: [
-      { id: "companyDocument", name: "companyDocument", label: "Company Registration Document", type: "file", required: true },
-      { id: "name", name: "name", label: "Company Name", type: "text", required: true },
-      { id: "taxId", name: "taxId", label: "Tax ID / Registration Number", type: "text", required: true },
-      { id: "contactPerson", name: "contactPerson", label: "Contact Person", type: "text", required: true },
-      { id: "email", name: "email", label: "Email Address", type: "text", required: true },
-      { id: "phone", name: "phone", label: "Phone Number", type: "text", required: true },
-      { id: "address", name: "address", label: "Business Address", type: "text", required: true },
+      {
+        id: "companyDocument",
+        name: "companyDocument",
+        label: "Company Registration Document",
+        type: "file",
+        required: true,
+      },
+      {
+        id: "name",
+        name: "name",
+        label: "Company Name",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "taxId",
+        name: "taxId",
+        label: "Tax ID / Registration Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "contactPerson",
+        name: "contactPerson",
+        label: "Contact Person",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "email",
+        name: "email",
+        label: "Email Address",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "phone",
+        name: "phone",
+        label: "Phone Number",
+        type: "text",
+        required: true,
+      },
+      {
+        id: "address",
+        name: "address",
+        label: "Business Address",
+        type: "text",
+        required: true,
+      },
     ],
   },
 ];
@@ -179,7 +431,11 @@ interface DocumentUploadWizardProps {
   onSuccess?: (result: any) => void;
 }
 
-type WizardStep = "select-template" | "upload-file" | "extract-data" | "review-confirm";
+type WizardStep =
+  | "select-template"
+  | "upload-file"
+  | "extract-data"
+  | "review-confirm";
 
 export function DocumentUploadWizard({
   open,
@@ -189,11 +445,16 @@ export function DocumentUploadWizard({
 }: DocumentUploadWizardProps) {
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState<WizardStep>("select-template");
-  const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(
-    defaultTemplate ? DOCUMENT_TEMPLATES.find(t => t.id === defaultTemplate) || null : null
-  );
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<DocumentTemplate | null>(
+      defaultTemplate
+        ? DOCUMENT_TEMPLATES.find(t => t.id === defaultTemplate) || null
+        : null
+    );
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [extractedData, setExtractedData] = useState<ExtractionResult | null>(null);
+  const [extractedData, setExtractedData] = useState<ExtractionResult | null>(
+    null
+  );
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionProgress, setExtractionProgress] = useState(0);
@@ -208,7 +469,11 @@ export function DocumentUploadWizard({
   // Reset wizard state
   const resetWizard = useCallback(() => {
     setCurrentStep("select-template");
-    setSelectedTemplate(defaultTemplate ? DOCUMENT_TEMPLATES.find(t => t.id === defaultTemplate) || null : null);
+    setSelectedTemplate(
+      defaultTemplate
+        ? DOCUMENT_TEMPLATES.find(t => t.id === defaultTemplate) || null
+        : null
+    );
     setUploadedFiles([]);
     setExtractedData(null);
     setFormData({});
@@ -357,8 +622,12 @@ export function DocumentUploadWizard({
             referenceNumber: formData.tenderNumber,
             title: formData.title,
             customerId: parseInt(formData.customerId),
-            submissionDeadline: formData.submissionDeadline ? new Date(formData.submissionDeadline) : null,
-            estimatedValue: formData.estimatedValue ? parseFloat(formData.estimatedValue) * 100 : null,
+            submissionDeadline: formData.submissionDeadline
+              ? new Date(formData.submissionDeadline)
+              : null,
+            estimatedValue: formData.estimatedValue
+              ? parseFloat(formData.estimatedValue) * 100
+              : null,
             department: formData.department || null,
             status: "draft",
           });
@@ -385,7 +654,9 @@ export function DocumentUploadWizard({
           });
           break;
         default:
-          toast.info("Document uploaded successfully. Entity creation for this type is not yet implemented.");
+          toast.info(
+            "Document uploaded successfully. Entity creation for this type is not yet implemented."
+          );
           result = { success: true };
       }
 
@@ -404,9 +675,23 @@ export function DocumentUploadWizard({
 
   // Get confidence badge color
   const getConfidenceBadge = (confidence: number) => {
-    if (confidence >= 0.9) return <Badge className="bg-green-100 text-green-800">High ({Math.round(confidence * 100)}%)</Badge>;
-    if (confidence >= 0.7) return <Badge className="bg-yellow-100 text-yellow-800">Medium ({Math.round(confidence * 100)}%)</Badge>;
-    return <Badge className="bg-red-100 text-red-800">Low ({Math.round(confidence * 100)}%)</Badge>;
+    if (confidence >= 0.9)
+      return (
+        <Badge className="bg-green-100 text-green-800">
+          High ({Math.round(confidence * 100)}%)
+        </Badge>
+      );
+    if (confidence >= 0.7)
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800">
+          Medium ({Math.round(confidence * 100)}%)
+        </Badge>
+      );
+    return (
+      <Badge className="bg-red-100 text-red-800">
+        Low ({Math.round(confidence * 100)}%)
+      </Badge>
+    );
   };
 
   // Render field based on type
@@ -417,17 +702,26 @@ export function DocumentUploadWizard({
     switch (field.type) {
       case "file":
         return null; // File already uploaded
-      case "select":
+      case "select": {
         let options: { value: string; label: string }[] = [];
         if (field.name === "supplierId") {
-          options = suppliers.map((s: any) => ({ value: s.id.toString(), label: s.name }));
+          options = suppliers.map((s: any) => ({
+            value: s.id.toString(),
+            label: s.name,
+          }));
         } else if (field.name === "customerId") {
-          options = customers.map((c: any) => ({ value: c.id.toString(), label: c.name }));
+          options = customers.map((c: any) => ({
+            value: c.id.toString(),
+            label: c.name,
+          }));
         } else if (field.options) {
           options = field.options.map(o => ({ value: o, label: o }));
         }
         return (
-          <Select value={value} onValueChange={v => handleFieldChange(field.name, v)}>
+          <Select
+            value={value}
+            onValueChange={v => handleFieldChange(field.name, v)}
+          >
             <SelectTrigger>
               <SelectValue placeholder={`Select ${field.label}`} />
             </SelectTrigger>
@@ -440,6 +734,7 @@ export function DocumentUploadWizard({
             </SelectContent>
           </Select>
         );
+      }
       case "date":
         return (
           <Input
@@ -490,7 +785,9 @@ export function DocumentUploadWizard({
                 <Card
                   key={template.id}
                   className={`cursor-pointer transition-all hover:border-primary hover:shadow-md ${
-                    selectedTemplate?.id === template.id ? "border-primary ring-2 ring-primary/20" : ""
+                    selectedTemplate?.id === template.id
+                      ? "border-primary ring-2 ring-primary/20"
+                      : ""
                   }`}
                   onClick={() => handleTemplateSelect(template)}
                 >
@@ -520,7 +817,9 @@ export function DocumentUploadWizard({
               <FileText className="h-8 w-8 text-primary" />
               <div>
                 <h3 className="font-medium">{selectedTemplate?.name}</h3>
-                <p className="text-sm text-muted-foreground">{selectedTemplate?.description}</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedTemplate?.description}
+                </p>
               </div>
             </div>
 
@@ -574,12 +873,19 @@ export function DocumentUploadWizard({
                       .map(field => {
                         const extracted = extractedData[field.name];
                         return (
-                          <div key={field.id} className="flex items-start justify-between p-3 bg-muted rounded-lg">
+                          <div
+                            key={field.id}
+                            className="flex items-start justify-between p-3 bg-muted rounded-lg"
+                          >
                             <div className="space-y-1">
-                              <p className="text-sm font-medium">{field.label}</p>
+                              <p className="text-sm font-medium">
+                                {field.label}
+                              </p>
                               <p className="text-sm">
                                 {extracted?.value || formData[field.name] || (
-                                  <span className="text-muted-foreground italic">Not extracted</span>
+                                  <span className="text-muted-foreground italic">
+                                    Not extracted
+                                  </span>
                                 )}
                               </p>
                             </div>
@@ -587,7 +893,9 @@ export function DocumentUploadWizard({
                               <div className="flex items-center gap-2">
                                 {getConfidenceBadge(extracted.confidence)}
                                 <Badge variant="outline" className="text-xs">
-                                  {extracted.source === "ai_inference" ? "AI" : "OCR"}
+                                  {extracted.source === "ai_inference"
+                                    ? "AI"
+                                    : "OCR"}
                                 </Badge>
                               </div>
                             )}
@@ -598,7 +906,9 @@ export function DocumentUploadWizard({
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                    <p>No data was extracted. Please fill in the fields manually.</p>
+                    <p>
+                      No data was extracted. Please fill in the fields manually.
+                    </p>
                   </div>
                 )}
               </TabsContent>
@@ -611,7 +921,9 @@ export function DocumentUploadWizard({
                       <div key={field.id} className="space-y-2">
                         <Label htmlFor={field.id}>
                           {field.label}
-                          {field.required && <span className="text-destructive ml-1">*</span>}
+                          {field.required && (
+                            <span className="text-destructive ml-1">*</span>
+                          )}
                         </Label>
                         {renderField(field)}
                         {extractedData?.[field.name] && (
@@ -634,7 +946,9 @@ export function DocumentUploadWizard({
               <CheckCircle2 className="h-8 w-8 text-green-600" />
               <div>
                 <h3 className="font-medium text-green-900">Ready to Submit</h3>
-                <p className="text-sm text-green-700">Review the information below and confirm.</p>
+                <p className="text-sm text-green-700">
+                  Review the information below and confirm.
+                </p>
               </div>
             </div>
 
@@ -654,9 +968,16 @@ export function DocumentUploadWizard({
                 {selectedTemplate?.fields
                   .filter(f => f.type !== "file" && formData[f.name])
                   .map(field => (
-                    <div key={field.id} className="flex justify-between py-2 border-b last:border-0">
-                      <span className="text-muted-foreground">{field.label}</span>
-                      <span className="font-medium">{formData[field.name]}</span>
+                    <div
+                      key={field.id}
+                      className="flex justify-between py-2 border-b last:border-0"
+                    >
+                      <span className="text-muted-foreground">
+                        {field.label}
+                      </span>
+                      <span className="font-medium">
+                        {formData[field.name]}
+                      </span>
                     </div>
                   ))}
               </CardContent>
@@ -671,8 +992,10 @@ export function DocumentUploadWizard({
     const canGoBack = currentStep !== "select-template";
     const canGoNext =
       (currentStep === "select-template" && selectedTemplate) ||
-      (currentStep === "upload-file" && uploadedFiles.length > 0 && !isExtracting) ||
-      (currentStep === "extract-data");
+      (currentStep === "upload-file" &&
+        uploadedFiles.length > 0 &&
+        !isExtracting) ||
+      currentStep === "extract-data";
 
     const handleNext = () => {
       if (currentStep === "select-template") {
@@ -702,18 +1025,11 @@ export function DocumentUploadWizard({
 
     return (
       <div className="flex justify-between pt-4 border-t">
-        <Button
-          variant="outline"
-          onClick={handleBack}
-          disabled={!canGoBack}
-        >
+        <Button variant="outline" onClick={handleBack} disabled={!canGoBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
-        <Button
-          onClick={handleNext}
-          disabled={!canGoNext}
-        >
+        <Button onClick={handleNext} disabled={!canGoNext}>
           {currentStep === "review-confirm" ? (
             <>
               <FileCheck className="h-4 w-4 mr-2" />
@@ -762,18 +1078,26 @@ export function DocumentUploadWizard({
 
             return (
               <div key={step.id} className="flex items-center">
-                <div className={`flex items-center gap-2 ${isActive ? "text-primary" : isCompleted ? "text-green-600" : "text-muted-foreground"}`}>
-                  <div className={`p-2 rounded-full ${isActive ? "bg-primary/10" : isCompleted ? "bg-green-100" : "bg-muted"}`}>
+                <div
+                  className={`flex items-center gap-2 ${isActive ? "text-primary" : isCompleted ? "text-green-600" : "text-muted-foreground"}`}
+                >
+                  <div
+                    className={`p-2 rounded-full ${isActive ? "bg-primary/10" : isCompleted ? "bg-green-100" : "bg-muted"}`}
+                  >
                     {isCompleted ? (
                       <CheckCircle2 className="h-4 w-4" />
                     ) : (
                       <Icon className="h-4 w-4" />
                     )}
                   </div>
-                  <span className="text-sm font-medium hidden sm:inline">{step.label}</span>
+                  <span className="text-sm font-medium hidden sm:inline">
+                    {step.label}
+                  </span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className={`w-8 md:w-16 h-0.5 mx-2 ${index < currentStepIndex ? "bg-green-500" : "bg-muted"}`} />
+                  <div
+                    className={`w-8 md:w-16 h-0.5 mx-2 ${index < currentStepIndex ? "bg-green-500" : "bg-muted"}`}
+                  />
                 )}
               </div>
             );
@@ -781,9 +1105,7 @@ export function DocumentUploadWizard({
         </div>
 
         {/* Step content */}
-        <div className="min-h-[300px]">
-          {renderStepContent()}
-        </div>
+        <div className="min-h-[300px]">{renderStepContent()}</div>
 
         {/* Navigation */}
         {renderNavigation()}

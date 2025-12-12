@@ -1,3 +1,4 @@
+/* eslint-disable no-case-declarations */
 import { COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -30,18 +31,18 @@ import {
   analyzeExpenses,
   analyzeInventory,
   generateBudgetForecast,
-  generateProductForecast,
   generateBulkForecast,
+  generateProductForecast,
   getAvailableProviders,
   isAIConfigured,
 } from "./ai";
 import {
+  extractCatalogData,
   extractExpenseData,
   extractInvoiceData,
-  extractTenderData,
   extractPriceListData,
-  extractCatalogData,
   extractPurchaseOrderData,
+  extractTenderData,
   performOCR,
 } from "./aiService";
 import * as db from "./db";
@@ -337,7 +338,7 @@ async function generateSalesHistoryFromData(productId: number) {
     date: Date;
     quantity: number;
     revenue: number;
-    channel?: 'tender' | 'direct' | 'contract' | 'other';
+    channel?: "tender" | "direct" | "contract" | "other";
   }> = [];
 
   try {
@@ -353,7 +354,10 @@ async function generateSalesHistoryFromData(productId: number) {
       // Generate random but consistent sales for the product
       const baseQuantity = 10 + (productId % 20);
       const variance = Math.sin(i * 0.5) * 5; // Seasonal variation
-      const quantity = Math.max(1, Math.round(baseQuantity + variance + (Math.random() * 10 - 5)));
+      const quantity = Math.max(
+        1,
+        Math.round(baseQuantity + variance + (Math.random() * 10 - 5))
+      );
 
       // Get product price
       const product = await db.getProductById(productId);
@@ -363,11 +367,11 @@ async function generateSalesHistoryFromData(productId: number) {
         date: monthDate,
         quantity,
         revenue: quantity * unitPrice,
-        channel: i % 3 === 0 ? 'tender' : i % 2 === 0 ? 'direct' : 'contract',
+        channel: i % 3 === 0 ? "tender" : i % 2 === 0 ? "direct" : "contract",
       });
     }
   } catch (error) {
-    console.error('[Router] Error generating sales history:', error);
+    console.error("[Router] Error generating sales history:", error);
   }
 
   return salesHistory;
@@ -2610,7 +2614,10 @@ export const appRouter = router({
           }
 
           // Extract data based on document type
-          let extractedData: Record<string, { value: any; confidence: number; source: string }> = {};
+          let extractedData: Record<
+            string,
+            { value: any; confidence: number; source: string }
+          > = {};
 
           switch (input.documentType) {
             case "tenders":
@@ -2672,7 +2679,8 @@ export const appRouter = router({
                   },
                   supplierAddress: {
                     value: invoiceResult.data.supplierAddress || "",
-                    confidence: invoiceResult.confidence?.supplierAddress || 0.6,
+                    confidence:
+                      invoiceResult.confidence?.supplierAddress || 0.6,
                     source: "ai_inference",
                   },
                   supplierTaxId: {
@@ -2687,11 +2695,14 @@ export const appRouter = router({
                   },
                   purchaseOrderNumber: {
                     value: invoiceResult.data.purchaseOrderNumber || "",
-                    confidence: invoiceResult.confidence?.purchaseOrderNumber || 0.7,
+                    confidence:
+                      invoiceResult.confidence?.purchaseOrderNumber || 0.7,
                     source: "ai_inference",
                   },
                   currency: {
-                    value: invoiceResult.data.currency || extractCurrency(documentText),
+                    value:
+                      invoiceResult.data.currency ||
+                      extractCurrency(documentText),
                     confidence: invoiceResult.confidence?.currency || 0.7,
                     source: "ai_inference",
                   },
@@ -2809,13 +2820,19 @@ export const appRouter = router({
                     source: "ai_inference",
                   },
                   priceListName: {
-                    value: priceListResult.data.priceListName || extractCatalogName(documentText, input.fileName),
-                    confidence: priceListResult.confidence?.priceListName || 0.6,
+                    value:
+                      priceListResult.data.priceListName ||
+                      extractCatalogName(documentText, input.fileName),
+                    confidence:
+                      priceListResult.confidence?.priceListName || 0.6,
                     source: "ai_inference",
                   },
                   effectiveDate: {
-                    value: priceListResult.data.effectiveDate || extractDate(documentText),
-                    confidence: priceListResult.confidence?.effectiveDate || 0.5,
+                    value:
+                      priceListResult.data.effectiveDate ||
+                      extractDate(documentText),
+                    confidence:
+                      priceListResult.confidence?.effectiveDate || 0.5,
                     source: "ai_inference",
                   },
                   expiryDate: {
@@ -2824,13 +2841,16 @@ export const appRouter = router({
                     source: "ai_inference",
                   },
                   currency: {
-                    value: priceListResult.data.currency || extractCurrency(documentText),
+                    value:
+                      priceListResult.data.currency ||
+                      extractCurrency(documentText),
                     confidence: priceListResult.confidence?.currency || 0.7,
                     source: "ai_inference",
                   },
                   discountTerms: {
                     value: priceListResult.data.discountTerms || "",
-                    confidence: priceListResult.confidence?.discountTerms || 0.6,
+                    confidence:
+                      priceListResult.confidence?.discountTerms || 0.6,
                     source: "ai_inference",
                   },
                   products: {
@@ -2877,12 +2897,16 @@ export const appRouter = router({
                     source: "ai_inference",
                   },
                   catalogName: {
-                    value: catalogResult.data.catalogName || extractCatalogName(documentText, input.fileName),
+                    value:
+                      catalogResult.data.catalogName ||
+                      extractCatalogName(documentText, input.fileName),
                     confidence: catalogResult.confidence?.catalogName || 0.6,
                     source: "ai_inference",
                   },
                   catalogDate: {
-                    value: catalogResult.data.catalogDate || extractDate(documentText),
+                    value:
+                      catalogResult.data.catalogDate ||
+                      extractDate(documentText),
                     confidence: catalogResult.confidence?.catalogDate || 0.5,
                     source: "ai_inference",
                   },
@@ -2940,12 +2964,16 @@ export const appRouter = router({
                     source: "ai_inference",
                   },
                   supplierName: {
-                    value: poResult.data.supplierName || extractCompanyName(documentText),
+                    value:
+                      poResult.data.supplierName ||
+                      extractCompanyName(documentText),
                     confidence: poResult.confidence?.supplierName || 0.7,
                     source: "ai_inference",
                   },
                   supplierAddress: {
-                    value: poResult.data.supplierAddress || extractAddress(documentText),
+                    value:
+                      poResult.data.supplierAddress ||
+                      extractAddress(documentText),
                     confidence: poResult.confidence?.supplierAddress || 0.6,
                     source: "ai_inference",
                   },
@@ -2960,7 +2988,8 @@ export const appRouter = router({
                     source: "ai_inference",
                   },
                   currency: {
-                    value: poResult.data.currency || extractCurrency(documentText),
+                    value:
+                      poResult.data.currency || extractCurrency(documentText),
                     confidence: poResult.confidence?.currency || 0.7,
                     source: "ai_inference",
                   },
@@ -3433,7 +3462,9 @@ export const appRouter = router({
 
         // Get sales history (from invoices, tenders, etc.)
         // For now, we'll create mock sales data - in production, this would come from actual sales records
-        const salesHistory = await generateSalesHistoryFromData(input.productId);
+        const salesHistory = await generateSalesHistoryFromData(
+          input.productId
+        );
 
         const productData = {
           productId: product.id,
@@ -3448,7 +3479,10 @@ export const appRouter = router({
           leadTimeDays: 14, // Default lead time
         };
 
-        const forecast = await generateProductForecast(productData, input.forecastMonths);
+        const forecast = await generateProductForecast(
+          productData,
+          input.forecastMonths
+        );
         return forecast;
       }),
 
@@ -3471,7 +3505,9 @@ export const appRouter = router({
 
         // Filter by specific IDs if provided
         if (input.productIds && input.productIds.length > 0) {
-          products = products.filter((p: any) => input.productIds!.includes(p.id));
+          products = products.filter((p: any) =>
+            input.productIds!.includes(p.id)
+          );
         }
 
         // Limit to first 50 products for performance
@@ -3497,7 +3533,10 @@ export const appRouter = router({
           })
         );
 
-        const forecast = await generateBulkForecast(productsData, input.forecastMonths);
+        const forecast = await generateBulkForecast(
+          productsData,
+          input.forecastMonths
+        );
         return forecast;
       }),
 

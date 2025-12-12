@@ -1,5 +1,5 @@
-import { createHmac, randomBytes } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
+import { createHmac, randomBytes } from "node:crypto";
 import { ENV } from "./env";
 import { createSecurityEvent } from "./input-validation";
 
@@ -24,7 +24,13 @@ class CsrfProtectionService {
    * Get CSRF secret for HMAC signing
    */
   private getCsrfSecret(): string {
-    return ENV.cookieSecret || "default-dev-secret-change-in-prod";
+    const secret = ENV.cookieSecret;
+    if (!secret || secret.length < 32) {
+      throw new Error(
+        "[CSRF] cookieSecret must be set and at least 32 characters; set JWT_SECRET or cookieSecret"
+      );
+    }
+    return secret;
   }
 
   /**
@@ -79,7 +85,10 @@ class CsrfProtectionService {
 
       // Check if token has expired
       const tokenTime = Number.parseInt(timestamp, 10);
-      if (Number.isNaN(tokenTime) || Date.now() - tokenTime > this.TOKEN_EXPIRY_MS) {
+      if (
+        Number.isNaN(tokenTime) ||
+        Date.now() - tokenTime > this.TOKEN_EXPIRY_MS
+      ) {
         return false;
       }
 
@@ -233,9 +242,7 @@ class CsrfProtectionService {
       return realIp;
     }
 
-    return (
-      req.socket.remoteAddress || "unknown"
-    );
+    return req.socket.remoteAddress || "unknown";
   }
 
   /**

@@ -1,5 +1,6 @@
-import { invokeLLM } from "./_core/llm";
 import axios from "axios";
+import { isIP } from "node:net";
+import { invokeLLM } from "./_core/llm";
 
 /**
  * AI Service with fallback chain for LLM and OCR
@@ -22,24 +23,91 @@ interface ExtractionResult {
   errors?: string[];
 }
 
+function isPrivateIpv4(ip: string): boolean {
+  const [a, b, c] = ip.split(".").map(Number);
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 127) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64.0.0/10
+  if (a === 0 && b === 0 && c === 0) return true;
+  return false;
+}
+
+function isPrivateIpv6(ip: string): boolean {
+  const normalized = ip.toLowerCase();
+  if (normalized === "::1") return true;
+  if (normalized.startsWith("fd") || normalized.startsWith("fc")) return true;
+  if (normalized.startsWith("fe80")) return true;
+  return false;
+}
+
+function isPrivateIp(ip: string): boolean {
+  const ipType = isIP(ip);
+  if (ipType === 4) return isPrivateIpv4(ip);
+  if (ipType === 6) return isPrivateIpv6(ip);
+  return false;
+}
+
+function isSafeRemoteImageUrl(imageUrl: string): boolean {
+  try {
+    const url = new URL(imageUrl);
+
+    if (url.protocol !== "https:") return false;
+
+    const hostname = url.hostname.toLowerCase();
+    if (!hostname) return false;
+
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1"
+    ) {
+      return false;
+    }
+
+    if (hostname.endsWith(".local") || hostname.endsWith(".internal")) {
+      return false;
+    }
+
+    if (isPrivateIp(hostname)) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * OCR with fallback chain
  */
 export async function performOCR(imageUrl: string): Promise<OCRResult> {
+  if (!isSafeRemoteImageUrl(imageUrl)) {
+    console.warn(`[OCR] Blocked unsafe image URL: ${imageUrl}`);
+    return {
+      text: "",
+      success: false,
+      provider: "blocked",
+    };
+  }
+
   // Try OCR.space first if API key is configured
   const ocrSpaceKey = process.env.OCR_SPACE_API_KEY;
   if (ocrSpaceKey) {
     try {
       const response = await axios.post(
-        'https://api.ocr.space/parse/imageurl',
+        "https://api.ocr.space/parse/imageurl",
         new URLSearchParams({
           url: imageUrl,
           apikey: ocrSpaceKey,
-          language: 'eng',
-          isOverlayRequired: 'false',
+          language: "eng",
+          isOverlayRequired: "false",
         }),
         {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
           timeout: 30000,
         }
       );
@@ -48,14 +116,16 @@ export async function performOCR(imageUrl: string): Promise<OCRResult> {
         return {
           text: response.data.ParsedResults[0].ParsedText,
           success: true,
-          provider: 'ocr.space',
+          provider: "ocr.space",
         };
       }
     } catch (error) {
-      console.warn('[OCR] OCR.space failed, trying fallback:', error);
+      console.warn("[OCR] OCR.space failed, trying fallback:", error);
     }
   } else {
-    console.warn('[OCR] OCR_SPACE_API_KEY not set; skipping OCR.space and using fallback.');
+    console.warn(
+      "[OCR] OCR_SPACE_API_KEY not set; skipping OCR.space and using fallback."
+    );
   }
 
   // Fallback: Use LLM vision capabilities for OCR
@@ -63,17 +133,17 @@ export async function performOCR(imageUrl: string): Promise<OCRResult> {
     const llmResponse = await invokeLLM({
       messages: [
         {
-          role: 'user',
+          role: "user",
           content: [
             {
-              type: 'text',
-              text: 'Extract all text from this image. Return only the extracted text, preserving the layout and structure as much as possible.',
+              type: "text",
+              text: "Extract all text from this image. Return only the extracted text, preserving the layout and structure as much as possible.",
             },
             {
-              type: 'image_url',
+              type: "image_url",
               image_url: {
                 url: imageUrl,
-                detail: 'high',
+                detail: "high",
               },
             },
           ],
@@ -82,19 +152,19 @@ export async function performOCR(imageUrl: string): Promise<OCRResult> {
     });
 
     const content = llmResponse.choices[0]?.message?.content;
-    const extractedText = typeof content === 'string' ? content : '';
+    const extractedText = typeof content === "string" ? content : "";
 
     return {
       text: extractedText,
       success: true,
-      provider: 'llm-vision',
+      provider: "llm-vision",
     };
   } catch (error) {
-    console.error('[OCR] All OCR methods failed:', error);
+    console.error("[OCR] All OCR methods failed:", error);
     return {
-      text: '',
+      text: "",
       success: false,
-      provider: 'none',
+      provider: "none",
     };
   }
 }
@@ -102,7 +172,10 @@ export async function performOCR(imageUrl: string): Promise<OCRResult> {
 /**
  * Extract tender information from document
  */
-export async function extractTenderData(documentText: string, documentUrl?: string): Promise<ExtractionResult> {
+export async function extractTenderData(
+  documentText: string,
+  documentUrl?: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting tender information from documents.
 Extract the following information and return it as a JSON object:
 {
@@ -128,44 +201,44 @@ Extract the following information and return it as a JSON object:
 
 Return ONLY the JSON object, no additional text. If a field is not found, use null or empty string/array.`;
 
-  const providers = ['groq', 'gemini', 'anthropic'];
+  const providers = ["groq", "gemini", "anthropic"];
 
   for (const provider of providers) {
     try {
       const response = await invokeLLM({
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: documentText },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: documentText },
         ],
         response_format: {
-          type: 'json_schema',
+          type: "json_schema",
           json_schema: {
-            name: 'tender_extraction',
+            name: "tender_extraction",
             strict: true,
             schema: {
-              type: 'object',
+              type: "object",
               properties: {
-                referenceNumber: { type: ['string', 'null'] },
-                title: { type: ['string', 'null'] },
-                description: { type: ['string', 'null'] },
-                publishDate: { type: ['string', 'null'] },
-                submissionDeadline: { type: ['string', 'null'] },
-                evaluationDeadline: { type: ['string', 'null'] },
-                requirements: { type: ['string', 'null'] },
-                terms: { type: ['string', 'null'] },
-                estimatedValue: { type: ['number', 'null'] },
+                referenceNumber: { type: ["string", "null"] },
+                title: { type: ["string", "null"] },
+                description: { type: ["string", "null"] },
+                publishDate: { type: ["string", "null"] },
+                submissionDeadline: { type: ["string", "null"] },
+                evaluationDeadline: { type: ["string", "null"] },
+                requirements: { type: ["string", "null"] },
+                terms: { type: ["string", "null"] },
+                estimatedValue: { type: ["number", "null"] },
                 items: {
-                  type: 'array',
+                  type: "array",
                   items: {
-                    type: 'object',
+                    type: "object",
                     properties: {
-                      description: { type: 'string' },
-                      quantity: { type: 'number' },
-                      unit: { type: ['string', 'null'] },
-                      specifications: { type: ['string', 'null'] },
-                      estimatedPrice: { type: ['number', 'null'] },
+                      description: { type: "string" },
+                      quantity: { type: "number" },
+                      unit: { type: ["string", "null"] },
+                      specifications: { type: ["string", "null"] },
+                      estimatedPrice: { type: ["number", "null"] },
                     },
-                    required: ['description', 'quantity'],
+                    required: ["description", "quantity"],
                     additionalProperties: false,
                   },
                 },
@@ -178,14 +251,14 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
       });
 
       const content = response.choices[0]?.message?.content;
-      if (!content || typeof content !== 'string') continue;
+      if (!content || typeof content !== "string") continue;
 
       const data = JSON.parse(content);
 
       // Generate confidence scores (simplified - in production, use actual model confidence)
       const confidence: Record<string, number> = {};
       Object.keys(data).forEach(key => {
-        if (data[key] !== null && data[key] !== '') {
+        if (data[key] !== null && data[key] !== "") {
           confidence[key] = 0.85; // Default confidence
         }
       });
@@ -206,15 +279,17 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
     success: false,
     data: {},
     confidence: {},
-    provider: 'none',
-    errors: ['All LLM providers failed'],
+    provider: "none",
+    errors: ["All LLM providers failed"],
   };
 }
 
 /**
  * Extract invoice data from document with enhanced line item extraction
  */
-export async function extractInvoiceData(documentText: string): Promise<ExtractionResult> {
+export async function extractInvoiceData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting invoice information from documents.
 Extract the following information and return it as a JSON object:
 {
@@ -258,39 +333,56 @@ IMPORTANT:
 - Return ONLY the JSON object, no additional text
 - If a field is not found, use null or empty string/array`;
 
-  const providers = ['groq', 'gemini', 'anthropic'];
+  const providers = ["groq", "gemini", "anthropic"];
 
   for (const provider of providers) {
     try {
       const response = await invokeLLM({
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Extract invoice data from this document:\n\n${documentText}` },
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: `Extract invoice data from this document:\n\n${documentText}`,
+          },
         ],
       });
 
       const content = response.choices[0]?.message?.content;
-      if (!content || typeof content !== 'string') continue;
+      if (!content || typeof content !== "string") continue;
 
       // Parse JSON, handling potential markdown code blocks
       let jsonStr = content.trim();
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr
+          .replace(/^```(?:json)?\n?/, "")
+          .replace(/\n?```$/, "");
       }
 
       const data = JSON.parse(jsonStr);
 
       // Calculate confidence based on field completeness
       const confidence: Record<string, number> = {};
-      const highConfidenceFields = ['invoiceNumber', 'totalAmount', 'supplierName'];
-      const mediumConfidenceFields = ['invoiceDate', 'dueDate', 'items', 'subtotal'];
+      const highConfidenceFields = new Set([
+        "invoiceNumber",
+        "totalAmount",
+        "supplierName",
+      ]);
+      const mediumConfidenceFields = new Set([
+        "invoiceDate",
+        "dueDate",
+        "items",
+        "subtotal",
+      ]);
 
       Object.keys(data).forEach(key => {
-        if (data[key] !== null && data[key] !== '' &&
-            !(Array.isArray(data[key]) && data[key].length === 0)) {
-          if (highConfidenceFields.includes(key)) {
+        if (
+          data[key] !== null &&
+          data[key] !== "" &&
+          !(Array.isArray(data[key]) && data[key].length === 0)
+        ) {
+          if (highConfidenceFields.has(key)) {
             confidence[key] = 0.9;
-          } else if (mediumConfidenceFields.includes(key)) {
+          } else if (mediumConfidenceFields.has(key)) {
             confidence[key] = 0.8;
           } else {
             confidence[key] = 0.7;
@@ -300,7 +392,7 @@ IMPORTANT:
 
       // Special confidence for items based on count
       if (data.items && Array.isArray(data.items) && data.items.length > 0) {
-        confidence['items'] = Math.min(0.95, 0.7 + (data.items.length * 0.05));
+        confidence["items"] = Math.min(0.95, 0.7 + data.items.length * 0.05);
       }
 
       return {
@@ -322,7 +414,7 @@ IMPORTANT:
       success: true,
       data: fallbackData,
       confidence: { invoiceNumber: 0.6, totalAmount: 0.6 },
-      provider: 'regex-fallback',
+      provider: "regex-fallback",
     };
   }
 
@@ -330,8 +422,8 @@ IMPORTANT:
     success: false,
     data: {},
     confidence: {},
-    provider: 'none',
-    errors: ['All extraction methods failed'],
+    provider: "none",
+    errors: ["All extraction methods failed"],
   };
 }
 
@@ -355,7 +447,7 @@ function extractInvoiceWithRegex(text: string): any {
     /bill\s*(?:no|number)?[\s:]*([A-Z0-9-]+)/i,
   ];
   for (const pattern of invNumPatterns) {
-    const match = text.match(pattern);
+    const match = pattern.exec(text);
     if (match) {
       data.invoiceNumber = match[1].trim();
       break;
@@ -363,7 +455,8 @@ function extractInvoiceWithRegex(text: string): any {
   }
 
   // Date patterns
-  const datePattern = /(\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{4}[-/]\d{1,2}[-/]\d{1,2})/g;
+  const datePattern =
+    /(\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{4}[-/]\d{1,2}[-/]\d{1,2})/g;
   const dates = text.match(datePattern);
   if (dates && dates.length > 0) {
     data.invoiceDate = dates[0];
@@ -376,9 +469,9 @@ function extractInvoiceWithRegex(text: string): any {
     /[$€£]\s*([\d,]+\.?\d*)\s*(?:total)?$/im,
   ];
   for (const pattern of totalPatterns) {
-    const match = text.match(pattern);
+    const match = pattern.exec(text);
     if (match) {
-      const amount = parseFloat(match[1].replace(/,/g, ''));
+      const amount = Number.parseFloat(match[1].replaceAll(",", ""));
       data.totalAmount = Math.round(amount * 100); // Convert to cents
       break;
     }
@@ -390,7 +483,9 @@ function extractInvoiceWithRegex(text: string): any {
 /**
  * Extract price list data from document with table parsing
  */
-export async function extractPriceListData(documentText: string): Promise<ExtractionResult> {
+export async function extractPriceListData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting price list information from documents.
 Extract the following information and return it as a JSON object:
 {
@@ -424,37 +519,48 @@ IMPORTANT:
 - Preserve SKU/product codes exactly as written
 - Return ONLY the JSON object, no additional text`;
 
-  const providers = ['groq', 'gemini', 'anthropic'];
+  const providers = ["groq", "gemini", "anthropic"];
 
   for (const provider of providers) {
     try {
       const response = await invokeLLM({
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Extract price list data from this document:\n\n${documentText}` },
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: `Extract price list data from this document:\n\n${documentText}`,
+          },
         ],
       });
 
       const content = response.choices[0]?.message?.content;
-      if (!content || typeof content !== 'string') continue;
+      if (!content || typeof content !== "string") continue;
 
       let jsonStr = content.trim();
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr
+          .replace(/^```(?:json)?\n?/, "")
+          .replace(/\n?```$/, "");
       }
 
       const data = JSON.parse(jsonStr);
 
       const confidence: Record<string, number> = {};
       Object.keys(data).forEach(key => {
-        if (data[key] !== null && data[key] !== '' &&
-            !(Array.isArray(data[key]) && data[key].length === 0)) {
+        if (
+          data[key] !== null &&
+          data[key] !== "" &&
+          !(Array.isArray(data[key]) && data[key].length === 0)
+        ) {
           confidence[key] = 0.8;
         }
       });
 
       if (data.products && Array.isArray(data.products)) {
-        confidence['products'] = Math.min(0.95, 0.6 + (data.products.length * 0.02));
+        confidence["products"] = Math.min(
+          0.95,
+          0.6 + data.products.length * 0.02
+        );
       }
 
       return {
@@ -473,15 +579,17 @@ IMPORTANT:
     success: false,
     data: {},
     confidence: {},
-    provider: 'none',
-    errors: ['All extraction methods failed'],
+    provider: "none",
+    errors: ["All extraction methods failed"],
   };
 }
 
 /**
  * Extract product catalog data with detailed specifications
  */
-export async function extractCatalogData(documentText: string): Promise<ExtractionResult> {
+export async function extractCatalogData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting product catalog information.
 Extract the following information and return it as a JSON object:
 {
@@ -526,43 +634,55 @@ IMPORTANT:
 - Convert any prices to cents
 - Return ONLY the JSON object`;
 
-  const providers = ['groq', 'gemini', 'anthropic'];
+  const providers = ["groq", "gemini", "anthropic"];
 
   for (const provider of providers) {
     try {
       const response = await invokeLLM({
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Extract product catalog data from this document:\n\n${documentText}` },
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: `Extract product catalog data from this document:\n\n${documentText}`,
+          },
         ],
       });
 
       const content = response.choices[0]?.message?.content;
-      if (!content || typeof content !== 'string') continue;
+      if (!content || typeof content !== "string") continue;
 
       let jsonStr = content.trim();
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr
+          .replace(/^```(?:json)?\n?/, "")
+          .replace(/\n?```$/, "");
       }
 
       const data = JSON.parse(jsonStr);
 
       const confidence: Record<string, number> = {};
       Object.keys(data).forEach(key => {
-        if (data[key] !== null && data[key] !== '' &&
-            !(Array.isArray(data[key]) && data[key].length === 0)) {
+        if (
+          data[key] !== null &&
+          data[key] !== "" &&
+          !(Array.isArray(data[key]) && data[key].length === 0)
+        ) {
           confidence[key] = 0.75;
         }
       });
 
       if (data.products && Array.isArray(data.products)) {
-        confidence['products'] = Math.min(0.9, 0.5 + (data.products.length * 0.03));
+        confidence["products"] = Math.min(
+          0.9,
+          0.5 + data.products.length * 0.03
+        );
         // Higher confidence if products have specifications
-        const withSpecs = data.products.filter((p: any) =>
-          p.specifications && Object.keys(p.specifications).length > 0
+        const withSpecs = data.products.filter(
+          (p: any) =>
+            p.specifications && Object.keys(p.specifications).length > 0
         ).length;
         if (withSpecs > 0) {
-          confidence['specifications'] = 0.85;
+          confidence["specifications"] = 0.85;
         }
       }
 
@@ -582,15 +702,17 @@ IMPORTANT:
     success: false,
     data: {},
     confidence: {},
-    provider: 'none',
-    errors: ['All extraction methods failed'],
+    provider: "none",
+    errors: ["All extraction methods failed"],
   };
 }
 
 /**
  * Extract purchase order data
  */
-export async function extractPurchaseOrderData(documentText: string): Promise<ExtractionResult> {
+export async function extractPurchaseOrderData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting purchase order information.
 Extract the following information and return it as a JSON object:
 {
@@ -626,33 +748,45 @@ Extract the following information and return it as a JSON object:
 
 Convert all monetary amounts to cents. Return ONLY the JSON object.`;
 
-  const providers = ['groq', 'gemini', 'anthropic'];
+  const providers = ["groq", "gemini", "anthropic"];
 
   for (const provider of providers) {
     try {
       const response = await invokeLLM({
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Extract purchase order data from this document:\n\n${documentText}` },
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: `Extract purchase order data from this document:\n\n${documentText}`,
+          },
         ],
       });
 
       const content = response.choices[0]?.message?.content;
-      if (!content || typeof content !== 'string') continue;
+      if (!content || typeof content !== "string") continue;
 
       let jsonStr = content.trim();
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr
+          .replace(/^```(?:json)?\n?/, "")
+          .replace(/\n?```$/, "");
       }
 
       const data = JSON.parse(jsonStr);
 
       const confidence: Record<string, number> = {};
-      const highConfidenceFields = new Set(['poNumber', 'totalAmount', 'supplierName']);
+      const highConfidenceFields = new Set([
+        "poNumber",
+        "totalAmount",
+        "supplierName",
+      ]);
 
       Object.keys(data).forEach(key => {
-        if (data[key] !== null && data[key] !== '' &&
-            !(Array.isArray(data[key]) && data[key].length === 0)) {
+        if (
+          data[key] !== null &&
+          data[key] !== "" &&
+          !(Array.isArray(data[key]) && data[key].length === 0)
+        ) {
           confidence[key] = highConfidenceFields.has(key) ? 0.9 : 0.75;
         }
       });
@@ -673,15 +807,17 @@ Convert all monetary amounts to cents. Return ONLY the JSON object.`;
     success: false,
     data: {},
     confidence: {},
-    provider: 'none',
-    errors: ['All extraction methods failed'],
+    provider: "none",
+    errors: ["All extraction methods failed"],
   };
 }
 
 /**
  * Extract expense data from receipt/document
  */
-export async function extractExpenseData(documentText: string): Promise<ExtractionResult> {
+export async function extractExpenseData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting expense information from receipts and documents.
 Extract the following information and return it as a JSON object:
 {
@@ -695,25 +831,25 @@ Extract the following information and return it as a JSON object:
 
 Return ONLY the JSON object, no additional text. If a field is not found, use null or empty string.`;
 
-  const providers = ['groq', 'gemini', 'anthropic'];
+  const providers = ["groq", "gemini", "anthropic"];
 
   for (const provider of providers) {
     try {
       const response = await invokeLLM({
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: documentText },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: documentText },
         ],
       });
 
       const content = response.choices[0]?.message?.content;
-      if (!content || typeof content !== 'string') continue;
+      if (!content || typeof content !== "string") continue;
 
       const data = JSON.parse(content);
 
       const confidence: Record<string, number> = {};
       Object.keys(data).forEach(key => {
-        if (data[key] !== null && data[key] !== '') {
+        if (data[key] !== null && data[key] !== "") {
           confidence[key] = 0.85;
         }
       });
@@ -734,15 +870,18 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
     success: false,
     data: {},
     confidence: {},
-    provider: 'none',
-    errors: ['All LLM providers failed'],
+    provider: "none",
+    errors: ["All LLM providers failed"],
   };
 }
 
 /**
  * Generate business forecast using AI
  */
-export async function generateForecast(historicalData: any[], type: string): Promise<any> {
+export async function generateForecast(
+  historicalData: any[],
+  type: string
+): Promise<any> {
   const systemPrompt = `You are an AI assistant specialized in business forecasting.
 Analyze the historical data and generate forecasts for the next 6 months.
 Return predictions as a JSON array with this structure:
@@ -757,20 +896,20 @@ Return predictions as a JSON array with this structure:
   try {
     const response = await invokeLLM({
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: "system", content: systemPrompt },
         {
-          role: 'user',
-          content: `Historical ${type} data:\n${JSON.stringify(historicalData, null, 2)}\n\nGenerate forecasts for the next 6 months.`
+          role: "user",
+          content: `Historical ${type} data:\n${JSON.stringify(historicalData, null, 2)}\n\nGenerate forecasts for the next 6 months.`,
         },
       ],
     });
 
     const content = response.choices[0]?.message?.content;
-    if (!content || typeof content !== 'string') return [];
+    if (!content || typeof content !== "string") return [];
 
     return JSON.parse(content);
   } catch (error) {
-    console.error('[AI] Forecast generation failed:', error);
+    console.error("[AI] Forecast generation failed:", error);
     return [];
   }
 }
@@ -778,7 +917,10 @@ Return predictions as a JSON array with this structure:
 /**
  * Detect anomalies using AI
  */
-export async function detectAnomalies(data: any[], context: string): Promise<any[]> {
+export async function detectAnomalies(
+  data: any[],
+  context: string
+): Promise<any[]> {
   const systemPrompt = `You are an AI assistant specialized in detecting anomalies and outliers in business data.
 Analyze the data and identify any anomalies, outliers, or unusual patterns.
 Return findings as a JSON array with this structure:
@@ -797,20 +939,20 @@ If no anomalies are found, return an empty array.`;
   try {
     const response = await invokeLLM({
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: "system", content: systemPrompt },
         {
-          role: 'user',
-          content: `Context: ${context}\n\nData to analyze:\n${JSON.stringify(data, null, 2)}`
+          role: "user",
+          content: `Context: ${context}\n\nData to analyze:\n${JSON.stringify(data, null, 2)}`,
         },
       ],
     });
 
     const content = response.choices[0]?.message?.content;
-    if (!content || typeof content !== 'string') return [];
+    if (!content || typeof content !== "string") return [];
 
     return JSON.parse(content);
   } catch (error) {
-    console.error('[AI] Anomaly detection failed:', error);
+    console.error("[AI] Anomaly detection failed:", error);
     return [];
   }
 }
@@ -838,24 +980,23 @@ Return analysis as a JSON object:
   try {
     const response = await invokeLLM({
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: "system", content: systemPrompt },
         {
-          role: 'user',
-          content: `Tender history:\n${JSON.stringify(tenderHistory, null, 2)}`
+          role: "user",
+          content: `Tender history:\n${JSON.stringify(tenderHistory, null, 2)}`,
         },
       ],
     });
 
     const content = response.choices[0]?.message?.content;
-    if (!content || typeof content !== 'string') return null;
+    if (!content || typeof content !== "string") return null;
 
     return JSON.parse(content);
   } catch (error) {
-    console.error('[AI] Win rate analysis failed:', error);
+    console.error("[AI] Win rate analysis failed:", error);
     return null;
   }
 }
-
 
 // =============================================================================
 // COMPREHENSIVE DOCUMENT EXTRACTION FUNCTIONS
@@ -864,7 +1005,9 @@ Return analysis as a JSON object:
 /**
  * Extract supplier data from registration documents
  */
-export async function extractSupplierData(documentText: string): Promise<ExtractionResult> {
+export async function extractSupplierData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting supplier/company registration information.
 Extract the following information and return it as a JSON object:
 {
@@ -889,13 +1032,15 @@ Extract the following information and return it as a JSON object:
 
 Return ONLY the JSON object. If a field is not found, use null or empty string/array.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'supplier');
+  return await genericExtraction(documentText, systemPrompt, "supplier");
 }
 
 /**
  * Extract detailed expense report data with line items
  */
-export async function extractExpenseReportData(documentText: string): Promise<ExtractionResult> {
+export async function extractExpenseReportData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting expense report information.
 Extract the following information and return it as a JSON object:
 {
@@ -922,13 +1067,15 @@ Extract the following information and return it as a JSON object:
 
 Convert all amounts to cents. Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'expense_report');
+  return await genericExtraction(documentText, systemPrompt, "expense_report");
 }
 
 /**
  * Extract budget data from financial documents
  */
-export async function extractBudgetData(documentText: string): Promise<ExtractionResult> {
+export async function extractBudgetData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting budget information.
 Extract the following information and return it as a JSON object:
 {
@@ -951,13 +1098,15 @@ Extract the following information and return it as a JSON object:
 
 Convert all amounts to cents. Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'budget');
+  return await genericExtraction(documentText, systemPrompt, "budget");
 }
 
 /**
  * Extract commercial registration (CR) data
  */
-export async function extractCommercialRegistrationData(documentText: string): Promise<ExtractionResult> {
+export async function extractCommercialRegistrationData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting Saudi Commercial Registration (السجل التجاري) information.
 Extract the following information and return it as a JSON object:
 {
@@ -976,13 +1125,19 @@ Extract the following information and return it as a JSON object:
 Look for Arabic text like: رقم السجل التجاري، اسم المنشأة، الشكل القانوني، رأس المال
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'commercial_registration');
+  return await genericExtraction(
+    documentText,
+    systemPrompt,
+    "commercial_registration"
+  );
 }
 
 /**
  * Extract VAT certificate data
  */
-export async function extractVATCertificateData(documentText: string): Promise<ExtractionResult> {
+export async function extractVATCertificateData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting VAT certificate information.
 Extract the following information and return it as a JSON object:
 {
@@ -995,13 +1150,15 @@ Extract the following information and return it as a JSON object:
 Look for Arabic text like: الرقم الضريبي، شهادة تسجيل ضريبة القيمة المضافة
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'vat_certificate');
+  return await genericExtraction(documentText, systemPrompt, "vat_certificate");
 }
 
 /**
  * Extract Zakat certificate data
  */
-export async function extractZakatCertificateData(documentText: string): Promise<ExtractionResult> {
+export async function extractZakatCertificateData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting Zakat & Tax certificate information.
 Extract the following information and return it as a JSON object:
 {
@@ -1015,13 +1172,19 @@ Extract the following information and return it as a JSON object:
 Look for Arabic text like: شهادة الزكاة والدخل، رقم الشهادة، صالحة حتى
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'zakat_certificate');
+  return await genericExtraction(
+    documentText,
+    systemPrompt,
+    "zakat_certificate"
+  );
 }
 
 /**
  * Extract GOSI certificate data
  */
-export async function extractGOSICertificateData(documentText: string): Promise<ExtractionResult> {
+export async function extractGOSICertificateData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting GOSI certificate information.
 Extract the following information and return it as a JSON object:
 {
@@ -1036,13 +1199,19 @@ Extract the following information and return it as a JSON object:
 Look for Arabic text like: شهادة التأمينات الاجتماعية، رقم المنشأة
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'gosi_certificate');
+  return await genericExtraction(
+    documentText,
+    systemPrompt,
+    "gosi_certificate"
+  );
 }
 
 /**
  * Extract bank guarantee data
  */
-export async function extractBankGuaranteeData(documentText: string): Promise<ExtractionResult> {
+export async function extractBankGuaranteeData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting bank guarantee/letter of guarantee information.
 Extract the following information and return it as a JSON object:
 {
@@ -1060,13 +1229,15 @@ Extract the following information and return it as a JSON object:
 
 Convert amounts to cents. Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'bank_guarantee');
+  return await genericExtraction(documentText, systemPrompt, "bank_guarantee");
 }
 
 /**
  * Extract Letter of Authorization (LOA) data
  */
-export async function extractLOAData(documentText: string): Promise<ExtractionResult> {
+export async function extractLOAData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting Letter of Authorization (LOA) information.
 Extract the following information and return it as a JSON object:
 {
@@ -1085,13 +1256,15 @@ Extract the following information and return it as a JSON object:
 
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'loa');
+  return await genericExtraction(documentText, systemPrompt, "loa");
 }
 
 /**
  * Extract MOCI agency registration data
  */
-export async function extractMOCILetterData(documentText: string): Promise<ExtractionResult> {
+export async function extractMOCILetterData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting Saudi MOCI agency registration information.
 Extract the following information and return it as a JSON object:
 {
@@ -1108,13 +1281,15 @@ Extract the following information and return it as a JSON object:
 Look for Arabic text like: وزارة التجارة، الوكالة التجارية
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'moci_letter');
+  return await genericExtraction(documentText, systemPrompt, "moci_letter");
 }
 
 /**
  * Extract FDA certificate data
  */
-export async function extractFDACertificateData(documentText: string): Promise<ExtractionResult> {
+export async function extractFDACertificateData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting FDA certificate and 510(k) clearance information.
 Extract the following information and return it as a JSON object:
 {
@@ -1132,13 +1307,15 @@ Extract the following information and return it as a JSON object:
 
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'fda_certificate');
+  return await genericExtraction(documentText, systemPrompt, "fda_certificate");
 }
 
 /**
  * Extract CE marking certificate data
  */
-export async function extractCECertificateData(documentText: string): Promise<ExtractionResult> {
+export async function extractCECertificateData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting CE marking certificate information.
 Extract the following information and return it as a JSON object:
 {
@@ -1158,13 +1335,15 @@ Extract the following information and return it as a JSON object:
 
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'ce_certificate');
+  return await genericExtraction(documentText, systemPrompt, "ce_certificate");
 }
 
 /**
  * Extract ISO certificate data
  */
-export async function extractISOCertificateData(documentText: string): Promise<ExtractionResult> {
+export async function extractISOCertificateData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting ISO certification information.
 Extract the following information and return it as a JSON object:
 {
@@ -1182,13 +1361,15 @@ Extract the following information and return it as a JSON object:
 
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'iso_certificate');
+  return await genericExtraction(documentText, systemPrompt, "iso_certificate");
 }
 
 /**
  * Extract SFDA certificate data
  */
-export async function extractSFDACertificateData(documentText: string): Promise<ExtractionResult> {
+export async function extractSFDACertificateData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting Saudi FDA (SFDA) medical device registration information.
 Extract the following information and return it as a JSON object:
 {
@@ -1209,13 +1390,19 @@ Extract the following information and return it as a JSON object:
 Look for Arabic text like: هيئة الغذاء والدواء، تسجيل الأجهزة الطبية
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'sfda_certificate');
+  return await genericExtraction(
+    documentText,
+    systemPrompt,
+    "sfda_certificate"
+  );
 }
 
 /**
  * Extract manufacturer authorization letter data
  */
-export async function extractManufacturerAuthorizationData(documentText: string): Promise<ExtractionResult> {
+export async function extractManufacturerAuthorizationData(
+  documentText: string
+): Promise<ExtractionResult> {
   const systemPrompt = `You are an AI assistant specialized in extracting manufacturer authorization letter information.
 Extract the following information and return it as a JSON object:
 {
@@ -1235,7 +1422,11 @@ Extract the following information and return it as a JSON object:
 
 Return ONLY the JSON object.`;
 
-  return await genericExtraction(documentText, systemPrompt, 'manufacturer_authorization');
+  return await genericExtraction(
+    documentText,
+    systemPrompt,
+    "manufacturer_authorization"
+  );
 }
 
 /**
@@ -1246,24 +1437,29 @@ async function genericExtraction(
   systemPrompt: string,
   extractionType: string
 ): Promise<ExtractionResult> {
-  const providers = ['groq', 'gemini', 'anthropic'];
+  const providers = ["groq", "gemini", "anthropic"];
 
   for (const provider of providers) {
     try {
       const response = await invokeLLM({
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Extract data from this document:\n\n${documentText}` },
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: `Extract data from this document:\n\n${documentText}`,
+          },
         ],
       });
 
       const content = response.choices[0]?.message?.content;
-      if (!content || typeof content !== 'string') continue;
+      if (!content || typeof content !== "string") continue;
 
       // Parse JSON, handling potential markdown code blocks
       let jsonStr = content.trim();
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr
+          .replace(/^```(?:json)?\n?/, "")
+          .replace(/\n?```$/, "");
       }
 
       const data = JSON.parse(jsonStr);
@@ -1271,11 +1467,22 @@ async function genericExtraction(
       // Generate confidence scores based on field completeness
       const confidence: Record<string, number> = {};
       Object.keys(data).forEach(key => {
-        if (data[key] !== null && data[key] !== '' &&
-            !(Array.isArray(data[key]) && data[key].length === 0)) {
+        if (
+          data[key] !== null &&
+          data[key] !== "" &&
+          !(Array.isArray(data[key]) && data[key].length === 0)
+        ) {
           // Higher confidence for key identification fields
-          const keyFields = ['certificateNumber', 'registrationNumber', 'vatNumber', 'crNumber',
-                           'fdaNumber', 'sfdaNumber', 'companyName', 'manufacturerName'];
+          const keyFields = [
+            "certificateNumber",
+            "registrationNumber",
+            "vatNumber",
+            "crNumber",
+            "fdaNumber",
+            "sfdaNumber",
+            "companyName",
+            "manufacturerName",
+          ];
           if (keyFields.includes(key)) {
             confidence[key] = 0.9;
           } else {
@@ -1291,7 +1498,10 @@ async function genericExtraction(
         provider,
       };
     } catch (error) {
-      console.warn(`[AI] ${provider} failed for ${extractionType} extraction:`, error);
+      console.warn(
+        `[AI] ${provider} failed for ${extractionType} extraction:`,
+        error
+      );
       continue;
     }
   }
@@ -1300,7 +1510,7 @@ async function genericExtraction(
     success: false,
     data: {},
     confidence: {},
-    provider: 'none',
+    provider: "none",
     errors: [`All extraction methods failed for ${extractionType}`],
   };
 }

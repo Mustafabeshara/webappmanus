@@ -477,9 +477,16 @@ class TaskManagementService {
       // Get assignee from context or null
       const assignedTo = context.assignees?.[step.assigneeRole] || null;
 
+      const requiredDocsText = step.requiredDocuments?.length
+        ? `Required documents: ${step.requiredDocuments.join(", ")}`
+        : "";
+      const descriptionParts = [step.description, requiredDocsText].filter(
+        Boolean
+      );
+
       const task = await this.createTask({
         title: step.name,
-        description: `${step.description}\n\n${step.requiredDocuments?.length ? `Required documents: ${step.requiredDocuments.join(", ")}` : ""}`,
+        description: descriptionParts.join("\n\n"),
         assignedTo,
         dueDate: dueDate.toISOString(),
         priority: cumulativeDays === 0 ? "high" : "medium",
@@ -548,8 +555,8 @@ class TaskManagementService {
       ([key, template]) => ({
         id: key,
         name: template.documentType
-          .replace(/_/g, " ")
-          .replace(/\b\w/g, l => l.toUpperCase()),
+          .replaceAll("_", " ")
+          .replaceAll(/\b\w/g, l => l.toUpperCase()),
         stepsCount: template.workflowSteps.length,
         steps: template.workflowSteps.map(s => ({
           id: s.stepId,
@@ -598,8 +605,7 @@ class TaskManagementService {
     let tasksCreated = 0;
 
     for (const tender of tenders) {
-      if (!tender.submissionDeadline) continue;
-      if (["closed", "archived"].includes(tender.status || "")) continue;
+      if (!this.isTenderEligibleForReminders(tender)) continue;
 
       const existingTasks = await db.getTasksByEntity("tender", tender.id);
       const existingTitles = new Set(
@@ -607,41 +613,14 @@ class TaskManagementService {
       );
 
       for (const window of reminderWindows) {
-        const reminderDate = new Date(tender.submissionDeadline);
-        reminderDate.setDate(reminderDate.getDate() - window);
-
-        if (reminderDate < now) continue;
-
-        const marker = `[#tender-${tender.id}-d${window}]`;
-        const title = `${marker} Tender ${tender.referenceNumber || tender.title} closes in ${window} days`;
-        if (existingTitles.has(title.toLowerCase())) continue;
-
-        await db.createTask({
-          title,
-          description: `Submission deadline: ${tender.submissionDeadline.toISOString()}`,
-          status: "todo",
-          priority: window <= 3 ? "urgent" : "high",
-          assignedTo: tender.createdBy ?? null,
-          departmentId: tender.departmentId ?? null,
-          relatedEntityType: "tender",
-          relatedEntityId: tender.id,
-          dueDate: tender.submissionDeadline,
-          createdBy: tender.createdBy ?? 1,
+        const created = await this.createTenderReminderForWindow({
+          tender,
+          window,
+          existingTitles,
+          now,
+          notify,
         });
-
-        if (notify && tender.createdBy) {
-          await db.createNotification({
-            userId: tender.createdBy,
-            type: "deadline",
-            title: "Tender deadline reminder created",
-            message: `${title}\nDeadline: ${tender.submissionDeadline.toISOString()}`,
-            entityType: "tender",
-            entityId: tender.id,
-            priority: window <= 3 ? "high" : "normal",
-          });
-        }
-
-        tasksCreated += 1;
+        if (created) tasksCreated += 1;
       }
     }
 
@@ -651,6 +630,61 @@ class TaskManagementService {
       horizonDays,
       reminderWindows,
     };
+  }
+
+  private isTenderEligibleForReminders(tender: any) {
+    if (!tender.submissionDeadline) return false;
+    return !["closed", "archived"].includes(tender.status || "");
+  }
+
+  private buildTenderReminderTitle(tender: any, window: number) {
+    const marker = `[#tender-${tender.id}-d${window}]`;
+    return `${marker} Tender ${tender.referenceNumber || tender.title} closes in ${window} days`;
+  }
+
+  private async createTenderReminderForWindow(params: {
+    tender: any;
+    window: number;
+    existingTitles: Set<string>;
+    now: Date;
+    notify: boolean;
+  }) {
+    const { tender, window, existingTitles, now, notify } = params;
+
+    const reminderDate = new Date(tender.submissionDeadline);
+    reminderDate.setDate(reminderDate.getDate() - window);
+
+    if (reminderDate < now) return false;
+
+    const title = this.buildTenderReminderTitle(tender, window);
+    if (existingTitles.has(title.toLowerCase())) return false;
+
+    await db.createTask({
+      title,
+      description: `Submission deadline: ${tender.submissionDeadline.toISOString()}`,
+      status: "todo",
+      priority: window <= 3 ? "urgent" : "high",
+      assignedTo: tender.createdBy ?? null,
+      departmentId: tender.departmentId ?? null,
+      relatedEntityType: "tender",
+      relatedEntityId: tender.id,
+      dueDate: tender.submissionDeadline,
+      createdBy: tender.createdBy ?? 1,
+    });
+
+    if (notify && tender.createdBy) {
+      await db.createNotification({
+        userId: tender.createdBy,
+        type: "deadline",
+        title: "Tender deadline reminder created",
+        message: `${title}\nDeadline: ${tender.submissionDeadline.toISOString()}`,
+        entityType: "tender",
+        entityId: tender.id,
+        priority: window <= 3 ? "high" : "normal",
+      });
+    }
+
+    return true;
   }
 
   /**

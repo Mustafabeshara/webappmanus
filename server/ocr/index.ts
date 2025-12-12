@@ -6,19 +6,21 @@
  */
 
 import { spawn } from "child_process";
-import path from "path";
 import fs from "fs/promises";
 import { createRequire } from "module";
+import path from "path";
 
 // Use createRequire to load CommonJS pdf-parse module at runtime
 // This avoids esbuild bundling issues with ESM/CJS interop
 const require = createRequire(import.meta.url);
 
 // Lazy-loaded pdf-parse PDFParse class
-let PDFParseClass: (new (options: { data: Uint8Array }) => {
-  getText(): Promise<{ pages: Array<{ text: string }>; text: string }>;
-  getInfo(): Promise<{ total: number; info: Record<string, unknown> }>;
-}) | null = null;
+let PDFParseClass:
+  | (new (options: { data: Uint8Array }) => {
+      getText(): Promise<{ pages: Array<{ text: string }>; text: string }>;
+      getInfo(): Promise<{ total: number; info: Record<string, unknown> }>;
+    })
+  | null = null;
 
 async function getPdfParseClass() {
   if (!PDFParseClass) {
@@ -37,7 +39,9 @@ async function getPdfParseClass() {
 }
 
 // Helper function to extract text from PDF buffer
-async function extractTextFromPdf(dataBuffer: Buffer): Promise<{ text: string; numpages: number }> {
+async function extractTextFromPdf(
+  dataBuffer: Buffer
+): Promise<{ text: string; numpages: number }> {
   const PdfParseClass = await getPdfParseClass();
   // pdf-parse v2 expects Uint8Array, convert Buffer if necessary
   const dataArray = new Uint8Array(dataBuffer);
@@ -48,12 +52,13 @@ async function extractTextFromPdf(dataBuffer: Buffer): Promise<{ text: string; n
   const infoResult = await parser.getInfo();
 
   // v2 returns text in both pages array and combined text property
-  const fullText = textResult.text || textResult.pages.map(page => page.text).join('\n\n');
+  const fullText =
+    textResult.text || textResult.pages.map(page => page.text).join("\n\n");
 
   // getInfo returns { total: number, info: {...} } - use 'total' for page count
   return {
     text: fullText,
-    numpages: infoResult.total || textResult.pages.length
+    numpages: infoResult.total || textResult.pages.length,
   };
 }
 
@@ -128,10 +133,10 @@ async function isPythonAvailable(): Promise<boolean> {
     return pythonAvailable;
   }
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const proc = spawn("python3", ["--version"]);
 
-    proc.on("close", (code) => {
+    proc.on("close", code => {
       pythonAvailable = code === 0;
       resolve(pythonAvailable);
     });
@@ -173,31 +178,33 @@ async function executePython(args: string[]): Promise<OCRResponse> {
   if (!hasPython) {
     return {
       success: false,
-      error: "OCR not available: Python is not installed on this server. Please add tender details manually.",
+      error:
+        "OCR not available: Python is not installed on this server. Please add tender details manually.",
       details: {
         reason: "python_not_installed",
-        suggestion: "Manual entry mode is available - you can upload the PDF and fill in the tender details manually."
-      }
+        suggestion:
+          "Manual entry mode is available - you can upload the PDF and fill in the tender details manually.",
+      },
     };
   }
 
   const pythonPath = await getPythonPath();
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const process = spawn(pythonPath, [PYTHON_SCRIPT, ...args]);
 
     let stdout = "";
     let stderr = "";
 
-    process.stdout.on("data", (data) => {
+    process.stdout.on("data", data => {
       stdout += data.toString();
     });
 
-    process.stderr.on("data", (data) => {
+    process.stderr.on("data", data => {
       stderr += data.toString();
     });
 
-    process.on("close", (code) => {
+    process.on("close", code => {
       if (code !== 0 && !stdout) {
         resolve({
           success: false,
@@ -219,14 +226,15 @@ async function executePython(args: string[]): Promise<OCRResponse> {
       }
     });
 
-    process.on("error", (err) => {
+    process.on("error", err => {
       resolve({
         success: false,
         error: `OCR not available: ${err.message}. Please add tender details manually.`,
         details: {
           reason: "python_error",
-          suggestion: "Manual entry mode is available - you can upload the PDF and fill in the tender details manually."
-        }
+          suggestion:
+            "Manual entry mode is available - you can upload the PDF and fill in the tender details manually.",
+        },
       });
     });
   });
@@ -292,7 +300,12 @@ async function extractWithJavaScript(
 
     // Parse extracted text to find tender information
     const result = parseTenderText(text, filename, options.department);
-    console.log("[OCR JS] Parsed result - ref:", result.reference_number, "items:", result.items?.length);
+    console.log(
+      "[OCR JS] Parsed result - ref:",
+      result.reference_number,
+      "items:",
+      result.items?.length
+    );
     console.log("[OCR JS] Closing date extracted:", result.closing_date);
     console.log("[OCR JS] First 500 chars of text:", text.substring(0, 500));
 
@@ -311,8 +324,9 @@ async function extractWithJavaScript(
       success: false,
       error: `PDF text extraction failed: ${e instanceof Error ? e.message : String(e)}`,
       details: {
-        suggestion: "The PDF may be image-based or corrupted. Please fill in the tender details manually."
-      }
+        suggestion:
+          "The PDF may be image-based or corrupted. Please fill in the tender details manually.",
+      },
     };
   }
 }
@@ -428,13 +442,13 @@ function parseTenderText(
     // Submission deadline: DD/MM/YYYY
     /submission\s*deadline\s*[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
     // Due date: DD/MM/YYYY
-    /due\s*date\s*[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    /due\s*date\s*[:\s]*(\d{1,2}[/. -]\d{1,2}[/. -]\d{2,4})/i,
     // Arabic closing date formats
-    /تاريخ\s*الإغلاق\s*[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
-    /تاريخ\s*الاغلاق\s*[:\s]*([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
-    /ــــخ اﻹغـﻼق[:\s]*([\d]{4}[/\-.][\d]{1,2}[/\-.][\d]{1,2})/i,
+    /تاريخ\s*الإغلاق\s*[:\s]*(\d{1,2}[/. -]\d{1,2}[/. -]\d{2,4})/i,
+    /تاريخ\s*الاغلاق\s*[:\s]*(\d{1,2}[/. -]\d{1,2}[/. -]\d{2,4})/i,
+    /ــــخ اﻹغـﻼق[:\s]*(\d{4}[/. -]\d{1,2}[/. -]\d{1,2})/i,
     // Generic date near "closing" keyword (looser match)
-    /closing[^\d]{0,20}([\d]{1,2}[/\-.][\d]{1,2}[/\-.][\d]{2,4})/i,
+    /closing[^\d]{0,20}(\d{1,2}[/. -]\d{1,2}[/. -]\d{2,4})/i,
   ];
 
   let closingDate = "";
@@ -449,15 +463,15 @@ function parseTenderText(
   // If still no closing date found, try to find any date that looks like a deadline
   // by scanning for dates near keywords
   if (!closingDate) {
-    const datePattern = /([\d]{1,2})[/\-\.]([\d]{1,2})[/\-\.]([\d]{2,4})/g;
+    const datePattern = /(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/g;
     const keywordPattern = /closing|deadline|due|last\s*date|submission/i;
-    const lines = text.split('\n');
+    const lines = text.split("\n");
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (keywordPattern.test(line)) {
         // Check this line and next 2 lines for a date
-        const searchText = lines.slice(i, i + 3).join(' ');
+        const searchText = lines.slice(i, i + 3).join(" ");
         const dateMatch = searchText.match(datePattern);
         if (dateMatch) {
           closingDate = dateMatch[0].replace(/-/g, "/").replace(/\./g, "/");
@@ -477,7 +491,9 @@ function parseTenderText(
   }
 
   // Calculate evaluation date (2 weeks after closing)
-  const evaluationDate = closingDateISO ? calculateEvaluationDate(closingDate) : "";
+  const evaluationDate = closingDateISO
+    ? calculateEvaluationDate(closingDate)
+    : "";
 
   // Extract posting date
   const postingDatePatterns = [
@@ -527,12 +543,14 @@ function parseTenderText(
   }
 
   // Detect language
-  const arabicPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g;
+  const arabicPattern =
+    /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g;
   const arabicChars = (text.match(arabicPattern) || []).length;
   const totalChars = text.replace(/\s+/g, "").length;
   const arabicRatio = totalChars > 0 ? arabicChars / totalChars : 0;
   const hasArabic = arabicChars > 0;
-  const language = arabicRatio > 0.3 ? "arabic" : arabicRatio > 0.05 ? "mixed" : "english";
+  const language =
+    arabicRatio > 0.3 ? "arabic" : arabicRatio > 0.05 ? "mixed" : "english";
 
   return {
     reference_number: referenceNumber,
@@ -559,7 +577,10 @@ function parseTenderText(
  */
 function extractItemsFromText(text: string): TenderItem[] {
   const items: TenderItem[] = [];
-  const lines = text.split("\n").map(l => l.trim()).filter(l => l);
+  const lines = text
+    .split("\n")
+    .map(l => l.trim())
+    .filter(l => l);
 
   // Try MOH tabular format first
   // MOH format has sections: SL No, item descriptions, UNIT, QUANTITY
@@ -585,7 +606,10 @@ function extractItemsFromText(text: string): TenderItem[] {
       const match = line.match(pattern);
       if (match) {
         const [, num, desc, qty, unit] = match;
-        let description = desc.trim().replace(/\s+/g, " ").replace(/^[\d\s\-\.]+/, "");
+        let description = desc
+          .trim()
+          .replace(/\s+/g, " ")
+          .replace(/^[\d\s.-]+/, "");
 
         if (description && description.length > 3) {
           const key = description.toLowerCase().substring(0, 100);
@@ -629,8 +653,10 @@ function extractMOHTableItems(lines: string[]): TenderItem[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].toUpperCase();
-    if (line === "SL NO" || line === "SL. NO" || line === "SL.NO") slNoIndex = i;
-    if (line === "ITEM DESCRIPTION" || line.includes("DESCRIPTION")) itemDescIndex = i;
+    if (line === "SL NO" || line === "SL. NO" || line === "SL.NO")
+      slNoIndex = i;
+    if (line === "ITEM DESCRIPTION" || line.includes("DESCRIPTION"))
+      itemDescIndex = i;
     if (line === "UNIT") unitIndex = i;
     if (line === "QUANTITY") quantityIndex = i;
   }
@@ -654,7 +680,12 @@ function extractMOHTableItems(lines: string[]): TenderItem[] {
 
   // Extract descriptions between SL NO and UNIT (or ITEM DESCRIPTION and UNIT)
   // These need to be joined if split across lines
-  const descEndIdx = unitIndex > -1 ? unitIndex : quantityIndex > -1 ? quantityIndex : lines.length;
+  const descEndIdx =
+    unitIndex > -1
+      ? unitIndex
+      : quantityIndex > -1
+        ? quantityIndex
+        : lines.length;
   const rawDescLines: string[] = [];
 
   for (let i = slNoIndex + 1; i < descEndIdx; i++) {
@@ -664,7 +695,12 @@ function extractMOHTableItems(lines: string[]): TenderItem[] {
     // Skip if it's just numbers or too short
     if (/^[\d]+$/.test(line) || line.length < 2) continue;
     // Skip Arabic-only lines
-    if (/^[\u0600-\u06FF\s\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+$/.test(line)) continue;
+    if (
+      /^[\u0600-\u06FF\s\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+$/.test(
+        line
+      )
+    )
+      continue;
     // Skip unit keywords in description area
     if (/^(PCS?|PIECES?|EACH|UNITS?|NOS?|SETS?)$/i.test(line)) continue;
 
@@ -677,7 +713,11 @@ function extractMOHTableItems(lines: string[]): TenderItem[] {
     let currentDesc = "";
     for (const line of rawDescLines) {
       // If line starts with uppercase letter and we have content, might be new item
-      if (currentDesc && /^[A-Z]/.test(line) && descriptions.length < expectedItemCount) {
+      if (
+        currentDesc &&
+        /^[A-Z]/.test(line) &&
+        descriptions.length < expectedItemCount
+      ) {
         // Check if this looks like a continuation (starts with common continuation words)
         if (/^(SIZES?|AND|WITH|FOR|IN|TO|OR)\b/i.test(line)) {
           currentDesc += " " + line;
@@ -703,7 +743,11 @@ function extractMOHTableItems(lines: string[]): TenderItem[] {
   // Extract units: look for PCS/PIECES etc. BEFORE the UNIT marker
   if (unitIndex > -1) {
     // Look backwards from UNIT marker for unit values
-    for (let i = unitIndex - 1; i >= 0 && units.length < expectedItemCount; i--) {
+    for (
+      let i = unitIndex - 1;
+      i >= 0 && units.length < expectedItemCount;
+      i--
+    ) {
       const line = lines[i].toUpperCase();
       if (/^(PCS?|PIECES?|EACH|UNITS?|NOS?|SETS?)$/i.test(line)) {
         units.unshift(line.toLowerCase()); // Add to front since we're going backwards
@@ -724,7 +768,11 @@ function extractMOHTableItems(lines: string[]): TenderItem[] {
     }
   } else if (quantityIndex > -1) {
     // If no UNIT marker, look for numbers before QUANTITY
-    for (let i = quantityIndex - 1; i >= 0 && quantities.length < expectedItemCount; i--) {
+    for (
+      let i = quantityIndex - 1;
+      i >= 0 && quantities.length < expectedItemCount;
+      i--
+    ) {
       const line = lines[i];
       if (/^[\d]+$/.test(line) && parseInt(line) <= 10000) {
         quantities.unshift(line);
@@ -846,8 +894,9 @@ export async function extractTenderFromBase64(
       success: false,
       error: `Failed to process PDF: ${e instanceof Error ? e.message : String(e)}`,
       details: {
-        suggestion: "The file may be corrupted. Please try uploading again or fill in the details manually."
-      }
+        suggestion:
+          "The file may be corrupted. Please try uploading again or fill in the details manually.",
+      },
     };
   }
 }
@@ -878,8 +927,9 @@ export async function getOCRStatus(): Promise<{
       },
       scriptPath: PYTHON_SCRIPT,
       pythonPath: "pdf-parse (JavaScript)",
-      message: "PDF text extraction is available using JavaScript. Note: Image-based PDFs may require manual entry.",
-      extractionMethod: "pdf-parse-js"
+      message:
+        "PDF text extraction is available using JavaScript. Note: Image-based PDFs may require manual entry.",
+      extractionMethod: "pdf-parse-js",
     };
   }
 
@@ -894,6 +944,6 @@ export async function getOCRStatus(): Promise<{
     message: dependencies.ready
       ? "OCR is ready for use."
       : "OCR dependencies are missing. You can still add tenders manually.",
-    extractionMethod: "python-ocr"
+    extractionMethod: "python-ocr",
   };
 }

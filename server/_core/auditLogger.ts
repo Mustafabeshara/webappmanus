@@ -329,7 +329,7 @@ class AuditLogger {
         name: "union_select",
         regex: /(\bunion\b.*\bselect\b)|(\bselect\b.*\bunion\b)/i,
       },
-      { name: "sql_comments", regex: /(--|\#|\/\*|\*\/)/ },
+      { name: "sql_comments", regex: /(--|#|\/\*|\*\/)/ },
       { name: "boolean_blind", regex: /(\band\b|\bor\b)\s+\d+\s*=\s*\d+/i },
       { name: "time_based", regex: /\b(sleep|waitfor|delay)\s*\(/i },
       {

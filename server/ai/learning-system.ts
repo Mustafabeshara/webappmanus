@@ -11,12 +11,12 @@
 
 // Correction types
 export type CorrectionType =
-  | 'product_match'
-  | 'category_suggestion'
-  | 'price_prediction'
-  | 'search_relevance'
-  | 'tender_match'
-  | 'supplier_recommendation';
+  | "product_match"
+  | "category_suggestion"
+  | "price_prediction"
+  | "search_relevance"
+  | "tender_match"
+  | "supplier_recommendation";
 
 // Correction record
 export interface CorrectionRecord {
@@ -113,10 +113,12 @@ class LearningStore {
         weight: 0.5,
         frequency: 1,
         lastSeen: new Date(),
-        examples: [{
-          input: correction.originalValue,
-          expected: correction.correctedValue,
-        }],
+        examples: [
+          {
+            input: correction.originalValue,
+            expected: correction.correctedValue,
+          },
+        ],
       });
     }
   }
@@ -126,24 +128,25 @@ class LearningStore {
    */
   private extractPatternKey(correction: CorrectionRecord): string {
     switch (correction.type) {
-      case 'product_match':
-        return `pm-${correction.context.tenderId || 'any'}-${this.normalizeValue(correction.originalValue)}`;
+      case "product_match":
+        return `pm-${correction.context.tenderId || "any"}-${this.normalizeValue(correction.originalValue)}`;
 
-      case 'category_suggestion':
+      case "category_suggestion":
         return `cs-${this.normalizeValue(correction.originalValue)}-${this.normalizeValue(correction.correctedValue)}`;
 
-      case 'price_prediction':
+      case "price_prediction": {
         const priceRange = this.getPriceRange(correction.correctedValue);
-        return `pp-${correction.context.category || 'any'}-${priceRange}`;
+        return `pp-${correction.context.category || "any"}-${priceRange}`;
+      }
 
-      case 'search_relevance':
-        return `sr-${this.normalizeValue(correction.context.query)}-${correction.correctedValue ? 'relevant' : 'irrelevant'}`;
+      case "search_relevance":
+        return `sr-${this.normalizeValue(correction.context.query)}-${correction.correctedValue ? "relevant" : "irrelevant"}`;
 
-      case 'tender_match':
-        return `tm-${correction.context.tenderId || 'any'}-${correction.context.productId || 'any'}`;
+      case "tender_match":
+        return `tm-${correction.context.tenderId || "any"}-${correction.context.productId || "any"}`;
 
-      case 'supplier_recommendation':
-        return `sup-${correction.context.category || 'any'}-${this.normalizeValue(correction.correctedValue)}`;
+      case "supplier_recommendation":
+        return `sup-${correction.context.category || "any"}-${this.normalizeValue(correction.correctedValue)}`;
 
       default:
         return `${correction.type}-${Date.now()}`;
@@ -154,8 +157,8 @@ class LearningStore {
    * Normalize value for pattern matching
    */
   private normalizeValue(value: any): string {
-    if (typeof value === 'string') {
-      return value.toLowerCase().trim().replace(/\s+/g, '-').substring(0, 50);
+    if (typeof value === "string") {
+      return value.toLowerCase().trim().replace(/\s+/g, "-").substring(0, 50);
     }
     return String(value).substring(0, 50);
   }
@@ -164,10 +167,10 @@ class LearningStore {
    * Get price range category
    */
   private getPriceRange(price: number): string {
-    if (price < 1000) return 'low';
-    if (price < 10000) return 'medium';
-    if (price < 100000) return 'high';
-    return 'premium';
+    if (price < 1000) return "low";
+    if (price < 10000) return "medium";
+    if (price < 100000) return "high";
+    return "premium";
   }
 
   /**
@@ -231,7 +234,8 @@ class LearningStore {
     let relevance = 0;
 
     // Time decay - patterns become less relevant over time
-    const daysSinceLastSeen = (Date.now() - pattern.lastSeen.getTime()) / (1000 * 60 * 60 * 24);
+    const daysSinceLastSeen =
+      (Date.now() - pattern.lastSeen.getTime()) / (1000 * 60 * 60 * 24);
     const timeDecay = Math.exp(-daysSinceLastSeen / 30);
 
     relevance += timeDecay * 0.3;
@@ -240,7 +244,7 @@ class LearningStore {
     relevance += Math.min(pattern.frequency / 10, 0.3);
 
     // Context matching
-    const patternParts = pattern.pattern.split('-');
+    const patternParts = pattern.pattern.split("-");
     for (const part of patternParts) {
       for (const value of Object.values(context)) {
         if (String(value).toLowerCase().includes(part.toLowerCase())) {
@@ -298,7 +302,8 @@ class LearningStore {
     const correctionsByType: Record<string, number> = {};
 
     for (const correction of this.corrections.values()) {
-      correctionsByType[correction.type] = (correctionsByType[correction.type] || 0) + 1;
+      correctionsByType[correction.type] =
+        (correctionsByType[correction.type] || 0) + 1;
     }
 
     // Get top patterns by frequency
@@ -307,8 +312,11 @@ class LearningStore {
       .slice(0, 10);
 
     // Calculate learning rate (corrections applied / total)
-    const applied = Array.from(this.corrections.values()).filter(c => c.applied).length;
-    const learningRate = this.corrections.size > 0 ? applied / this.corrections.size : 0;
+    const applied = Array.from(this.corrections.values()).filter(
+      c => c.applied
+    ).length;
+    const learningRate =
+      this.corrections.size > 0 ? applied / this.corrections.size : 0;
 
     return {
       totalCorrections: this.corrections.size,
@@ -377,7 +385,7 @@ export function recordProductMatchCorrection(
   userId?: number
 ): CorrectionRecord {
   return learningStore.recordCorrection(
-    'product_match',
+    "product_match",
     { tenderId, productId, wasCorrect },
     correctProductId,
     { tenderId, productId },
@@ -395,7 +403,7 @@ export function recordCategoryCorrection(
   userId?: number
 ): CorrectionRecord {
   return learningStore.recordCorrection(
-    'category_suggestion',
+    "category_suggestion",
     suggestedCategory,
     actualCategory,
     productContext,
@@ -414,7 +422,7 @@ export function recordSearchRelevanceCorrection(
   userId?: number
 ): CorrectionRecord {
   return learningStore.recordCorrection(
-    'search_relevance',
+    "search_relevance",
     { resultId, resultType },
     isRelevant,
     { query, resultId, resultType },
@@ -444,11 +452,14 @@ export function applyLearningToScore(
   type: CorrectionType,
   context: Record<string, any>
 ): number {
-  const { adjustment, confidence } = learningStore.getAdjustments(type, context);
+  const { adjustment, confidence } = learningStore.getAdjustments(
+    type,
+    context
+  );
 
   // Only apply adjustment if we have enough confidence
   if (confidence < 0.3) return baseScore;
 
   // Apply weighted adjustment
-  return baseScore + (adjustment * confidence * 20);
+  return baseScore + adjustment * confidence * 20;
 }

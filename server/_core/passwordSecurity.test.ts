@@ -116,7 +116,8 @@ describe("Password Security Service - Property Tests", () => {
     it("should require numbers when policy enabled", () => {
       fc.assert(
         fc.property(
-          fc.stringMatching(/^[A-Za-z!@#$%^&*()_+\-=\[\]{}|;':\",./<>?]{12,}$/),
+          // eslint-disable-next-line no-useless-escape
+          fc.stringMatching(/^[A-Za-z!@#$%^&*()_+\-=\[\]{}|;':",./<>?]{12,}$/),
           passwordWithoutNumbers => {
             const result = passwordSecurityService.validatePassword(
               passwordWithoutNumbers

@@ -478,27 +478,30 @@ class AIDatabaseIntegration {
     const recommendations: string[] = [];
 
     switch (entityType) {
-      case "tenders":
+      case "tenders": {
         const tenderInsights = await this.analyzeTenderTrends(timeRange);
         insights.push(...tenderInsights.insights);
         trends.push(...tenderInsights.trends);
         recommendations.push(...tenderInsights.recommendations);
         break;
+      }
 
-      case "suppliers":
+      case "suppliers": {
         const supplierInsights =
           await this.analyzeSupplierPerformance(timeRange);
         insights.push(...supplierInsights.insights);
         trends.push(...supplierInsights.trends);
         recommendations.push(...supplierInsights.recommendations);
         break;
+      }
 
-      case "spending":
+      case "spending": {
         const spendingInsights = await this.analyzeSpendingPatterns(timeRange);
         insights.push(...spendingInsights.insights);
         trends.push(...spendingInsights.trends);
         recommendations.push(...spendingInsights.recommendations);
         break;
+      }
     }
 
     return { insights, trends, recommendations };

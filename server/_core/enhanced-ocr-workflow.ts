@@ -2,7 +2,6 @@
  * Enhanced OCR Workflow with Intelligent Field Population
  * Improved accuracy, validation, and user experience
  */
-
 import * as db from "../db";
 import { aiDocumentProcessor } from "./ai-document-processor";
 
@@ -281,7 +280,6 @@ class EnhancedOCRWorkflow {
   }
 
   // Placeholder methods for field population
-  // eslint-disable-next-line sonarjs/cognitive-complexity
   private async populateTenderFields(
     tenderId: number,
     data: any,
