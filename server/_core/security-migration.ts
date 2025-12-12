@@ -5,6 +5,42 @@
 
 import * as db from "../db";
 
+/**
+ * Check if a column exists in a table
+ */
+async function columnExists(database: any, tableName: string, columnName: string): Promise<boolean> {
+  try {
+    const result = await database.execute(`
+      SELECT COUNT(*) as count
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+    `, [tableName, columnName]);
+    return result[0]?.[0]?.count > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Safely add a column if it doesn't exist
+ */
+async function addColumnIfNotExists(
+  database: any,
+  tableName: string,
+  columnName: string,
+  columnDef: string
+): Promise<void> {
+  const exists = await columnExists(database, tableName, columnName);
+  if (!exists) {
+    await database.execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
+    console.log(`  Added column: ${columnName}`);
+  } else {
+    console.log(`  Column exists: ${columnName}`);
+  }
+}
+
 export async function runSecurityMigration() {
   console.log("🔄 Running security migration...");
 
@@ -17,23 +53,22 @@ export async function runSecurityMigration() {
     // Add security fields to users table (if they don't exist)
     console.log("Adding security fields to users table...");
 
-    const alterUserQueries = [
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS passwordHash VARCHAR(255)`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS passwordSalt VARCHAR(255)`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS failedLoginAttempts INT DEFAULT 0 NOT NULL`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS lastFailedLoginAt TIMESTAMP NULL`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS lockedUntil TIMESTAMP NULL`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS lastLoginAt TIMESTAMP NULL`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS passwordChangedAt TIMESTAMP NULL`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS requirePasswordChange BOOLEAN DEFAULT FALSE NOT NULL`,
+    const columnsToAdd = [
+      { name: "passwordHash", def: "VARCHAR(255)" },
+      { name: "passwordSalt", def: "VARCHAR(255)" },
+      { name: "failedLoginAttempts", def: "INT DEFAULT 0 NOT NULL" },
+      { name: "lastFailedLoginAt", def: "TIMESTAMP NULL" },
+      { name: "lockedUntil", def: "TIMESTAMP NULL" },
+      { name: "lastLoginAt", def: "TIMESTAMP NULL" },
+      { name: "passwordChangedAt", def: "TIMESTAMP NULL" },
+      { name: "requirePasswordChange", def: "BOOLEAN DEFAULT FALSE NOT NULL" },
     ];
 
-    for (const query of alterUserQueries) {
+    for (const col of columnsToAdd) {
       try {
-        await database.execute(query);
+        await addColumnIfNotExists(database, "users", col.name, col.def);
       } catch (error) {
-        // Ignore errors for columns that already exist
-        console.log(`Column might already exist: ${error}`);
+        console.log(`  Error adding ${col.name}: ${error}`);
       }
     }
 
