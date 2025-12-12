@@ -1,4 +1,16 @@
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -679,7 +691,7 @@ export async function getSupplierDeliveries(
 
   // Get deliveries linked to purchase orders from this supplier
   const supplierOrders = await getSupplierOrders(supplierId, dateRange);
-  const orderIds = supplierOrders.map((o) => o.id);
+  const orderIds = supplierOrders.map(o => o.id);
 
   if (orderIds.length === 0) return [];
 
@@ -1014,6 +1026,22 @@ export async function getTendersCount() {
     .select({ count: sql<number>`count(*)` })
     .from(tenders);
   return Number(result[0]?.count ?? 0);
+}
+
+export async function getTendersDueBetween(start: Date, end: Date) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(tenders)
+    .where(
+      and(
+        gte(tenders.submissionDeadline, start),
+        lte(tenders.submissionDeadline, end)
+      )
+    )
+    .orderBy(asc(tenders.submissionDeadline));
 }
 
 export async function getTenderById(id: number) {
@@ -1831,6 +1859,21 @@ export async function getTasksByAssignee(userId: number) {
     .orderBy(desc(tasks.createdAt));
 }
 
+export async function getTasksByEntity(entityType: string, entityId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.relatedEntityType, entityType),
+        eq(tasks.relatedEntityId, entityId)
+      )
+    );
+}
+
 export async function createTask(task: typeof tasks.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -2543,5 +2586,4 @@ export async function getFileUploadById(id: number) {
 }
 
 // Re-export drizzle operators and tables for use in security modules
-export { sessions, securityEvents };
-export { eq, and, or, lt, gt, lte, gte, desc, asc };
+export { and, asc, desc, eq, gt, gte, lt, lte, or, securityEvents, sessions };

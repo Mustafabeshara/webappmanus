@@ -49,6 +49,11 @@ export interface TaskAnalyticsInput {
   module?: string;
 }
 
+interface TenderDeadlineOptions {
+  horizonDays?: number;
+  reminderWindows?: number[]; // days before deadline to create reminders
+}
+
 // =============================================================================
 // DOCUMENT WORKFLOW TEMPLATES
 // =============================================================================
@@ -77,7 +82,10 @@ export interface DocumentWorkflowStep {
 /**
  * Pre-defined workflow templates for different document types
  */
-export const DOCUMENT_WORKFLOW_TEMPLATES: Record<string, DocumentWorkflowConfig> = {
+export const DOCUMENT_WORKFLOW_TEMPLATES: Record<
+  string,
+  DocumentWorkflowConfig
+> = {
   // Tender Submission Workflow
   tender_submission: {
     documentType: "tender_submission",
@@ -91,7 +99,11 @@ export const DOCUMENT_WORKFLOW_TEMPLATES: Record<string, DocumentWorkflowConfig>
         description: "Collect all required documents for tender submission",
         assigneeRole: "procurement",
         dueInDays: 5,
-        requiredDocuments: ["commercial_registration", "vat_certificate", "company_profile"],
+        requiredDocuments: [
+          "commercial_registration",
+          "vat_certificate",
+          "company_profile",
+        ],
         approvalRequired: false,
         nextStepId: "technical_proposal",
       },
@@ -132,7 +144,8 @@ export const DOCUMENT_WORKFLOW_TEMPLATES: Record<string, DocumentWorkflowConfig>
         stepId: "final_review",
         name: "Final Review & Approval",
         nameAr: "المراجعة النهائية والموافقة",
-        description: "Management review and approval of complete tender package",
+        description:
+          "Management review and approval of complete tender package",
         assigneeRole: "management",
         dueInDays: 2,
         approvalRequired: true,
@@ -406,7 +419,10 @@ class TaskManagementService {
   /**
    * Start a workflow instance from a template
    */
-  async startWorkflowInstance(templateId: number, context: Record<string, any>) {
+  async startWorkflowInstance(
+    templateId: number,
+    context: Record<string, any>
+  ) {
     // In a full implementation, this would:
     // 1. Load the template
     // 2. Create an instance record
@@ -499,10 +515,14 @@ class TaskManagementService {
    */
   async getDocumentWorkflowStatus(workflowInstanceId: number) {
     const tasks = await db.getAllTasks();
-    const workflowTasks = tasks.filter((t: any) => t.workflowInstanceId === workflowInstanceId);
+    const workflowTasks = tasks.filter(
+      (t: any) => t.workflowInstanceId === workflowInstanceId
+    );
 
     const totalTasks = workflowTasks.length;
-    const completedTasks = workflowTasks.filter((t: any) => t.status === "done").length;
+    const completedTasks = workflowTasks.filter(
+      (t: any) => t.status === "done"
+    ).length;
     const currentTask = workflowTasks.find(
       (t: any) => t.status === "in_progress" || t.status === "todo"
     );
@@ -511,7 +531,8 @@ class TaskManagementService {
       workflowInstanceId,
       totalSteps: totalTasks,
       completedSteps: completedTasks,
-      progressPercent: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+      progressPercent:
+        totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
       currentTask,
       isComplete: completedTasks === totalTasks,
       tasks: workflowTasks,
@@ -522,18 +543,22 @@ class TaskManagementService {
    * Get available document workflow templates
    */
   getAvailableWorkflowTemplates() {
-    return Object.entries(DOCUMENT_WORKFLOW_TEMPLATES).map(([key, template]) => ({
-      id: key,
-      name: template.documentType.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-      stepsCount: template.workflowSteps.length,
-      steps: template.workflowSteps.map((s) => ({
-        id: s.stepId,
-        name: s.name,
-        nameAr: s.nameAr,
-        dueInDays: s.dueInDays,
-        approvalRequired: s.approvalRequired,
-      })),
-    }));
+    return Object.entries(DOCUMENT_WORKFLOW_TEMPLATES).map(
+      ([key, template]) => ({
+        id: key,
+        name: template.documentType
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, l => l.toUpperCase()),
+        stepsCount: template.workflowSteps.length,
+        steps: template.workflowSteps.map(s => ({
+          id: s.stepId,
+          name: s.name,
+          nameAr: s.nameAr,
+          dueInDays: s.dueInDays,
+          approvalRequired: s.approvalRequired,
+        })),
+      })
+    );
   }
 
   /**
@@ -553,6 +578,62 @@ class TaskManagementService {
     return {
       expiringDocuments: [],
       tasksCreated: 0,
+    };
+  }
+
+  /**
+   * Ensure deadline reminder tasks exist for upcoming tenders
+   */
+  async ensureTenderDeadlineTasks(options: TenderDeadlineOptions = {}) {
+    const horizonDays = options.horizonDays ?? 30;
+    const reminderWindows = options.reminderWindows ?? [14, 7, 3, 1];
+
+    const now = new Date();
+    const horizonEnd = new Date();
+    horizonEnd.setDate(now.getDate() + horizonDays);
+
+    const tenders = await db.getTendersDueBetween(now, horizonEnd);
+    let tasksCreated = 0;
+
+    for (const tender of tenders) {
+      if (!tender.submissionDeadline) continue;
+
+      const existingTasks = await db.getTasksByEntity("tender", tender.id);
+      const existingTitles = new Set(
+        existingTasks.map(t => (t.title || "").toLowerCase())
+      );
+
+      for (const window of reminderWindows) {
+        const reminderDate = new Date(tender.submissionDeadline);
+        reminderDate.setDate(reminderDate.getDate() - window);
+
+        if (reminderDate < now) continue;
+
+        const title = `Tender ${tender.referenceNumber || tender.title} closes in ${window} days`;
+        if (existingTitles.has(title.toLowerCase())) continue;
+
+        await db.createTask({
+          title,
+          description: `Submission deadline: ${tender.submissionDeadline.toISOString()}`,
+          status: "todo",
+          priority: window <= 3 ? "urgent" : "high",
+          assignedTo: tender.createdBy ?? null,
+          departmentId: tender.departmentId ?? null,
+          relatedEntityType: "tender",
+          relatedEntityId: tender.id,
+          dueDate: tender.submissionDeadline,
+          createdBy: tender.createdBy ?? 1,
+        });
+
+        tasksCreated += 1;
+      }
+    }
+
+    return {
+      tendersChecked: tenders.length,
+      tasksCreated,
+      horizonDays,
+      reminderWindows,
     };
   }
 
@@ -624,11 +705,14 @@ class TaskManagementService {
     );
     let avgCompletionTime = 0;
     if (completedTasksWithDates.length > 0) {
-      const totalTime = completedTasksWithDates.reduce((sum: number, t: any) => {
-        const created = new Date(t.createdAt).getTime();
-        const completed = new Date(t.updatedAt).getTime();
-        return sum + (completed - created);
-      }, 0);
+      const totalTime = completedTasksWithDates.reduce(
+        (sum: number, t: any) => {
+          const created = new Date(t.createdAt).getTime();
+          const completed = new Date(t.updatedAt).getTime();
+          return sum + (completed - created);
+        },
+        0
+      );
       avgCompletionTime = Math.round(
         totalTime / completedTasksWithDates.length / (1000 * 60 * 60 * 24)
       ); // Days
@@ -648,7 +732,10 @@ class TaskManagementService {
   /**
    * Helper: Update workflow progress when a task completes
    */
-  private async updateWorkflowProgress(workflowInstanceId: number, taskId: number) {
+  private async updateWorkflowProgress(
+    workflowInstanceId: number,
+    taskId: number
+  ) {
     // In a full implementation, this would update the workflow instance's progress
     console.log(
       `[TaskManagement] Task ${taskId} added to workflow instance ${workflowInstanceId}`

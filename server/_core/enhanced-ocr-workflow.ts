@@ -281,6 +281,7 @@ class EnhancedOCRWorkflow {
   }
 
   // Placeholder methods for field population
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   private async populateTenderFields(
     tenderId: number,
     data: any,
@@ -288,17 +289,67 @@ class EnhancedOCRWorkflow {
   ): Promise<void> {
     const updates: any = {};
 
+    const parseDate = (value: any): Date | null => {
+      if (!value) return null;
+      const asDate = value instanceof Date ? value : new Date(value);
+      return Number.isNaN(asDate.getTime()) ? null : asDate;
+    };
+
+    const parseMoneyToCents = (value: any): number | undefined => {
+      if (value === undefined || value === null) return undefined;
+      const cleaned = String(value).replaceAll(/[^0-9.-]/g, "");
+      const parsed = Number.parseFloat(cleaned);
+      if (Number.isNaN(parsed)) return undefined;
+      return Math.round(parsed * 100);
+    };
+
     fields.forEach(field => {
       if (data[field] !== undefined) {
         switch (field) {
           case "title":
             updates.title = data[field];
             break;
-          case "submissionDeadline":
-            updates.submissionDeadline = new Date(data[field]);
+          case "description":
+            updates.description = data[field];
             break;
+          case "publishDate": {
+            const parsed = parseDate(data[field]);
+            if (parsed) updates.publishDate = parsed;
+            break;
+          }
+          case "submissionDeadline":
+            {
+              const parsed = parseDate(data[field]);
+              if (parsed) updates.submissionDeadline = parsed;
+            }
+            break;
+          case "evaluationDeadline": {
+            const parsed = parseDate(data[field]);
+            if (parsed) updates.evaluationDeadline = parsed;
+            break;
+          }
           case "estimatedValue":
-            updates.estimatedValue = parseFloat(data[field]) * 100;
+            {
+              const cents = parseMoneyToCents(data[field]);
+              if (cents !== undefined) updates.estimatedValue = cents;
+            }
+            break;
+          case "currency":
+            // currency field not stored directly; keep as note for review
+            updates.notes = updates.notes
+              ? `${updates.notes}\nCurrency: ${data[field]}`
+              : `Currency: ${data[field]}`;
+            break;
+          case "buyer":
+            // No dedicated column; append to notes for human review
+            updates.notes = updates.notes
+              ? `${updates.notes}\nBuyer: ${data[field]}`
+              : `Buyer: ${data[field]}`;
+            break;
+          case "submissionWindow":
+            updates.notes = updates.notes
+              ? `${updates.notes}\nSubmission window: ${data[field]}`
+              : `Submission window: ${data[field]}`;
             break;
         }
       }
