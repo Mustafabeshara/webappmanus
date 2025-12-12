@@ -31,6 +31,10 @@ export const PAGINATION = {
   MAX_PAGE_SIZE: 100,
   /** Minimum page number */
   MIN_PAGE: 1,
+  /** Alias for DEFAULT_PAGE_SIZE (used by pagination utilities) */
+  DEFAULT_LIMIT: 20,
+  /** Alias for MAX_PAGE_SIZE (used by pagination utilities) */
+  MAX_LIMIT: 100,
 } as const;
 
 // =============================================================================

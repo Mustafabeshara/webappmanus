@@ -374,7 +374,7 @@ export default function RequirementDetails() {
               <Label>Next Follow-up Date</Label>
               <Input
                 type="date"
-                value={nextFollowup || (cmsCase?.nextFollowupDate ? cmsCase.nextFollowupDate.slice(0, 10) : "")}
+                value={nextFollowup || (cmsCase?.nextFollowupDate ? new Date(cmsCase.nextFollowupDate).toISOString().slice(0, 10) : "")}
                 onChange={(e) => setNextFollowup(e.target.value)}
               />
             </div>

@@ -938,9 +938,9 @@ export const appRouter = router({
 
       // Calculate vendor scores and insights
       const vendorAnalysis = suppliers.map(supplier => {
-        // Count tender participations
+        // Count tender participations - tenders don't have supplierId, use customerId as proxy
         const supplierTenders = tenders.filter(
-          t => t.supplierId === supplier.id
+          t => t.customerId === supplier.id
         );
         const wonTenders = supplierTenders.filter(t => t.status === "awarded");
         const winRate =
@@ -948,13 +948,14 @@ export const appRouter = router({
             ? (wonTenders.length / supplierTenders.length) * 100
             : 0;
 
-        // Calculate delivery performance
+        // Calculate delivery performance - use customerId field
         const supplierDeliveries = deliveries.filter(
-          d => d.supplierId === supplier.id
+          d => d.customerId === supplier.id
         );
         const onTimeDeliveries = supplierDeliveries.filter(d => {
-          if (!d.expectedDate || !d.actualDate) return true;
-          return new Date(d.actualDate) <= new Date(d.expectedDate);
+          // Use scheduledDate and deliveredDate instead of expectedDate/actualDate
+          if (!d.scheduledDate || !d.deliveredDate) return true;
+          return new Date(d.deliveredDate) <= new Date(d.scheduledDate);
         });
         const onTimeRate =
           supplierDeliveries.length > 0
@@ -1227,7 +1228,12 @@ export const appRouter = router({
     update: protectedMutationProcedure
       .input(inventorySchemas.update)
       .mutation(async ({ input }) => {
-        const { id, ...data } = input;
+        const { id, expiryDate, ...rest } = input;
+        // Convert string date to Date object if provided
+        const data = {
+          ...rest,
+          expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+        };
         await db.updateInventory(id, data);
         return { success: true };
       }),
@@ -1235,6 +1241,8 @@ export const appRouter = router({
     // AI-powered inventory optimization
     optimize: protectedProcedure.mutation(async () => {
       // Get all inventory with product details
+      // getAllInventory returns joined data with renamed fields:
+      // currentStock (not quantity), reorderLevel (not minStockLevel), id is product id
       const inventoryItems = await db.getAllInventory();
       const products = await db.getAllProducts();
 
@@ -1243,20 +1251,19 @@ export const appRouter = router({
 
       // Transform inventory data for AI analysis
       const itemsForAnalysis = inventoryItems.map(inv => {
-        const product = productMap.get(inv.productId);
         return {
           id: inv.id,
-          productId: inv.productId,
-          productName: product?.name || `Product #${inv.productId}`,
-          productSku: product?.sku || `SKU-${inv.productId}`,
-          category: product?.category || undefined,
-          quantity: inv.quantity,
-          minStockLevel: inv.minStockLevel || 10,
-          maxStockLevel: inv.maxStockLevel || undefined,
-          unitPrice: product?.price || undefined,
+          productId: inv.id, // product id from joined result
+          productName: inv.name || `Product #${inv.id}`,
+          productSku: inv.sku || `SKU-${inv.id}`,
+          category: inv.category || undefined,
+          quantity: inv.currentStock ?? 0,
+          minStockLevel: inv.reorderLevel ?? 10,
+          maxStockLevel: inv.maxStockLevel ?? undefined,
+          unitPrice: inv.unitPrice ?? undefined,
           expiryDate: inv.expiryDate || null,
           location: inv.location || undefined,
-          lastRestocked: inv.updatedAt || null,
+          lastRestocked: inv.lastRestocked || null,
         };
       });
 
@@ -1855,9 +1862,9 @@ export const appRouter = router({
           const outstanding = inv.totalAmount - (inv.paidAmount || 0);
           totalOutstanding += outstanding;
 
-          // Check if overdue
+          // Check if overdue (we already know status is not "paid" here)
           const dueDate = new Date(inv.dueDate);
-          if (dueDate < now && inv.status !== "paid") {
+          if (dueDate < now) {
             totalOverdue += outstanding;
             overdueInvoices.push({
               id: inv.id,
@@ -1997,7 +2004,7 @@ export const appRouter = router({
           .slice(0, 10),
         unmatchedTenders: unmatchedTenders.slice(0, 5).map(t => ({
           id: t.id,
-          tenderNumber: t.tenderNumber,
+          tenderNumber: t.referenceNumber,
           title: t.title,
           awardedValue: t.awardedValue,
         })),
@@ -2601,15 +2608,15 @@ export const appRouter = router({
           // Perform OCR if needed
           if (isPDF || isImage) {
             // Use the existing OCR service
-            const ocrResult = await ocrService.extractFromBase64(
+            const ocrResult = await ocrService.extractTenderFromBase64(
               input.fileData,
               input.fileName,
               { department: "Biomedical Engineering" }
             );
 
-            if (ocrResult.success) {
-              documentText = ocrResult.text || "";
-              ocrProvider = ocrResult.method || "tesseract";
+            if (ocrResult.success && ocrResult.data) {
+              documentText = ocrResult.data.raw_text || ocrResult.data.specifications_text || "";
+              ocrProvider = ocrResult.data.extraction_method || "tesseract";
             }
           }
 
@@ -2737,12 +2744,14 @@ export const appRouter = router({
                     source: "ai_inference",
                   },
                   items: {
-                    value: invoiceResult.data.items || [],
+                    value: (invoiceResult.data as Record<string, unknown>).items || [],
                     confidence: invoiceResult.confidence?.items || 0.7,
                     source: "ai_inference",
                   },
                   itemCount: {
-                    value: (invoiceResult.data.items || []).length,
+                    value: Array.isArray((invoiceResult.data as Record<string, unknown>).items)
+                      ? ((invoiceResult.data as Record<string, unknown>).items as unknown[]).length
+                      : 0,
                     confidence: 0.9,
                     source: "ai_inference",
                   },
@@ -2854,12 +2863,14 @@ export const appRouter = router({
                     source: "ai_inference",
                   },
                   products: {
-                    value: priceListResult.data.products || [],
+                    value: (priceListResult.data as Record<string, unknown>).products || [],
                     confidence: priceListResult.confidence?.products || 0.7,
                     source: "ai_inference",
                   },
                   productCount: {
-                    value: (priceListResult.data.products || []).length,
+                    value: Array.isArray((priceListResult.data as Record<string, unknown>).products)
+                      ? ((priceListResult.data as Record<string, unknown>).products as unknown[]).length
+                      : 0,
                     confidence: 0.9,
                     source: "ai_inference",
                   },
@@ -2911,17 +2922,19 @@ export const appRouter = router({
                     source: "ai_inference",
                   },
                   categories: {
-                    value: catalogResult.data.categories || [],
+                    value: (catalogResult.data as Record<string, unknown>).categories || [],
                     confidence: catalogResult.confidence?.categories || 0.7,
                     source: "ai_inference",
                   },
                   products: {
-                    value: catalogResult.data.products || [],
+                    value: (catalogResult.data as Record<string, unknown>).products || [],
                     confidence: catalogResult.confidence?.products || 0.7,
                     source: "ai_inference",
                   },
                   productCount: {
-                    value: (catalogResult.data.products || []).length,
+                    value: Array.isArray((catalogResult.data as Record<string, unknown>).products)
+                      ? ((catalogResult.data as Record<string, unknown>).products as unknown[]).length
+                      : 0,
                     confidence: 0.9,
                     source: "ai_inference",
                   },
@@ -3009,12 +3022,14 @@ export const appRouter = router({
                     source: "ai_inference",
                   },
                   items: {
-                    value: poResult.data.items || [],
+                    value: (poResult.data as Record<string, unknown>).items || [],
                     confidence: poResult.confidence?.items || 0.7,
                     source: "ai_inference",
                   },
                   itemCount: {
-                    value: (poResult.data.items || []).length,
+                    value: Array.isArray((poResult.data as Record<string, unknown>).items)
+                      ? ((poResult.data as Record<string, unknown>).items as unknown[]).length
+                      : 0,
                     confidence: 0.9,
                     source: "ai_inference",
                   },
@@ -3466,6 +3481,8 @@ export const appRouter = router({
           input.productId
         );
 
+        // inventory is an array, get first item if exists
+        const inventoryItem = inventory[0];
         const productData = {
           productId: product.id,
           productName: product.name,
@@ -3473,9 +3490,9 @@ export const appRouter = router({
           category: product.category || undefined,
           unitPrice: product.unitPrice || 0,
           salesHistory,
-          currentInventory: inventory?.quantity || 0,
-          minStockLevel: inventory?.minStockLevel || 0,
-          maxStockLevel: inventory?.maxStockLevel || undefined,
+          currentInventory: inventoryItem?.quantity || 0,
+          minStockLevel: inventoryItem?.minStockLevel || 0,
+          maxStockLevel: inventoryItem?.maxStockLevel || undefined,
           leadTimeDays: 14, // Default lead time
         };
 
@@ -3515,7 +3532,8 @@ export const appRouter = router({
 
         const productsData = await Promise.all(
           products.map(async (product: any) => {
-            const inventory = await db.getInventoryByProduct(product.id);
+            const inventoryItems = await db.getInventoryByProduct(product.id);
+            const inventoryItem = inventoryItems[0];
             const salesHistory = await generateSalesHistoryFromData(product.id);
 
             return {
@@ -3525,9 +3543,9 @@ export const appRouter = router({
               category: product.category || undefined,
               unitPrice: product.unitPrice || 0,
               salesHistory,
-              currentInventory: inventory?.quantity || 0,
-              minStockLevel: inventory?.minStockLevel || 0,
-              maxStockLevel: inventory?.maxStockLevel || undefined,
+              currentInventory: inventoryItem?.quantity || 0,
+              minStockLevel: inventoryItem?.minStockLevel || 0,
+              maxStockLevel: inventoryItem?.maxStockLevel || undefined,
               leadTimeDays: 14,
             };
           })
@@ -3641,6 +3659,7 @@ export const appRouter = router({
         customers,
         products,
         suppliers,
+        inventoryItems,
       ] = await Promise.all([
         db.getAllTenders(),
         db.getAllBudgets(),
@@ -3650,6 +3669,7 @@ export const appRouter = router({
         db.getAllCustomers(),
         db.getAllProducts(),
         db.getAllSuppliers(),
+        db.getAllInventory(),
       ]);
 
       // Financial metrics
@@ -3722,13 +3742,13 @@ export const appRouter = router({
           ? Math.round((totalBudgetSpent / totalBudgetAllocated) * 100)
           : 0;
 
-      // Inventory health
-      const lowStockItems = products.filter(
-        p => p.quantity <= (p.minStockLevel || 10)
+      // Inventory health - getAllInventory returns joined data with currentStock and reorderLevel
+      const lowStockItems = inventoryItems.filter(
+        item => (item.currentStock ?? 0) <= (item.reorderLevel ?? 10)
       );
-      const outOfStockItems = products.filter(p => p.quantity === 0);
-      const inventoryValue = products.reduce(
-        (sum, p) => sum + p.quantity * (p.unitPrice || 0),
+      const outOfStockItems = inventoryItems.filter(item => (item.currentStock ?? 0) === 0);
+      const inventoryValue = inventoryItems.reduce(
+        (sum, item) => sum + (item.currentStock ?? 0) * (item.unitPrice || 0),
         0
       );
 
@@ -3744,12 +3764,12 @@ export const appRouter = router({
       });
 
       // Supplier performance
-      const activeSuppliers = suppliers.filter(s => s.status === "active");
+      const activeSuppliers = suppliers.filter(s => s.complianceStatus === "compliant");
       const avgSupplierRating =
         activeSuppliers.length > 0
           ? Math.round(
               activeSuppliers.reduce(
-                (sum, s) => sum + (s.performanceScore || 0),
+                (sum, s) => sum + (s.rating || 0),
                 0
               ) / activeSuppliers.length
             )
@@ -3893,7 +3913,7 @@ export const appRouter = router({
 
         const monthRevenue = invoices
           .filter(inv => {
-            const d = new Date(inv.paidAt || inv.createdAt);
+            const d = new Date(inv.issueDate || inv.createdAt);
             return d >= monthStart && d <= monthEnd && inv.status === "paid";
           })
           .reduce((sum, inv) => sum + inv.totalAmount, 0);
@@ -4003,7 +4023,7 @@ export const appRouter = router({
         tenders,
         invoices,
         deliveries,
-        products,
+        inventoryItems,
         budgets,
       ] = await Promise.all([
         db.getUserNotifications(ctx.user.id),
@@ -4011,7 +4031,7 @@ export const appRouter = router({
         db.getAllTenders(),
         db.getAllInvoices(),
         db.getAllDeliveries(),
-        db.getAllProducts(),
+        db.getAllInventory(),
         db.getAllBudgets(),
       ]);
 
@@ -4040,10 +4060,10 @@ export const appRouter = router({
         byType[notification.type] = (byType[notification.type] || 0) + 1;
       }
 
-      // Group by category
+      // Group by category (using entityType as category)
       const byCategory: Record<string, number> = {};
       for (const notification of allNotifications) {
-        const category = notification.category || "general";
+        const category = notification.entityType || "general";
         byCategory[category] = (byCategory[category] || 0) + 1;
       }
 
@@ -4057,9 +4077,9 @@ export const appRouter = router({
 
       // Check for tender deadlines
       const upcomingTenderDeadlines = tenders.filter(t => {
-        if (t.status !== "open" || !t.deadline) return false;
+        if (t.status !== "open" || !t.submissionDeadline) return false;
         const daysUntil = Math.ceil(
-          (new Date(t.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          (new Date(t.submissionDeadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
         );
         return daysUntil >= 0 && daysUntil <= 3;
       });
@@ -4080,7 +4100,7 @@ export const appRouter = router({
       });
       if (overdueInvoices.length > 0) {
         const totalOverdue = overdueInvoices.reduce(
-          (sum, inv) => sum + Number(inv.total || 0),
+          (sum, inv) => sum + Number(inv.totalAmount || 0),
           0
         );
         smartAlerts.push({
@@ -4094,8 +4114,8 @@ export const appRouter = router({
       // Check for late deliveries
       const lateDeliveries = deliveries.filter(d => {
         if (d.status === "delivered" || d.status === "cancelled") return false;
-        if (!d.expectedDate) return false;
-        return new Date(d.expectedDate) < new Date();
+        if (!d.scheduledDate) return false;
+        return new Date(d.scheduledDate) < new Date();
       });
       if (lateDeliveries.length > 0) {
         smartAlerts.push({
@@ -4106,11 +4126,11 @@ export const appRouter = router({
         });
       }
 
-      // Check for low stock items
-      const lowStockProducts = products.filter(
-        p =>
-          Number(p.quantity || 0) <= Number(p.reorderLevel || 0) &&
-          Number(p.quantity || 0) > 0
+      // Check for low stock items (using inventory data with currentStock and reorderLevel)
+      const lowStockProducts = inventoryItems.filter(
+        item =>
+          Number(item.currentStock ?? 0) <= Number(item.reorderLevel ?? 0) &&
+          Number(item.currentStock ?? 0) > 0
       );
       if (lowStockProducts.length > 0) {
         smartAlerts.push({
@@ -4122,8 +4142,8 @@ export const appRouter = router({
       }
 
       // Check for out of stock items
-      const outOfStockProducts = products.filter(
-        p => Number(p.quantity || 0) === 0
+      const outOfStockProducts = inventoryItems.filter(
+        item => Number(item.currentStock ?? 0) === 0
       );
       if (outOfStockProducts.length > 0) {
         smartAlerts.push({
@@ -4136,7 +4156,7 @@ export const appRouter = router({
 
       // Check for over-budget items
       const overBudgets = budgets.filter(
-        b => Number(b.spent || 0) > Number(b.amount || 0)
+        b => Number(b.spentAmount || 0) > Number(b.allocatedAmount || 0)
       );
       if (overBudgets.length > 0) {
         smartAlerts.push({
@@ -4150,7 +4170,7 @@ export const appRouter = router({
       // Check for budgets near limit (>90%)
       const nearLimitBudgets = budgets.filter(b => {
         const utilization =
-          (Number(b.spent || 0) / Number(b.amount || 1)) * 100;
+          (Number(b.spentAmount || 0) / Number(b.allocatedAmount || 1)) * 100;
         return utilization >= 90 && utilization <= 100;
       });
       if (nearLimitBudgets.length > 0) {
@@ -4284,7 +4304,7 @@ export const appRouter = router({
       for (const n of notifications) {
         typeFrequency[n.type] = (typeFrequency[n.type] || 0) + 1;
 
-        const cat = n.category || "general";
+        const cat = n.entityType || "general";
         categoryFrequency[cat] = (categoryFrequency[cat] || 0) + 1;
 
         if (!readRateByType[n.type]) {
@@ -4864,12 +4884,23 @@ export const appRouter = router({
         const suppliers = await db.getAllSuppliers();
         const products = await db.getAllProducts();
 
+        // Convert null values to undefined to match expected function signature
+        const mappedItems = items.map(item => ({
+          description: item.description || undefined,
+          specifications: item.specifications ?? undefined,
+        }));
+
         const supplierProducts = suppliers
           .map(supplier => {
             const prods = products.filter(
               p => p.manufacturerId === supplier.id
             );
-            const score = scoreSupplierAgainstTender(items, prods);
+            const mappedProds = prods.map(p => ({
+              name: p.name,
+              description: p.description ?? undefined,
+              specifications: p.specifications ?? undefined,
+            }));
+            const score = scoreSupplierAgainstTender(mappedItems, mappedProds);
             return { supplier, products: prods, score };
           })
           .sort((a, b) => b.score.total - a.score.total);
@@ -5190,16 +5221,14 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        // getAllInventory returns joined data where 'id' is the product id
         const inventory = await db.getAllInventory();
-        const products = await db.getAllProducts();
-        const productMap = new Map(products.map(p => [p.id, p]));
 
+        // Data is already joined with products - use name from joined result
         const dataWithProducts = inventory.map(inv => {
-          const product = productMap.get(inv.productId);
           return {
             ...inv,
-            productName: product?.name || `Product #${inv.productId}`,
-            sku: product?.sku || `SKU-${inv.productId}`,
+            productName: inv.name || `Product #${inv.id}`,
           };
         });
 
@@ -5293,7 +5322,7 @@ export const appRouter = router({
                 .optional(),
             })
           ),
-          data: z.array(z.record(z.any())),
+          data: z.array(z.record(z.string(), z.any())),
         })
       )
       .mutation(async ({ input }) => {
@@ -5302,7 +5331,7 @@ export const appRouter = router({
           filename: input.filename,
           title: input.title,
           columns: input.columns,
-          data: input.data,
+          data: input.data as import("./export").ExportRow[],
         });
         return result;
       }),
@@ -5591,7 +5620,7 @@ export const appRouter = router({
               category: z.string().optional(),
               unitPrice: z.number(),
               currency: z.string().optional(),
-              specifications: z.record(z.string()).optional(),
+              specifications: z.record(z.string(), z.string()).optional(),
             })
           ),
         })

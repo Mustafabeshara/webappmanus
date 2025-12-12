@@ -397,12 +397,14 @@ export const documentsRouter = router({
                   source: "ai_inference",
                 },
                 items: {
-                  value: invoiceResult.data.items || [],
+                  value: (invoiceResult.data as Record<string, unknown>).items || [],
                   confidence: invoiceResult.confidence?.items || 0.7,
                   source: "ai_inference",
                 },
                 itemCount: {
-                  value: (invoiceResult.data.items || []).length,
+                  value: Array.isArray((invoiceResult.data as Record<string, unknown>).items)
+                    ? ((invoiceResult.data as Record<string, unknown>).items as unknown[]).length
+                    : 0,
                   confidence: 0.9,
                   source: "ai_inference",
                 },
@@ -514,12 +516,14 @@ export const documentsRouter = router({
                   source: "ai_inference",
                 },
                 products: {
-                  value: priceListResult.data.products || [],
+                  value: (priceListResult.data as Record<string, unknown>).products || [],
                   confidence: priceListResult.confidence?.products || 0.7,
                   source: "ai_inference",
                 },
                 productCount: {
-                  value: (priceListResult.data.products || []).length,
+                  value: Array.isArray((priceListResult.data as Record<string, unknown>).products)
+                    ? ((priceListResult.data as Record<string, unknown>).products as unknown[]).length
+                    : 0,
                   confidence: 0.9,
                   source: "ai_inference",
                 },
@@ -576,12 +580,14 @@ export const documentsRouter = router({
                   source: "ai_inference",
                 },
                 products: {
-                  value: catalogResult.data.products || [],
+                  value: (catalogResult.data as Record<string, unknown>).products || [],
                   confidence: catalogResult.confidence?.products || 0.7,
                   source: "ai_inference",
                 },
                 productCount: {
-                  value: (catalogResult.data.products || []).length,
+                  value: Array.isArray((catalogResult.data as Record<string, unknown>).products)
+                    ? ((catalogResult.data as Record<string, unknown>).products as unknown[]).length
+                    : 0,
                   confidence: 0.9,
                   source: "ai_inference",
                 },
@@ -669,12 +675,14 @@ export const documentsRouter = router({
                   source: "ai_inference",
                 },
                 items: {
-                  value: poResult.data.items || [],
+                  value: (poResult.data as Record<string, unknown>).items || [],
                   confidence: poResult.confidence?.items || 0.7,
                   source: "ai_inference",
                 },
                 itemCount: {
-                  value: (poResult.data.items || []).length,
+                  value: Array.isArray((poResult.data as Record<string, unknown>).items)
+                    ? ((poResult.data as Record<string, unknown>).items as unknown[]).length
+                    : 0,
                   confidence: 0.9,
                   source: "ai_inference",
                 },

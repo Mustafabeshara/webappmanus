@@ -129,7 +129,7 @@ export function ProductForecast({ productId, onClose }: ProductForecastProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
   // Fetch products
-  const { data: products = [] } = trpc.products.getAll.useQuery();
+  const { data: products = [] } = trpc.products.list.useQuery();
 
   // Filter products for selection
   const filteredProducts = useMemo(() => {

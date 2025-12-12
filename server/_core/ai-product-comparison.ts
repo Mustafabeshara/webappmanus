@@ -120,7 +120,7 @@ class AIProductComparison {
       );
 
       // Generate overall recommendation
-      const overallRecommendat = this.generateRecommendation(
+      const overallRecommendation = this.generateRecommendation(
         productAnalyses,
         request.comparisonCriteria
       );
@@ -332,7 +332,7 @@ class AIProductComparison {
       certifications,
       missingCertifications,
       regulatoryCompliance: missingCertifications.length === 0,
-      qualityStandards: certifications.filter(cert => cert.includes("ISO")),
+      qualityStandards: certifications.filter((cert: string) => cert.includes("ISO")),
     };
   }
 

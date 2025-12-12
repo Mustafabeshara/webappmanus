@@ -7,6 +7,7 @@
  */
 
 import bcrypt from "bcrypt";
+import { createHash } from "node:crypto";
 import { auditLogger } from "./auditLogger";
 
 // Password policy configuration
@@ -73,8 +74,7 @@ class PasswordSecurityService {
   ): Promise<{ isBreached: boolean; count: number }> {
     try {
       // Hash the password with SHA-1 (required by HaveIBeenPwned API)
-      const sha1Hash = crypto
-        .createHash("sha1")
+      const sha1Hash = createHash("sha1")
         .update(password)
         .digest("hex")
         .toUpperCase();
@@ -95,7 +95,7 @@ class PasswordSecurityService {
       if (!response.ok) {
         // If API is unavailable, log warning but don't fail validation
         auditLogger.logSecurityEvent({
-          type: "system_warning",
+          type: "suspicious_activity",
           severity: "medium",
           description:
             "HaveIBeenPwned API unavailable for password breach check",
@@ -118,7 +118,7 @@ class PasswordSecurityService {
     } catch (error) {
       // Log error but don't fail validation if breach check fails
       auditLogger.logSecurityEvent({
-        type: "system_error",
+        type: "suspicious_activity",
         severity: "medium",
         description: "Error checking password breach status",
         details: {

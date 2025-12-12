@@ -57,7 +57,7 @@ export const notificationsRouter = router({
       tenders,
       invoices,
       deliveries,
-      products,
+      inventoryItems,
       budgets,
     ] = await Promise.all([
       db.getUserNotifications(ctx.user.id),
@@ -65,7 +65,7 @@ export const notificationsRouter = router({
       db.getAllTenders(),
       db.getAllInvoices(),
       db.getAllDeliveries(),
-      db.getAllProducts(),
+      db.getAllInventory(),
       db.getAllBudgets(),
     ]);
 
@@ -94,10 +94,10 @@ export const notificationsRouter = router({
       byType[notification.type] = (byType[notification.type] || 0) + 1;
     }
 
-    // Group by category
+    // Group by entity type (as category proxy)
     const byCategory: Record<string, number> = {};
     for (const notification of allNotifications) {
-      const category = notification.category || "general";
+      const category = notification.entityType || "general";
       byCategory[category] = (byCategory[category] || 0) + 1;
     }
 
@@ -111,9 +111,9 @@ export const notificationsRouter = router({
 
     // Check for tender deadlines
     const upcomingTenderDeadlines = tenders.filter(t => {
-      if (t.status !== "open" || !t.deadline) return false;
+      if (t.status !== "open" || !t.submissionDeadline) return false;
       const daysUntil = Math.ceil(
-        (new Date(t.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        (new Date(t.submissionDeadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       );
       return daysUntil >= 0 && daysUntil <= 3;
     });
@@ -134,7 +134,7 @@ export const notificationsRouter = router({
     });
     if (overdueInvoices.length > 0) {
       const totalOverdue = overdueInvoices.reduce(
-        (sum, inv) => sum + Number(inv.total || 0),
+        (sum, inv) => sum + Number(inv.totalAmount || 0),
         0
       );
       smartAlerts.push({
@@ -148,8 +148,8 @@ export const notificationsRouter = router({
     // Check for late deliveries
     const lateDeliveries = deliveries.filter(d => {
       if (d.status === "delivered" || d.status === "cancelled") return false;
-      if (!d.expectedDate) return false;
-      return new Date(d.expectedDate) < new Date();
+      if (!d.scheduledDate) return false;
+      return new Date(d.scheduledDate) < new Date();
     });
     if (lateDeliveries.length > 0) {
       smartAlerts.push({
@@ -160,37 +160,38 @@ export const notificationsRouter = router({
       });
     }
 
-    // Check for low stock items
-    const lowStockProducts = products.filter(
-      p =>
-        Number(p.quantity || 0) <= Number(p.reorderLevel || 0) &&
-        Number(p.quantity || 0) > 0
+    // Check for low stock items - getAllInventory returns joined data with:
+    // currentStock (not quantity), reorderLevel (not minStockLevel)
+    const lowStockItems = inventoryItems.filter(
+      item =>
+        Number(item.currentStock ?? 0) <= Number(item.reorderLevel ?? 0) &&
+        Number(item.currentStock ?? 0) > 0
     );
-    if (lowStockProducts.length > 0) {
+    if (lowStockItems.length > 0) {
       smartAlerts.push({
         type: "warning",
         category: "Inventory Alert",
-        message: `${lowStockProducts.length} product(s) are running low on stock. Consider placing purchase orders.`,
+        message: `${lowStockItems.length} product(s) are running low on stock. Consider placing purchase orders.`,
         actionUrl: "/inventory",
       });
     }
 
     // Check for out of stock items
-    const outOfStockProducts = products.filter(
-      p => Number(p.quantity || 0) === 0
+    const outOfStockItems = inventoryItems.filter(
+      item => Number(item.currentStock ?? 0) === 0
     );
-    if (outOfStockProducts.length > 0) {
+    if (outOfStockItems.length > 0) {
       smartAlerts.push({
         type: "critical",
         category: "Inventory Critical",
-        message: `${outOfStockProducts.length} product(s) are completely out of stock! Immediate action required.`,
+        message: `${outOfStockItems.length} product(s) are completely out of stock! Immediate action required.`,
         actionUrl: "/inventory",
       });
     }
 
     // Check for over-budget items
     const overBudgets = budgets.filter(
-      b => Number(b.spent || 0) > Number(b.amount || 0)
+      b => Number(b.spentAmount || 0) > Number(b.allocatedAmount || 0)
     );
     if (overBudgets.length > 0) {
       smartAlerts.push({
@@ -204,7 +205,7 @@ export const notificationsRouter = router({
     // Check for budgets near limit (>90%)
     const nearLimitBudgets = budgets.filter(b => {
       const utilization =
-        (Number(b.spent || 0) / Number(b.amount || 1)) * 100;
+        (Number(b.spentAmount || 0) / Number(b.allocatedAmount || 1)) * 100;
       return utilization >= 90 && utilization <= 100;
     });
     if (nearLimitBudgets.length > 0) {
@@ -338,7 +339,7 @@ export const notificationsRouter = router({
     for (const n of notifications) {
       typeFrequency[n.type] = (typeFrequency[n.type] || 0) + 1;
 
-      const cat = n.category || "general";
+      const cat = n.entityType || "general";
       categoryFrequency[cat] = (categoryFrequency[cat] || 0) + 1;
 
       if (!readRateByType[n.type]) {

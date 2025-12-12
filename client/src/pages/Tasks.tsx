@@ -16,16 +16,23 @@ import { FileUpload } from "@/components/FileUpload";
 
 type TaskStatus = "todo" | "in_progress" | "review" | "completed" | "cancelled";
 
-interface Task {
+// Task type matching the database schema
+type Task = {
   id: number;
   title: string;
-  description?: string;
-  priority: string;
+  description: string | null;
+  priority: "low" | "medium" | "high" | "urgent";
   status: TaskStatus;
-  assignedTo?: number;
-  dueDate?: string;
-  createdAt: string;
-}
+  assignedTo: number | null;
+  departmentId: number | null;
+  relatedEntityType: string | null;
+  relatedEntityId: number | null;
+  dueDate: Date | null;
+  completedAt: Date | null;
+  createdBy: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 const KANBAN_COLUMNS: { id: TaskStatus; title: string; color: string }[] = [
   { id: "todo", title: "To Do", color: "bg-gray-100 border-gray-300" },

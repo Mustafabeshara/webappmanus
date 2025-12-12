@@ -8,10 +8,17 @@ import * as db from "../db";
 export interface PriceUpdateInput {
   supplierId: number;
   productId: number;
-  newPrice: number; // in cents
+  newPrice?: number; // in cents
+  unitPrice?: number; // Alias for newPrice
   effectiveDate?: string;
+  validFrom?: Date; // Alias for effectiveDate
   expiryDate?: string;
+  validUntil?: Date; // Alias for expiryDate
   notes?: string;
+  currency?: string;
+  supplierProductCode?: string;
+  minimumOrderQuantity?: number;
+  leadTimeDays?: number;
 }
 
 export interface CatalogImportInput {
@@ -42,7 +49,11 @@ class SupplierCatalogService {
   /**
    * Update supplier price for a product
    */
-  async updateSupplierPrice(input: PriceUpdateInput) {
+  async updateSupplierPrice(
+    input: PriceUpdateInput,
+    _userId?: number,
+    changeReason?: string
+  ) {
     const supplier = await db.getSupplierById(input.supplierId);
     if (!supplier) {
       throw new Error("Supplier not found");
@@ -53,21 +64,28 @@ class SupplierCatalogService {
       throw new Error("Product not found");
     }
 
+    // Get price from either newPrice or unitPrice
+    const price = input.newPrice ?? input.unitPrice ?? 0;
+    // Get effective date from either effectiveDate or validFrom
+    const effectiveDateStr = input.effectiveDate ?? (input.validFrom ? input.validFrom.toISOString() : undefined);
+    // Get expiry date from either expiryDate or validUntil
+    const expiryDateStr = input.expiryDate ?? (input.validUntil ? input.validUntil.toISOString() : undefined);
+
     // Create price history record
     const priceRecord = {
       supplierId: input.supplierId,
       productId: input.productId,
-      price: input.newPrice,
-      effectiveDate: input.effectiveDate ? new Date(input.effectiveDate) : new Date(),
-      expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
-      notes: input.notes || null,
+      price,
+      effectiveDate: effectiveDateStr ? new Date(effectiveDateStr) : new Date(),
+      expiryDate: expiryDateStr ? new Date(expiryDateStr) : null,
+      notes: changeReason ?? input.notes ?? null,
       createdAt: new Date(),
     };
 
     console.log("[SupplierCatalog] Price updated:", {
-      supplier: supplier.companyName,
+      supplier: supplier.name,
       product: product.name,
-      price: input.newPrice / 100,
+      price: price / 100,
     });
 
     // In a full implementation, this would:
@@ -78,7 +96,7 @@ class SupplierCatalogService {
     return {
       success: true,
       priceRecord,
-      message: `Price updated for ${product.name} from ${supplier.companyName}`,
+      message: `Price updated for ${product.name} from ${supplier.name}`,
     };
   }
 
@@ -111,7 +129,7 @@ class SupplierCatalogService {
             name: product.name,
             description: product.description || existing.description,
             category: product.category || existing.category,
-            price: product.unitPrice,
+            unitPrice: product.unitPrice,
             unit: product.unit || existing.unit,
           });
           results.updated++;
@@ -122,11 +140,10 @@ class SupplierCatalogService {
             description: product.description || "",
             sku: product.sku,
             category: product.category || "Uncategorized",
-            price: product.unitPrice,
+            unitPrice: product.unitPrice,
             unit: product.unit || "each",
-            quantity: 0, // Initial stock is 0
-            minimumStock: product.minOrderQuantity || 1,
-            supplierId: input.supplierId,
+            manufacturerId: input.supplierId, // Link to supplier
+            createdBy: 1, // System user
           });
           results.imported++;
         }
@@ -148,7 +165,7 @@ class SupplierCatalogService {
     }
 
     console.log("[SupplierCatalog] Catalog imported:", {
-      supplier: supplier.companyName,
+      supplier: supplier.name,
       imported: results.imported,
       updated: results.updated,
       errors: results.errors.length,
@@ -176,11 +193,11 @@ class SupplierCatalogService {
 
     const priceComparison = filteredSuppliers.map((supplier: any) => ({
       supplierId: supplier.id,
-      supplierName: supplier.companyName,
-      price: product.price, // In real implementation, get from supplier_prices table
+      supplierName: supplier.name,
+      price: product.unitPrice ?? 0, // In real implementation, get from supplier_prices table
       effectiveDate: new Date().toISOString(),
-      isPreferred: supplier.status === "active",
-      deliveryTerms: supplier.paymentTerms || "Standard",
+      isPreferred: supplier.complianceStatus === "compliant",
+      deliveryTerms: "Standard",
       minimumOrder: 1,
     }));
 
@@ -230,7 +247,7 @@ class SupplierCatalogService {
 
     return {
       supplierId,
-      supplierName: supplier.companyName,
+      supplierName: supplier.name,
       totalProducts: supplierProducts.length,
       byCategory,
       averagePrice: Math.round(avgPrice),
@@ -270,6 +287,242 @@ class SupplierCatalogService {
       } catch (error) {
         results.errors.push(
           `${update.sku}: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Compare product prices across suppliers
+   */
+  async compareProductPrices(productId: number) {
+    const product = await db.getProductById(productId);
+    if (!product) {
+      throw new Error("Product not found");
+    }
+
+    const suppliers = await db.getAllSuppliers();
+    const priceComparison = suppliers.map((supplier: any) => ({
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      price: product.unitPrice ?? 0,
+      effectiveDate: new Date().toISOString(),
+      isPreferred: supplier.complianceStatus === "compliant",
+    }));
+
+    priceComparison.sort((a: any, b: any) => a.price - b.price);
+
+    return {
+      productId: product.id,
+      productName: product.name,
+      productSku: product.sku,
+      prices: priceComparison,
+      lowestPrice: priceComparison[0]?.price || 0,
+      highestPrice: priceComparison[priceComparison.length - 1]?.price || 0,
+    };
+  }
+
+  /**
+   * Detect duplicate products in catalog
+   */
+  async detectDuplicateProducts(productId?: number, threshold?: number) {
+    const allProducts = await db.getAllProducts();
+    const similarityThreshold = threshold ?? 0.8;
+    const duplicates: Array<{
+      product1: { id: number; name: string; sku: string };
+      product2: { id: number; name: string; sku: string };
+      similarity: number;
+    }> = [];
+
+    const productsToCheck = productId
+      ? allProducts.filter((p: any) => p.id === productId)
+      : allProducts;
+
+    for (const product1 of productsToCheck) {
+      for (const product2 of allProducts) {
+        if (product1.id >= product2.id) continue;
+
+        // Simple name similarity check
+        const name1 = (product1.name || "").toLowerCase();
+        const name2 = (product2.name || "").toLowerCase();
+        const words1 = new Set(name1.split(/\s+/));
+        const words2 = new Set(name2.split(/\s+/));
+        const intersection = [...words1].filter((w) => words2.has(w));
+        const union = new Set([...words1, ...words2]);
+        const similarity = union.size > 0 ? intersection.length / union.size : 0;
+
+        if (similarity >= similarityThreshold) {
+          duplicates.push({
+            product1: { id: product1.id, name: product1.name, sku: product1.sku },
+            product2: { id: product2.id, name: product2.name, sku: product2.sku },
+            similarity,
+          });
+        }
+      }
+    }
+
+    return {
+      duplicatesFound: duplicates.length,
+      duplicates,
+      threshold: similarityThreshold,
+    };
+  }
+
+  /**
+   * Standardize product specifications
+   */
+  async standardizeProductSpecifications(
+    productId: number,
+    specifications: Array<{
+      key: string;
+      value: string;
+      unit?: string;
+      isRequired?: boolean;
+    }>,
+    _userId: number
+  ) {
+    const product = await db.getProductById(productId);
+    if (!product) {
+      throw new Error("Product not found");
+    }
+
+    const specsJson = JSON.stringify(
+      specifications.reduce(
+        (acc, spec) => {
+          acc[spec.key] = spec.unit ? `${spec.value} ${spec.unit}` : spec.value;
+          return acc;
+        },
+        {} as Record<string, string>
+      )
+    );
+
+    await db.updateProduct(productId, {
+      specifications: specsJson,
+    });
+
+    return {
+      success: true,
+      productId,
+      specificationsCount: specifications.length,
+    };
+  }
+
+  /**
+   * Analyze supplier performance
+   */
+  async analyzeSupplierPerformance(
+    supplierId: number,
+    _dateRange?: { start: Date; end: Date }
+  ) {
+    const supplier = await db.getSupplierById(supplierId);
+    if (!supplier) {
+      throw new Error("Supplier not found");
+    }
+
+    // Get supplier's products
+    const allProducts = await db.getAllProducts();
+    const supplierProducts = allProducts.filter(
+      (p: any) => p.manufacturerId === supplierId
+    );
+
+    // Get deliveries for this supplier (approximation based on available data)
+    const allDeliveries = await db.getAllDeliveries();
+    const supplierDeliveries = allDeliveries.filter(
+      (d: any) => d.customerId === supplierId // This is a simplification
+    );
+
+    const onTimeDeliveries = supplierDeliveries.filter((d: any) => {
+      if (!d.scheduledDate || !d.deliveredDate) return false;
+      return new Date(d.deliveredDate) <= new Date(d.scheduledDate);
+    });
+
+    const deliveryRate =
+      supplierDeliveries.length > 0
+        ? (onTimeDeliveries.length / supplierDeliveries.length) * 100
+        : 100;
+
+    return {
+      supplierId,
+      supplierName: supplier.name,
+      metrics: {
+        totalProducts: supplierProducts.length,
+        totalDeliveries: supplierDeliveries.length,
+        onTimeDeliveryRate: Math.round(deliveryRate),
+        qualityScore: supplier.rating ?? 0,
+        complianceStatus: supplier.complianceStatus,
+      },
+      performance: {
+        rating: supplier.rating ?? 0,
+        lastReview: supplier.updatedAt,
+      },
+    };
+  }
+
+  /**
+   * Import supplier catalog from external data
+   */
+  async importSupplierCatalog(
+    supplierId: number,
+    catalogData: Array<{
+      supplierProductCode: string;
+      productName: string;
+      description?: string;
+      category?: string;
+      unitPrice: number;
+      currency?: string;
+      specifications?: Record<string, string>;
+    }>,
+    _userId: number
+  ) {
+    const supplier = await db.getSupplierById(supplierId);
+    if (!supplier) {
+      throw new Error("Supplier not found");
+    }
+
+    const results = {
+      imported: 0,
+      updated: 0,
+      errors: [] as string[],
+    };
+
+    for (const item of catalogData) {
+      try {
+        const existingProducts = await db.getAllProducts();
+        const existing = existingProducts.find(
+          (p: any) => p.sku === item.supplierProductCode
+        );
+
+        if (existing) {
+          await db.updateProduct(existing.id, {
+            name: item.productName,
+            description: item.description,
+            category: item.category,
+            unitPrice: item.unitPrice,
+            specifications: item.specifications
+              ? JSON.stringify(item.specifications)
+              : undefined,
+          });
+          results.updated++;
+        } else {
+          await db.createProduct({
+            name: item.productName,
+            description: item.description || "",
+            sku: item.supplierProductCode,
+            category: item.category || "Uncategorized",
+            unitPrice: item.unitPrice,
+            manufacturerId: supplierId,
+            specifications: item.specifications
+              ? JSON.stringify(item.specifications)
+              : undefined,
+            createdBy: 1,
+          });
+          results.imported++;
+        }
+      } catch (error) {
+        results.errors.push(
+          `${item.supplierProductCode}: ${error instanceof Error ? error.message : "Unknown error"}`
         );
       }
     }

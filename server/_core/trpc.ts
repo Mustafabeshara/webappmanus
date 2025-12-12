@@ -190,8 +190,9 @@ const csrfProtectionMiddleware = t.middleware(async opts => {
   const tokenFromCookie = csrfProtectionService.getTokenFromCookies(ctx);
 
   // Validate CSRF tokens
+  const csrfContext = { user: ctx.user ? { sessionId: undefined } : undefined };
   if (
-    !csrfProtectionService.validateToken(tokenFromHeader, tokenFromCookie, ctx)
+    !csrfProtectionService.validateToken(tokenFromHeader, tokenFromCookie, csrfContext)
   ) {
     throw new TRPCError({
       code: "FORBIDDEN",
@@ -280,7 +281,7 @@ function createRateLimitMiddleware(
 ) {
   return t.middleware(async opts => {
     const { ctx, next } = opts;
-    const clientId = getClientId(ctx.req, ctx.user?.id);
+    const clientId = getClientId(ctx.req);
     const key = `${clientId}:${endpointName}`;
     const { limited, resetIn } = isRateLimited(key, config);
 

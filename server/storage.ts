@@ -25,7 +25,7 @@ function getFilePath(key: string): string {
   return path.join(STORAGE_DIR, key);
 }
 
-function getPublicUrl(key: string): string {
+export function getPublicUrl(key: string): string {
   // Return a URL path that can be served by Express static middleware
   const baseUrl = BASE_URL || '';
   return `${baseUrl}/uploads/${key}`;
@@ -105,3 +105,27 @@ export async function storageExists(relKey: string): Promise<boolean> {
 export function getStorageDirectory(): string {
   return STORAGE_DIR;
 }
+
+// List storage keys (files)
+export async function storageListKeys(prefix?: string): Promise<string[]> {
+  await ensureStorageDir();
+  const keys: string[] = [];
+
+  async function listDir(dir: string, baseKey: string = ""): Promise<void> {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const key = baseKey ? `${baseKey}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        await listDir(path.join(dir, entry.name), key);
+      } else {
+        if (!prefix || key.startsWith(prefix)) {
+          keys.push(key);
+        }
+      }
+    }
+  }
+
+  await listDir(STORAGE_DIR);
+  return keys;
+}
+

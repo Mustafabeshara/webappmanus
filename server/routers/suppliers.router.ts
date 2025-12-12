@@ -75,9 +75,9 @@ export const suppliersRouter = router({
 
     // Calculate vendor scores and insights
     const vendorAnalysis = suppliers.map(supplier => {
-      // Count tender participations
+      // Count tender participations (link via awardedSupplierId)
       const supplierTenders = tenders.filter(
-        t => t.supplierId === supplier.id
+        t => t.awardedSupplierId === supplier.id
       );
       const wonTenders = supplierTenders.filter(t => t.status === "awarded");
       const winRate =
@@ -85,13 +85,13 @@ export const suppliersRouter = router({
           ? (wonTenders.length / supplierTenders.length) * 100
           : 0;
 
-      // Calculate delivery performance
+      // Calculate delivery performance (link via customerId for now)
       const supplierDeliveries = deliveries.filter(
-        d => d.supplierId === supplier.id
+        d => d.customerId === supplier.id
       );
       const onTimeDeliveries = supplierDeliveries.filter(d => {
-        if (!d.expectedDate || !d.actualDate) return true;
-        return new Date(d.actualDate) <= new Date(d.expectedDate);
+        if (!d.scheduledDate || !d.deliveredDate) return true;
+        return new Date(d.deliveredDate) <= new Date(d.scheduledDate);
       });
       const onTimeRate =
         supplierDeliveries.length > 0

@@ -4,8 +4,6 @@
  * Proper type definitions for database operations to reduce `as any` assertions.
  */
 
-import type { MySqlInsertResult } from "drizzle-orm/mysql2";
-
 /**
  * Result type for MySQL INSERT operations
  * This provides proper typing for the insertId field from mysql2

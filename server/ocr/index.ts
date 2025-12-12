@@ -43,6 +43,9 @@ async function extractTextFromPdf(
   dataBuffer: Buffer
 ): Promise<{ text: string; numpages: number }> {
   const PdfParseClass = await getPdfParseClass();
+  if (!PdfParseClass) {
+    throw new Error("PDF parsing library not available");
+  }
   // pdf-parse v2 expects Uint8Array, convert Buffer if necessary
   const dataArray = new Uint8Array(dataBuffer);
   const parser = new PdfParseClass({ data: dataArray });

@@ -67,7 +67,7 @@ class InputValidationService {
     } catch (error) {
       if (error instanceof z.ZodError) {
         throw new Error(
-          `Validation failed: ${error.errors.map(e => e.message).join(", ")}`
+          `Validation failed: ${error.issues.map((e: z.ZodIssue) => e.message).join(", ")}`
         );
       }
       throw error;
@@ -219,7 +219,6 @@ class InputValidationService {
             size,
           }
         : undefined,
-      fileInfo: isValid ? { isSafe: true } : undefined,
     };
   }
 
@@ -550,4 +549,11 @@ export const commonSchemas = {
     .number()
     .min(0, { message: "Percentage cannot be negative" })
     .max(100, { message: "Percentage cannot exceed 100" }),
+
+  // File upload schema (base64 encoded file data)
+  fileUpload: z.object({
+    fileName: z.string().min(1).max(255),
+    fileData: z.string(), // base64 encoded
+    mimeType: z.string().min(1).max(100),
+  }),
 };

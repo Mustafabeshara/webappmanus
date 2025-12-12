@@ -56,7 +56,8 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 
-interface DocumentFile {
+// DocumentFile matches the database schema from files table
+type DocumentFile = {
   id: number;
   fileName: string;
   fileKey: string;
@@ -66,10 +67,14 @@ interface DocumentFile {
   entityType: string;
   entityId: number;
   uploadedBy: number;
-  extractionStatus: string;
-  createdAt: string;
-  updatedAt: string;
-}
+  category: string | null;
+  version: number;
+  parentFileId: number | null;
+  isCurrent: boolean;
+  replacedAt: Date | null;
+  createdAt: Date;
+  uploadedAt: Date;
+};
 
 interface ExtractionResult {
   id: number;
@@ -92,12 +97,10 @@ const DOCUMENT_TYPES = [
   { value: "contracts", label: "Contracts" },
 ];
 
-const EXTRACTION_STATUS = [
+const FILE_STATUS = [
   { value: "all", label: "All Status" },
-  { value: "not_started", label: "Pending" },
-  { value: "in_progress", label: "Processing" },
-  { value: "completed", label: "Completed" },
-  { value: "failed", label: "Failed" },
+  { value: "current", label: "Current" },
+  { value: "archived", label: "Archived" },
 ];
 
 export default function DocumentCenter() {
@@ -129,9 +132,10 @@ export default function DocumentCenter() {
         return false;
       }
 
-      // Status filter
-      if (selectedStatus !== "all" && file.extractionStatus !== selectedStatus) {
-        return false;
+      // Status filter (by version - current vs archived)
+      if (selectedStatus !== "all") {
+        if (selectedStatus === "current" && !file.isCurrent) return false;
+        if (selectedStatus === "archived" && file.isCurrent) return false;
       }
 
       // Date range filter
@@ -153,16 +157,15 @@ export default function DocumentCenter() {
   // Calculate statistics
   const stats = useMemo(() => {
     const total = files.length;
-    const completed = files.filter((f: DocumentFile) => f.extractionStatus === "completed").length;
-    const pending = files.filter((f: DocumentFile) => f.extractionStatus === "not_started").length;
-    const failed = files.filter((f: DocumentFile) => f.extractionStatus === "failed").length;
+    const current = files.filter((f: DocumentFile) => f.isCurrent).length;
+    const archived = files.filter((f: DocumentFile) => !f.isCurrent).length;
 
     const byType: Record<string, number> = {};
     files.forEach((f: DocumentFile) => {
       byType[f.entityType] = (byType[f.entityType] || 0) + 1;
     });
 
-    return { total, completed, pending, failed, byType };
+    return { total, current, archived, byType };
   }, [files]);
 
   // Get file icon based on mime type
@@ -173,18 +176,12 @@ export default function DocumentCenter() {
     return <File className="h-5 w-5 text-gray-500" />;
   };
 
-  // Get extraction status badge
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "completed":
-        return <Badge className="bg-green-100 text-green-800"><CheckCircle2 className="h-3 w-3 mr-1" />Extracted</Badge>;
-      case "in_progress":
-        return <Badge className="bg-blue-100 text-blue-800"><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Processing</Badge>;
-      case "failed":
-        return <Badge className="bg-red-100 text-red-800"><AlertCircle className="h-3 w-3 mr-1" />Failed</Badge>;
-      default:
-        return <Badge className="bg-gray-100 text-gray-800"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+  // Get file status badge (current vs archived)
+  const getStatusBadge = (isCurrent: boolean, version: number) => {
+    if (isCurrent) {
+      return <Badge className="bg-green-100 text-green-800"><CheckCircle2 className="h-3 w-3 mr-1" />Current (v{version})</Badge>;
     }
+    return <Badge className="bg-gray-100 text-gray-800"><Clock className="h-3 w-3 mr-1" />Archived (v{version})</Badge>;
   };
 
   // Format file size
@@ -266,32 +263,32 @@ export default function DocumentCenter() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Extracted</CardTitle>
+            <CardTitle className="text-sm font-medium">Current</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
-            <Progress value={(stats.completed / stats.total) * 100} className="mt-2" />
+            <div className="text-2xl font-bold text-green-600">{stats.current}</div>
+            <Progress value={(stats.current / stats.total) * 100} className="mt-2" />
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-500" />
+            <CardTitle className="text-sm font-medium">Archived</CardTitle>
+            <Clock className="h-4 w-4 text-gray-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-            <p className="text-xs text-muted-foreground">Awaiting extraction</p>
+            <div className="text-2xl font-bold text-gray-600">{stats.archived}</div>
+            <p className="text-xs text-muted-foreground">Older versions</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Failed</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-500" />
+            <CardTitle className="text-sm font-medium">By Type</CardTitle>
+            <FolderOpen className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.failed}</div>
-            <p className="text-xs text-muted-foreground">Need attention</p>
+            <div className="text-2xl font-bold text-blue-600">{Object.keys(stats.byType).length}</div>
+            <p className="text-xs text-muted-foreground">Document categories</p>
           </CardContent>
         </Card>
       </div>
@@ -335,13 +332,13 @@ export default function DocumentCenter() {
               </Select>
             </div>
             <div>
-              <Label>Extraction Status</Label>
+              <Label>File Status</Label>
               <Select value={selectedStatus} onValueChange={setSelectedStatus}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  {EXTRACTION_STATUS.map(status => (
+                  {FILE_STATUS.map(status => (
                     <SelectItem key={status.value} value={status.value}>
                       {status.label}
                     </SelectItem>
@@ -384,7 +381,7 @@ export default function DocumentCenter() {
                 <TableHead>File Name</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Size</TableHead>
-                <TableHead>Extraction</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Uploaded</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -422,7 +419,7 @@ export default function DocumentCenter() {
                       </Badge>
                     </TableCell>
                     <TableCell>{formatFileSize(file.fileSize)}</TableCell>
-                    <TableCell>{getStatusBadge(file.extractionStatus)}</TableCell>
+                    <TableCell>{getStatusBadge(file.isCurrent, file.version)}</TableCell>
                     <TableCell>
                       <div className="text-sm">
                         {format(new Date(file.createdAt), "MMM d, yyyy")}
@@ -457,12 +454,12 @@ export default function DocumentCenter() {
                         >
                           <Sparkles className="h-4 w-4" />
                         </Button>
-                        {file.extractionStatus !== "completed" && (
+                        {!file.isCurrent && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleReExtract(file)}
-                            title="Re-extract"
+                            title="Restore version"
                           >
                             <Wand2 className="h-4 w-4" />
                           </Button>
@@ -533,53 +530,33 @@ export default function DocumentCenter() {
                 <TabsTrigger value="metadata">Document Info</TabsTrigger>
               </TabsList>
               <TabsContent value="data" className="space-y-4 mt-4">
-                {selectedDocument.extractionStatus === "completed" ? (
+                {selectedDocument.isCurrent ? (
                   <div className="space-y-3">
                     <div className="p-4 bg-green-50 rounded-lg">
                       <div className="flex items-center gap-2 text-green-700">
                         <CheckCircle2 className="h-5 w-5" />
-                        <span className="font-medium">Extraction Complete</span>
+                        <span className="font-medium">Current Version (v{selectedDocument.version})</span>
                       </div>
                       <p className="text-sm text-green-600 mt-1">
-                        Data was successfully extracted from this document.
+                        This is the current version of the document.
                       </p>
                     </div>
-                    {/* Placeholder for actual extracted data */}
                     <Card>
                       <CardContent className="pt-4">
                         <p className="text-muted-foreground text-center py-4">
-                          Extracted data will be displayed here based on document type.
+                          Document details will be displayed here based on entity type.
                         </p>
                       </CardContent>
                     </Card>
-                  </div>
-                ) : selectedDocument.extractionStatus === "failed" ? (
-                  <div className="p-4 bg-red-50 rounded-lg">
-                    <div className="flex items-center gap-2 text-red-700">
-                      <AlertCircle className="h-5 w-5" />
-                      <span className="font-medium">Extraction Failed</span>
-                    </div>
-                    <p className="text-sm text-red-600 mt-1">
-                      The extraction process encountered an error.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => handleReExtract(selectedDocument)}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Retry Extraction
-                    </Button>
                   </div>
                 ) : (
                   <div className="p-4 bg-yellow-50 rounded-lg">
                     <div className="flex items-center gap-2 text-yellow-700">
                       <Clock className="h-5 w-5" />
-                      <span className="font-medium">Pending Extraction</span>
+                      <span className="font-medium">Archived Version (v{selectedDocument.version})</span>
                     </div>
                     <p className="text-sm text-yellow-600 mt-1">
-                      This document has not been processed yet.
+                      This is an older version of the document.
                     </p>
                     <Button
                       variant="outline"
@@ -588,7 +565,7 @@ export default function DocumentCenter() {
                       onClick={() => handleReExtract(selectedDocument)}
                     >
                       <Wand2 className="h-4 w-4 mr-2" />
-                      Start Extraction
+                      Restore This Version
                     </Button>
                   </div>
                 )}
@@ -622,8 +599,8 @@ export default function DocumentCenter() {
                     </span>
                   </div>
                   <div className="flex justify-between py-2">
-                    <span className="text-muted-foreground">Extraction Status</span>
-                    {getStatusBadge(selectedDocument.extractionStatus)}
+                    <span className="text-muted-foreground">Version Status</span>
+                    {getStatusBadge(selectedDocument.isCurrent, selectedDocument.version)}
                   </div>
                 </div>
               </TabsContent>

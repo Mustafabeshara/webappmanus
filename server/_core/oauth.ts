@@ -49,7 +49,7 @@ async function ensureAdminAccount(): Promise<{
       console.log("[Auth] Created admin account with hashed password");
     }
 
-    return adminUser;
+    return adminUser ?? null;
   } catch (error) {
     console.error("[Auth] Failed to ensure admin account:", error);
     return null;

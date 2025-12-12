@@ -393,6 +393,28 @@ class ModuleInterconnectionManager {
   }
 
   /**
+   * Process invoice document
+   */
+  private async processInvoiceDocument(
+    documentId: number,
+    extractedData: any
+  ): Promise<void> {
+    // Implementation to process invoice documents
+    console.log(`[Module] Processing invoice document ${documentId}`);
+  }
+
+  /**
+   * Process tender document
+   */
+  private async processTenderDocument(
+    documentId: number,
+    extractedData: any
+  ): Promise<void> {
+    // Implementation to process tender documents
+    console.log(`[Module] Processing tender document ${documentId}`);
+  }
+
+  /**
    * Parse product table from extracted data
    */
   private parseProductTable(tableData: any): any[] {

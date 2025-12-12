@@ -73,14 +73,13 @@ export const exportRouter = router({
       const products = await db.getAllProducts();
       const productMap = new Map(products.map(p => [p.id, p]));
 
-      const dataWithProducts = inventory.map(inv => {
-        const product = productMap.get(inv.productId);
-        return {
-          ...inv,
-          productName: product?.name || `Product #${inv.productId}`,
-          sku: product?.sku || `SKU-${inv.productId}`,
-        };
-      });
+      // getAllInventory returns joined data with product info already included:
+      // currentStock (not quantity), reorderLevel (not minStockLevel), id is product id
+      const dataWithProducts = inventory.map(inv => ({
+        ...inv,
+        productName: inv.name || `Product #${inv.id}`,
+        // sku is already included in joined data
+      }));
 
       const result = generateExport({
         format: input.format,
@@ -172,7 +171,7 @@ export const exportRouter = router({
               .optional(),
           })
         ),
-        data: z.array(z.record(z.any())),
+        data: z.array(z.record(z.string(), z.any())),
       })
     )
     .mutation(async ({ input }) => {

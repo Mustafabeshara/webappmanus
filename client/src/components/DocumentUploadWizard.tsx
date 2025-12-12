@@ -533,13 +533,14 @@ export function DocumentUploadWizard({
       setExtractionStatus("Extraction complete!");
 
       // Map extracted data to form fields
-      if (response.extractedData) {
-        setExtractedData(response.extractedData);
+      if (response.extractedData && Object.keys(response.extractedData).length > 0) {
+        const extractedResult = response.extractedData as ExtractionResult;
+        setExtractedData(extractedResult);
 
         // Auto-populate form fields from extraction
         const populatedData: Record<string, any> = {};
         selectedTemplate.fields.forEach(field => {
-          const extracted = response.extractedData[field.name];
+          const extracted = extractedResult[field.name];
           if (extracted?.value) {
             populatedData[field.name] = extracted.value;
           }
@@ -605,8 +606,7 @@ export function DocumentUploadWizard({
         const uploadResult = await trpcClient.files.uploadToS3.mutate({
           fileName: file.name,
           mimeType: file.type,
-          size: file.size,
-          base64Data: base64,
+          fileData: base64,
           entityType: selectedTemplate.module,
           entityId: 0, // Will be updated after entity creation
         });
@@ -619,34 +619,30 @@ export function DocumentUploadWizard({
       switch (selectedTemplate.module) {
         case "tenders":
           result = await trpcClient.tenders.create.mutate({
-            referenceNumber: formData.tenderNumber,
             title: formData.title,
-            customerId: parseInt(formData.customerId),
+            customerId: formData.customerId ? parseInt(formData.customerId) : undefined,
             submissionDeadline: formData.submissionDeadline
               ? new Date(formData.submissionDeadline)
-              : null,
+              : undefined,
             estimatedValue: formData.estimatedValue
               ? parseFloat(formData.estimatedValue) * 100
-              : null,
-            department: formData.department || null,
-            status: "draft",
+              : undefined,
+            description: formData.department || undefined,
           });
           break;
         case "invoices":
           result = await trpcClient.invoices.create.mutate({
-            invoiceNumber: formData.invoiceNumber,
-            supplierId: parseInt(formData.supplierId),
-            issueDate: new Date(formData.invoiceDate),
-            dueDate: new Date(formData.dueDate),
-            totalAmount: parseFloat(formData.totalAmount) * 100,
-            status: "pending",
+            customerId: formData.supplierId ? parseInt(formData.supplierId) : 0,
+            dueDate: new Date(formData.dueDate || Date.now()),
+            subtotal: parseFloat(formData.totalAmount || "0") * 100,
+            totalAmount: parseFloat(formData.totalAmount || "0") * 100,
             items: [],
           });
           break;
         case "suppliers":
           result = await trpcClient.suppliers.create.mutate({
             name: formData.name,
-            code: formData.taxId,
+            taxId: formData.taxId,
             contactPerson: formData.contactPerson,
             email: formData.email,
             phone: formData.phone,

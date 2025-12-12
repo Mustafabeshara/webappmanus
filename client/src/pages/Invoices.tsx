@@ -23,12 +23,17 @@ export default function Invoices() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const { data: invoices, isLoading } = trpc.invoices.list.useQuery();
+  const { data: customers = [] } = trpc.customers.list.useQuery();
+
+  // Create a customer lookup map
+  const customerMap = new Map(customers.map((c: { id: number; name: string }) => [c.id, c]));
 
   const filteredInvoices = invoices?.filter((invoice) => {
     const search = searchTerm.toLowerCase();
+    const customer = customerMap.get(invoice.customerId);
     return (
       invoice.invoiceNumber.toLowerCase().includes(search) ||
-      invoice.customer?.name?.toLowerCase().includes(search)
+      customer?.name?.toLowerCase().includes(search)
     );
   });
 
@@ -139,7 +144,7 @@ export default function Invoices() {
                           {invoice.invoiceNumber}
                         </TableCell>
                         <TableCell className="font-medium">
-                          {invoice.customer?.name || "-"}
+                          {customerMap.get(invoice.customerId)?.name || "-"}
                         </TableCell>
                         <TableCell>{formatDate(invoice.issueDate)}</TableCell>
                         <TableCell>{formatDate(invoice.dueDate)}</TableCell>

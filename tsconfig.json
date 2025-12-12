@@ -14,9 +14,7 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",
-    "baseUrl": ".",
     "forceConsistentCasingInFileNames": true,
-    "ignoreDeprecations": "6.0",
     "types": ["node", "vite/client"],
     "paths": {
       "@/*": ["./client/src/*"],

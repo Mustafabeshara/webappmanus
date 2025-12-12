@@ -73,7 +73,7 @@ class AITenderIntelligence {
       const activeTenders = tenders.filter(t => t.status === "open");
 
       // Get supplier products if supplierId provided
-      let products = [];
+      let products: Awaited<ReturnType<typeof db.getProductById>>[] = [];
       if (request.supplierId) {
         products = await db.getProductsBySupplierId(request.supplierId);
       } else if (request.productIds) {
@@ -424,18 +424,19 @@ class AITenderIntelligence {
     matchReasons: MatchReason[],
     criteria: MatchingCriteria
   ): number {
-    const weights = {
+    const weights: Record<string, number> = {
       specification: criteria.specificationWeight,
       price: criteria.priceWeight,
       delivery: criteria.deliveryWeight,
       compliance: criteria.complianceWeight,
+      experience: 0.1, // Default weight for experience category
     };
 
     let weightedScore = 0;
     let totalWeight = 0;
 
     for (const reason of matchReasons) {
-      const weight = weights[reason.category] || 0;
+      const weight = weights[reason.category] ?? 0;
       weightedScore += reason.score * weight;
       totalWeight += weight;
     }
@@ -455,7 +456,7 @@ class AITenderIntelligence {
     const specReason = matchReasons.find(r => r.category === "specification");
 
     const overallScore =
-      (complianceReason?.score || 0 + specReason?.score || 0) / 2;
+      ((complianceReason?.score ?? 0) + (specReason?.score ?? 0)) / 2;
 
     return {
       overall:
@@ -465,13 +466,12 @@ class AITenderIntelligence {
             ? "partial"
             : "non_compliant",
       details: {
-        specifications: (specReason?.score || 0) > 0.7,
+        specifications: (specReason?.score ?? 0) > 0.7,
         certifications: true, // Would check actual certifications
         delivery:
-          matchReasons.find(r => r.category === "delivery")?.score > 0.6 ||
-          false,
+          (matchReasons.find(r => r.category === "delivery")?.score ?? 0) > 0.6,
         pricing:
-          matchReasons.find(r => r.category === "price")?.score > 0.5 || false,
+          (matchReasons.find(r => r.category === "price")?.score ?? 0) > 0.5,
       },
     };
   }

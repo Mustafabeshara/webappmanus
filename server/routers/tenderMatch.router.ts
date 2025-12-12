@@ -21,11 +21,11 @@ function tokenize(text: string | null | undefined): Set<string> {
  * Score supplier products against tender items
  */
 function scoreSupplierAgainstTender(
-  tenderItems: Array<{ description?: string; specifications?: string }>,
+  tenderItems: Array<{ description?: string | null; specifications?: string | null }>,
   supplierProducts: Array<{
-    name?: string;
-    description?: string;
-    specifications?: string;
+    name?: string | null;
+    description?: string | null;
+    specifications?: string | null;
   }>
 ) {
   let total = 0;

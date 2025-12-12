@@ -1286,5 +1286,4 @@ export type TaskDependency = typeof taskDependencies.$inferSelect;
 export type InsertTaskDependency = typeof taskDependencies.$inferInsert;
 export type TaskEscalation = typeof taskEscalations.$inferSelect;
 export type InsertTaskEscalation = typeof taskEscalations.$inferInsert;
-export type SecurityEvent = typeof securityEvents.$inferSelect;
 export type InsertSecurityEvent = typeof securityEvents.$inferInsert;

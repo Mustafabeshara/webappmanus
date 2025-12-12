@@ -38,9 +38,13 @@ function formatValue(
     case "currency":
       return `$${(Number(value) / 100).toFixed(2)}`;
     case "date":
-      return value instanceof Date
-        ? value.toLocaleDateString()
-        : new Date(value).toLocaleDateString();
+      if (value instanceof Date) {
+        return value.toLocaleDateString();
+      }
+      if (typeof value === "string" || typeof value === "number") {
+        return new Date(value).toLocaleDateString();
+      }
+      return "";
     case "number":
       return Number(value).toLocaleString();
     case "percent":

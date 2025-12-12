@@ -1,6 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import { parse as parseCookieHeader } from "cookie";
 import type { NextFunction, Request, Response } from "express";
+import type { z } from "zod";
 import type { User, UserPermission } from "../../drizzle/schema";
 import * as db from "../db";
 import { auditLogging } from "./audit-logging";
@@ -234,7 +235,7 @@ export function requireAdmin() {
 /**
  * Input validation middleware
  */
-export function validateInput(schema: unknown) {
+export function validateInput<T>(schema: z.ZodSchema<T>) {
   return async (req: RequestWithAuth, res: Response, next: NextFunction) => {
     try {
       const validatedData = await inputValidation.validateWithThreatDetection(

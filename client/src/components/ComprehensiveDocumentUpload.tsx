@@ -2526,13 +2526,14 @@ export function ComprehensiveDocumentUpload({
       setExtractionProgress(100);
       setExtractionStatus("Extraction complete!");
 
-      if (response.extractedData) {
-        setExtractedData(response.extractedData);
+      if (response.extractedData && Object.keys(response.extractedData).length > 0) {
+        const extractedResult = response.extractedData as ExtractionResult;
+        setExtractedData(extractedResult);
 
         // Auto-populate form fields
         const populatedData: Record<string, any> = {};
         selectedTemplate.fields.forEach(field => {
-          const extracted = response.extractedData[field.name];
+          const extracted = extractedResult[field.name];
           if (extracted?.value) {
             populatedData[field.name] = extracted.value;
           }
@@ -2746,8 +2747,7 @@ export function ComprehensiveDocumentUpload({
         await trpcClient.files.uploadToS3.mutate({
           fileName: file.name,
           mimeType: file.type,
-          size: file.size,
-          base64Data: base64,
+          fileData: base64,
           entityType: selectedTemplate.category,
           entityId: 0,
         });

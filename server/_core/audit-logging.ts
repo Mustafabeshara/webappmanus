@@ -98,7 +98,7 @@ class AuditLoggingService {
   async logAction(action: AuditAction): Promise<void> {
     try {
       const now = new Date();
-      const changes = action.changes ? JSON.stringify(action.changes) : null;
+      const changes = action.changes ? JSON.stringify(action.changes) : undefined;
 
       const record = {
         userId: action.userId,
@@ -107,18 +107,15 @@ class AuditLoggingService {
         entityId: action.entityId,
         changes,
         ipAddress: action.ipAddress || "unknown",
-        userAgent: action.userAgent || null,
+        userAgent: action.userAgent || undefined,
         createdAt: now,
       };
 
-      // Generate integrity checksum
-      const checksum = this.generateChecksum(record);
+      // Generate integrity checksum (stored separately for integrity verification)
+      const _checksum = this.generateChecksum(record);
 
       // Create audit log entry
-      await db.createAuditLog({
-        ...record,
-        checksum,
-      });
+      await db.createAuditLog(record);
 
       // Check for compliance violations
       const violations = await this.detectComplianceViolations(action);

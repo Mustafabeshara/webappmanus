@@ -12,6 +12,7 @@ import "../types/db";
 export interface RateLimitConfig {
   windowMs: number; // Time window in milliseconds
   maxRequests: number; // Maximum requests per window
+  message?: string; // Custom error message when rate limited
   skipSuccessfulRequests?: boolean;
   skipFailedRequests?: boolean;
   keyGenerator?: (req: Request) => string;

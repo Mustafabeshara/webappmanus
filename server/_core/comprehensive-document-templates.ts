@@ -3954,6 +3954,3 @@ class ComprehensiveTemplateManager {
 
 // Export singleton instance
 export const comprehensiveTemplateManager = new ComprehensiveTemplateManager();
-
-// Export types
-export type { ComprehensiveTemplate, TemplateField, ValidationRule, AutoPopulationRule, WorkflowStep };

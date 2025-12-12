@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,16 +62,10 @@ export default function SupplierCatalog() {
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
 
   // Fetch all suppliers
-  const { data: suppliers = [], isLoading: suppliersLoading } = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: () => trpc.suppliers.list.query(),
-  });
+  const { data: suppliers = [], isLoading: suppliersLoading } = trpc.suppliers.list.useQuery();
 
   // Fetch all products
-  const { data: products = [], isLoading: productsLoading } = useQuery({
-    queryKey: ["products"],
-    queryFn: () => trpc.products.list.query(),
-  });
+  const { data: products = [], isLoading: productsLoading } = trpc.products.list.useQuery();
 
   // Get unique categories from products
   const categories = useMemo(() => {

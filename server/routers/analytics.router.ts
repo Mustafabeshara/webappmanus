@@ -130,6 +130,7 @@ export const analyticsRouter = router({
       customers,
       products,
       suppliers,
+      inventoryItems,
     ] = await Promise.all([
       db.getAllTenders(),
       db.getAllBudgets(),
@@ -139,6 +140,7 @@ export const analyticsRouter = router({
       db.getAllCustomers(),
       db.getAllProducts(),
       db.getAllSuppliers(),
+      db.getAllInventory(),
     ]);
 
     // Financial metrics
@@ -211,15 +213,16 @@ export const analyticsRouter = router({
         ? Math.round((totalBudgetSpent / totalBudgetAllocated) * 100)
         : 0;
 
-    // Inventory health
-    const lowStockItems = products.filter(
-      p => p.quantity <= (p.minStockLevel || 10)
+    // Inventory health - getAllInventory returns joined data with renamed fields:
+    // currentStock (not quantity), reorderLevel (not minStockLevel), id is product id
+    const lowStockItems = inventoryItems.filter(
+      item => (item.currentStock ?? 0) <= (item.reorderLevel ?? 10)
     );
-    const outOfStockItems = products.filter(p => p.quantity === 0);
-    const inventoryValue = products.reduce(
-      (sum, p) => sum + p.quantity * (p.unitPrice || 0),
-      0
-    );
+    const outOfStockItems = inventoryItems.filter(item => (item.currentStock ?? 0) === 0);
+    // Calculate inventory value - data already joined with products
+    const inventoryValue = inventoryItems.reduce((sum, item) => {
+      return sum + (item.currentStock ?? 0) * (item.unitPrice || 0);
+    }, 0);
 
     // Customer insights
     const activeCustomers = customers.filter(c => {
@@ -233,12 +236,12 @@ export const analyticsRouter = router({
     });
 
     // Supplier performance
-    const activeSuppliers = suppliers.filter(s => s.status === "active");
+    const activeSuppliers = suppliers.filter(s => s.complianceStatus === "compliant");
     const avgSupplierRating =
       activeSuppliers.length > 0
         ? Math.round(
             activeSuppliers.reduce(
-              (sum, s) => sum + (s.performanceScore || 0),
+              (sum, s) => sum + (s.rating || 0),
               0
             ) / activeSuppliers.length
           )
@@ -382,7 +385,7 @@ export const analyticsRouter = router({
 
       const monthRevenue = invoices
         .filter(inv => {
-          const d = new Date(inv.paidAt || inv.createdAt);
+          const d = new Date(inv.issueDate || inv.createdAt);
           return d >= monthStart && d <= monthEnd && inv.status === "paid";
         })
         .reduce((sum, inv) => sum + inv.totalAmount, 0);

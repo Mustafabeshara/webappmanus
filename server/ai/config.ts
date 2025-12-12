@@ -66,6 +66,11 @@ export const TASK_MODELS = {
   summarization: ['Groq', 'Gemini', 'OpenAI'],
   vision: ['Gemini', 'OpenAI'],
   arabicProcessing: ['Gemini', 'OpenAI', 'Groq'],
+  // Additional task types for various AI operations
+  analysis: ['Groq', 'Gemini', 'OpenAI'],
+  fast_analysis: ['Groq', 'Gemini', 'OpenAI'],
+  inventory_optimization: ['Groq', 'Gemini', 'OpenAI'],
+  nlp_query: ['Groq', 'Gemini', 'OpenAI'],
 };
 
 // Get available providers (with valid API keys)

@@ -25,13 +25,17 @@ export const supplierCatalogRouter = router({
       const { supplierCatalogService } = await import(
         "../_core/supplierCatalog"
       );
-      const { changeReason, ...priceData } = input;
+      const { changeReason, validFrom, validUntil, ...rest } = input;
 
-      return await supplierCatalogService.updateSupplierPrice(
-        priceData,
-        ctx.user.id,
-        changeReason
-      );
+      // Transform to match PriceUpdateInput interface
+      return await supplierCatalogService.updateSupplierPrice({
+        supplierId: rest.supplierId,
+        productId: rest.productId,
+        newPrice: rest.unitPrice,
+        effectiveDate: validFrom?.toISOString(),
+        expiryDate: validUntil?.toISOString(),
+        notes: changeReason,
+      });
     }),
 
   compareProductPrices: protectedProcedure
@@ -125,7 +129,7 @@ export const supplierCatalogRouter = router({
             category: z.string().optional(),
             unitPrice: z.number(),
             currency: z.string().optional(),
-            specifications: z.record(z.string()).optional(),
+            specifications: z.record(z.string(), z.string()).optional(),
           })
         ),
       })
@@ -135,9 +139,20 @@ export const supplierCatalogRouter = router({
         "../_core/supplierCatalog"
       );
 
+      // Map input to match service method signature
+      const catalogDataForService = input.catalogData.map(item => ({
+        supplierProductCode: item.supplierProductCode,
+        productName: item.productName,
+        description: item.description,
+        category: item.category,
+        unitPrice: item.unitPrice,
+        currency: item.currency,
+        specifications: item.specifications,
+      }));
+
       return await supplierCatalogService.importSupplierCatalog(
         input.supplierId,
-        input.catalogData,
+        catalogDataForService,
         ctx.user.id
       );
     }),

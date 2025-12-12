@@ -121,11 +121,9 @@ export default function Commissions() {
   const handleCreateRule = () => {
     createRuleMutation.mutate({
       name: newRule.name,
-      description: newRule.description || undefined,
-      percentage: newRule.percentage ? parseFloat(newRule.percentage) : undefined,
-      flatAmount: newRule.flatAmount ? parseFloat(newRule.flatAmount) : undefined,
-      minThreshold: newRule.minThreshold ? parseFloat(newRule.minThreshold) : undefined,
-      maxThreshold: newRule.maxThreshold ? parseFloat(newRule.maxThreshold) : undefined,
+      rateBps: newRule.percentage ? parseFloat(newRule.percentage) * 100 : 0, // Convert percentage to basis points
+      minMarginBps: newRule.minThreshold ? parseFloat(newRule.minThreshold) * 100 : undefined,
+      scopeType: "all" as const,
     });
   };
 

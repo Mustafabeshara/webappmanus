@@ -183,19 +183,22 @@ export const invoicesRouter = router({
     > = {};
 
     for (const inv of invoices) {
-      // Count by status
-      statusCounts[inv.status as keyof typeof statusCounts]++;
+      // Count by status - cast to string to handle TypeScript inference issues
+      const status = inv.status as string;
+      if (status in statusCounts) {
+        statusCounts[status as keyof typeof statusCounts]++;
+      }
 
       // Calculate amounts
-      if (inv.status === "paid") {
+      if (status === "paid") {
         totalPaid += inv.totalAmount;
-      } else if (inv.status !== "cancelled") {
+      } else if (status !== "cancelled") {
         const outstanding = inv.totalAmount - (inv.paidAmount || 0);
         totalOutstanding += outstanding;
 
         // Check if overdue
         const dueDate = new Date(inv.dueDate);
-        if (dueDate < now && inv.status !== "paid") {
+        if (dueDate < now && status !== "paid") {
           totalOverdue += outstanding;
           overdueInvoices.push({
             id: inv.id,
@@ -335,7 +338,7 @@ export const invoicesRouter = router({
         .slice(0, 10),
       unmatchedTenders: unmatchedTenders.slice(0, 5).map((t) => ({
         id: t.id,
-        tenderNumber: t.tenderNumber,
+        tenderNumber: t.referenceNumber,
         title: t.title,
         awardedValue: t.awardedValue,
       })),

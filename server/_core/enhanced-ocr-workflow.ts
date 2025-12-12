@@ -3,7 +3,7 @@
  * Improved accuracy, validation, and user experience
  */
 import * as db from "../db";
-import { aiDocumentProcessor } from "./ai-document-processor";
+import { aiDocumentProcessor, type ValidationRule } from "./ai-document-processor";
 
 export interface EnhancedOCRRequest {
   documentId: number;
@@ -139,13 +139,22 @@ class EnhancedOCRWorkflow {
     const extracted =
       await aiDocumentProcessor.processDocument(extractionRequest);
 
-    const data: any = {};
+    const data: Record<string, unknown> = {};
     const confidence: Record<string, number> = {};
 
-    Object.entries(extracted).forEach(([key, value]) => {
-      data[key] = value.value;
-      confidence[key] = value.confidence;
-    });
+    // Handle the DocumentProcessingResult
+    if (extracted.extractedData) {
+      Object.entries(extracted.extractedData).forEach(([key, value]) => {
+        if (typeof value === "object" && value !== null && "value" in value) {
+          const typedValue = value as { value: unknown; confidence: number };
+          data[key] = typedValue.value;
+          confidence[key] = typedValue.confidence ?? extracted.confidence ?? 0;
+        } else {
+          data[key] = value;
+          confidence[key] = extracted.confidence ?? 0;
+        }
+      });
+    }
 
     return { data, confidence };
   }
@@ -229,7 +238,7 @@ class EnhancedOCRWorkflow {
           break;
       }
     } catch (error) {
-      errors.push(`Auto-population failed: ${error.message}`);
+      errors.push(`Auto-population failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     return { autoPopulated, errors };

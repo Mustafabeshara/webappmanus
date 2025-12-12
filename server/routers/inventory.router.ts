@@ -73,7 +73,12 @@ export const inventoryRouter = router({
   update: protectedMutationProcedure
     .input(inventorySchemas.update)
     .mutation(async ({ input }) => {
-      const { id, ...data } = input;
+      const { id, expiryDate, ...rest } = input;
+      // Convert string date to Date object if provided
+      const data = {
+        ...rest,
+        expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+      };
       await db.updateInventory(id, data);
       return { success: true };
     }),
@@ -91,21 +96,22 @@ export const inventoryRouter = router({
     const productMap = new Map(products.map(p => [p.id, p]));
 
     // Transform inventory data for AI analysis
+    // getAllInventory returns joined data with renamed fields:
+    // currentStock (not quantity), reorderLevel (not minStockLevel)
     const itemsForAnalysis = inventoryItems.map(inv => {
-      const product = productMap.get(inv.productId);
       return {
         id: inv.id,
-        productId: inv.productId,
-        productName: product?.name || `Product #${inv.productId}`,
-        productSku: product?.sku || `SKU-${inv.productId}`,
-        category: product?.category || undefined,
-        quantity: inv.quantity,
-        minStockLevel: inv.minStockLevel || 10,
-        maxStockLevel: inv.maxStockLevel || undefined,
-        unitPrice: product?.price || undefined,
+        productId: inv.id, // product id from joined result
+        productName: inv.name || `Product #${inv.id}`,
+        productSku: inv.sku || `SKU-${inv.id}`,
+        category: inv.category || undefined,
+        quantity: inv.currentStock ?? 0,
+        minStockLevel: inv.reorderLevel ?? 10,
+        maxStockLevel: inv.maxStockLevel ?? undefined,
+        unitPrice: inv.unitPrice ?? undefined,
         expiryDate: inv.expiryDate || null,
         location: inv.location || undefined,
-        lastRestocked: inv.updatedAt || null,
+        lastRestocked: inv.lastRestocked || null,
       };
     });
 

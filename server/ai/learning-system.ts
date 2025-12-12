@@ -135,7 +135,7 @@ class LearningStore {
         return `cs-${this.normalizeValue(correction.originalValue)}-${this.normalizeValue(correction.correctedValue)}`;
 
       case "price_prediction": {
-        const priceRange = this.getPriceRange(correction.correctedValue);
+        const priceRange = this.getPriceRange(Number(correction.correctedValue) || 0);
         return `pp-${this.normalizeValue(correction.context["category"] ?? "any")}-${priceRange}`;
       }
 
@@ -215,7 +215,9 @@ class LearningStore {
       // Extract suggestion from examples
       if (pattern.examples.length > 0) {
         const recentExample = pattern.examples.at(-1);
-        suggestions.push(recentExample.expected);
+        if (recentExample) {
+          suggestions.push(recentExample.expected);
+        }
       }
     }
 

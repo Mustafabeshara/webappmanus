@@ -925,6 +925,7 @@ template by ID
       case "supplier":
         await db.createSupplier({
           name: formData.name,
+          code: formData.code || `SUP-${Date.now()}`, // Generate code if not provided
           taxId: formData.taxId,
           contactPerson: formData.contactPerson,
           email: formData.email,

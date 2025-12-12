@@ -481,3 +481,13 @@ export function resetCircuitBreaker(providerName?: string): void {
     circuitBreakerRegistry.resetAll();
   }
 }
+
+/**
+ * Check if AI is configured with at least one provider
+ */
+export function isAIConfigured(): boolean {
+  return getAvailableProviders().length > 0;
+}
+
+// Re-export getAvailableProviders from config
+export { getAvailableProviders } from "./config";

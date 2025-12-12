@@ -84,7 +84,8 @@ export const aiRouter = router({
       }
 
       // Get inventory data
-      const inventory = await db.getInventoryByProduct(input.productId);
+      const inventoryItems = await db.getInventoryByProduct(input.productId);
+      const inventory = inventoryItems[0]; // Get first inventory record
 
       // Get sales history (from invoices, tenders, etc.)
       // For now, we'll create mock sales data - in production, this would come from actual sales records
@@ -99,9 +100,9 @@ export const aiRouter = router({
         category: product.category || undefined,
         unitPrice: product.unitPrice || 0,
         salesHistory,
-        currentInventory: inventory?.quantity || 0,
-        minStockLevel: inventory?.minStockLevel || 0,
-        maxStockLevel: inventory?.maxStockLevel || undefined,
+        currentInventory: inventory?.quantity ?? 0,
+        minStockLevel: inventory?.minStockLevel ?? 0,
+        maxStockLevel: inventory?.maxStockLevel ?? undefined,
         leadTimeDays: 14, // Default lead time
       };
 
@@ -144,7 +145,8 @@ export const aiRouter = router({
 
       const productsData = await Promise.all(
         products.map(async (product: any) => {
-          const inventory = await db.getInventoryByProduct(product.id);
+          const inventoryItems = await db.getInventoryByProduct(product.id);
+          const inventory = inventoryItems[0]; // Get first inventory record
           const salesHistory = await generateSalesHistoryFromData(product.id);
 
           return {
@@ -154,9 +156,9 @@ export const aiRouter = router({
             category: product.category || undefined,
             unitPrice: product.unitPrice || 0,
             salesHistory,
-            currentInventory: inventory?.quantity || 0,
-            minStockLevel: inventory?.minStockLevel || 0,
-            maxStockLevel: inventory?.maxStockLevel || undefined,
+            currentInventory: inventory?.quantity ?? 0,
+            minStockLevel: inventory?.minStockLevel ?? 0,
+            maxStockLevel: inventory?.maxStockLevel ?? undefined,
             leadTimeDays: 14,
           };
         })

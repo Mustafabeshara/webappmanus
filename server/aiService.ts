@@ -33,6 +33,7 @@ interface ExtractionResult<T = JsonRecord> {
 }
 
 interface InvoiceRegexResult {
+  [key: string]: string | number | null | InvoiceLineItem[];
   invoiceNumber: string | null;
   invoiceDate: string | null;
   dueDate: string | null;

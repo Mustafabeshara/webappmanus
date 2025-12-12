@@ -9,11 +9,17 @@ export interface TaskInput {
   title: string;
   description?: string;
   assignedTo?: number;
-  dueDate?: string;
+  assigneeId?: number; // Alias for assignedTo
+  dueDate?: string | Date;
   priority: "low" | "medium" | "high" | "urgent";
+  status?: "todo" | "in_progress" | "review" | "done";
   linkedModule?: string;
   linkedEntityId?: number;
   workflowInstanceId?: number;
+  estimatedHours?: number;
+  category?: string;
+  tags?: string[];
+  createdBy?: number;
 }
 
 export interface WorkflowTemplate {
@@ -353,17 +359,33 @@ export const DOCUMENT_WORKFLOW_TEMPLATES: Record<
 class TaskManagementService {
   /**
    * Create a new task
+   * @param input - Task input data
+   * @param _dependencies - Optional dependencies (for workflow integration, currently unused)
+   * @param createdByUserId - ID of user creating the task
    */
-  async createTask(input: TaskInput) {
+  async createTask(
+    input: TaskInput,
+    _dependencies?: number[] | Array<{
+      dependsOnTaskId: number;
+      dependencyType: "finish_to_start" | "start_to_start" | "finish_to_finish" | "start_to_finish";
+      lagDays?: number;
+      isBlocking?: boolean;
+    }>,
+    createdByUserId?: number
+  ) {
+    const assignee = input.assignedTo ?? input.assigneeId ?? null;
+    const createdBy = createdByUserId ?? input.createdBy ?? 0;
+
     const task = await db.createTask({
       title: input.title,
       description: input.description || null,
-      assignedTo: input.assignedTo || null,
+      assignedTo: assignee,
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
       priority: input.priority,
-      status: "todo",
-      linkedModule: input.linkedModule || null,
-      linkedEntityId: input.linkedEntityId || null,
+      status: "todo" as const,
+      relatedEntityType: input.linkedModule || null,
+      relatedEntityId: input.linkedEntityId || null,
+      createdBy,
     });
 
     // If this task is part of a workflow instance, update the instance
@@ -377,24 +399,34 @@ class TaskManagementService {
   /**
    * Update task status with workflow progression
    */
-  async updateTaskStatus(taskId: number, status: string, userId: number) {
+  async updateTaskStatus(
+    taskId: number,
+    status: "todo" | "in_progress" | "review" | "completed" | "cancelled" | "done",
+    userId: number,
+    completionNotes?: string
+  ) {
     const task = await db.getTaskById(taskId);
     if (!task) {
       throw new Error("Task not found");
     }
 
-    const updatedTask = await db.updateTask(taskId, { status });
+    // Map "done" to "completed" for database consistency
+    const dbStatus = status === "done" ? "completed" : status;
+    const updatedTask = await db.updateTask(taskId, { status: dbStatus as "todo" | "in_progress" | "review" | "completed" | "cancelled" });
 
     // Add activity log
+    const comment = completionNotes
+      ? `Status changed from ${task.status} to ${dbStatus}. Notes: ${completionNotes}`
+      : `Status changed from ${task.status} to ${dbStatus}`;
     await db.createTaskComment({
       taskId,
       userId,
-      content: `Status changed from ${task.status} to ${status}`,
+      content: comment,
       isSystemComment: true,
     });
 
     // Check if task completion triggers workflow progression
-    if (status === "done" && task.linkedModule) {
+    if (dbStatus === "completed" && task.relatedEntityType) {
       await this.checkWorkflowProgression(task);
     }
 
@@ -404,12 +436,18 @@ class TaskManagementService {
   /**
    * Create a workflow template
    */
-  async createWorkflowTemplate(input: WorkflowTemplate) {
+  async createWorkflowTemplate(
+    input: WorkflowTemplate | { name: string; description?: string; category?: string; steps?: unknown[] },
+    _createdByUserId?: number
+  ) {
     // Store workflow template - in a real implementation, this would be a database table
     // For now, we'll use a simple JSON storage approach
     const template = {
       id: Date.now(),
-      ...input,
+      name: input.name,
+      description: input.description ?? "",
+      steps: "steps" in input ? input.steps : [],
+      triggers: "triggers" in input ? (input as WorkflowTemplate).triggers : [],
       createdAt: new Date().toISOString(),
     };
 
@@ -419,11 +457,21 @@ class TaskManagementService {
 
   /**
    * Start a workflow instance from a template
+   * Supports both (templateId, context) and (templateId, entityType, entityId, name, userId) signatures
    */
   async startWorkflowInstance(
     templateId: number,
-    context: Record<string, any>
+    entityTypeOrContext: string | Record<string, unknown>,
+    entityId?: number,
+    name?: string,
+    _userId?: number
   ) {
+    // Build context from either format
+    const context: Record<string, unknown> =
+      typeof entityTypeOrContext === "string"
+        ? { entityType: entityTypeOrContext, entityId, name }
+        : entityTypeOrContext;
+
     // In a full implementation, this would:
     // 1. Load the template
     // 2. Create an instance record
@@ -474,8 +522,8 @@ class TaskManagementService {
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + cumulativeDays + step.dueInDays);
 
-      // Get assignee from context or null
-      const assignedTo = context.assignees?.[step.assigneeRole] || null;
+      // Get assignee from context or undefined
+      const assignedTo = context.assignees?.[step.assigneeRole] ?? undefined;
 
       const requiredDocsText = step.requiredDocuments?.length
         ? `Required documents: ${step.requiredDocuments.join(", ")}`
@@ -493,6 +541,7 @@ class TaskManagementService {
         linkedModule: context.entityType,
         linkedEntityId: context.entityId,
         workflowInstanceId,
+        createdBy: context.createdBy,
       });
 
       tasks.push({

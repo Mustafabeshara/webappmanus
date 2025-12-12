@@ -519,6 +519,58 @@ export async function addCmsFollowup(entry: typeof cmsFollowups.$inferInsert) {
   return { insertId: getInsertId(result) };
 }
 
+export async function checkPermission(
+  userId: number,
+  module: string,
+  action: "view" | "create" | "edit" | "approve"
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const permissions = await db
+    .select()
+    .from(userPermissions)
+    .where(
+      and(
+        eq(userPermissions.userId, userId),
+        eq(userPermissions.module, module)
+      )
+    )
+    .limit(1);
+
+  if (permissions.length === 0) return false;
+
+  const perm = permissions[0];
+  switch (action) {
+    case "view":
+      return perm.canView;
+    case "create":
+      return perm.canCreate;
+    case "edit":
+      return perm.canEdit;
+    case "approve":
+      return perm.canApprove;
+    default:
+      return false;
+  }
+}
+
+export async function addRequirementItem(
+  item: typeof requirementItems.$inferInsert
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(requirementItems).values(item);
+  return { insertId: getInsertId(result) };
+}
+
+export async function removeRequirementItem(itemId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(requirementItems).where(eq(requirementItems.id, itemId));
+  return { success: true };
+}
+
 // ============================================
 // SUPPLIERS
 // ============================================
@@ -690,17 +742,17 @@ export async function getSupplierDeliveries(
   const db = await getDb();
   if (!db) return [];
 
-  // Get deliveries linked to purchase orders from this supplier
-  const supplierOrders = await getSupplierOrders(supplierId, dateRange);
-  const orderIds = supplierOrders.map(o => o.id);
+  // Note: The deliveries table doesn't have a direct link to suppliers via purchaseOrderId.
+  // Deliveries are linked to customers (customerId), tenders (tenderId), and invoices (invoiceId).
+  // This function would need a schema migration to add purchaseOrderId to deliveries table.
+  // For now, return empty array as the relationship doesn't exist.
+  // If supplier deliveries are needed, consider joining through tenders or invoices.
 
-  if (orderIds.length === 0) return [];
+  // Suppress unused variable warnings
+  void supplierId;
+  void dateRange;
 
-  return db
-    .select()
-    .from(deliveries)
-    .where(inArray(deliveries.purchaseOrderId, orderIds))
-    .orderBy(desc(deliveries.createdAt));
+  return [] as typeof deliveries.$inferSelect[];
 }
 
 export async function findProductByNameOrCode(name: string, code: string) {

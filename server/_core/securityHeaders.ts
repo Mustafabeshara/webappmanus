@@ -84,12 +84,17 @@ function buildCspDirectives(nonce?: string) {
     ...(nonce ? [`'nonce-${nonce}'`] : []),
   ];
 
-  return {
+  const directives = {
     ...base,
     scriptSrc: isProd ? prodScriptSrc : devScriptSrc,
-    // Add script-src-attr to prevent inline event handlers
-    scriptSrcAttr: isProd ? ["'none'"] : undefined,
   };
+
+  // Add script-src-attr to prevent inline event handlers (production only)
+  if (isProd) {
+    return { ...directives, scriptSrcAttr: ["'none'"] as const };
+  }
+
+  return directives;
 }
 
 /**

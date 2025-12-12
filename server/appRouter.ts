@@ -9,7 +9,8 @@
 import { systemRouter } from "./_core/systemRouter";
 import { router } from "./_core/trpc";
 
-// Import all domain routers
+// Import all domain routers from the routers directory
+// Note: We use "./routers/index" explicitly because there's also a routers.ts file
 import {
   authRouter,
   usersRouter,
@@ -42,7 +43,7 @@ import {
   commissionsRouter,
   hrRouter,
   supplierCatalogRouter,
-} from "./routers";
+} from "./routers/index";
 
 /**
  * Main application router that combines all feature routers
