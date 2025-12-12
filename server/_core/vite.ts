@@ -1,8 +1,8 @@
 import express, { type Express } from "express";
-import fs from "fs";
-import { type Server } from "http";
-import crypto from "crypto";
-import path from "path";
+import fs from "node:fs";
+import { type Server } from "node:http";
+import crypto from "node:crypto";
+import path from "node:path";
 
 // Generate a random ID (replacement for nanoid to avoid crypto global issues in bundled code)
 function generateId(length = 10): string {

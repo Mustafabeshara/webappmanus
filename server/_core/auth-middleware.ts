@@ -317,6 +317,6 @@ function getClientIp(req: Request): string {
   }
 
   return (
-    req.connection?.remoteAddress || req.socket?.remoteAddress || "unknown"
+    req.socket?.remoteAddress || "unknown"
   );
 }

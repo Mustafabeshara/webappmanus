@@ -10,7 +10,10 @@ import * as db from "../db";
 // SQL Injection detection patterns
 const SQL_INJECTION_PATTERNS = [
   /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE)\b)/i,
-  /(\b(UNION|OR|AND)\s+\d+\s*=\s*\d+)/i,
+  /(\b(UNION\s+SELECT|UNION|OR|AND)\s+\d+\s*=\s*\d+)/i,
+  /(information_schema\b)/i,
+  /(concat\s*\()/i,
+  /(0x[0-9a-f]+)/i,
   /(--|\/\*|\*\/|;)/,
   /(\b(SCRIPT|JAVASCRIPT|VBSCRIPT|ONLOAD|ONERROR)\b)/i,
   /('|(\\x27)|(\\x2D\\x2D))/i,
@@ -18,13 +21,18 @@ const SQL_INJECTION_PATTERNS = [
 
 // XSS payload detection patterns
 const XSS_PATTERNS = [
-  /<script[^>]*>.*?<\/script>/gi,
-  /<iframe[^>]*>.*?<\/iframe>/gi,
-  /javascript:/gi,
-  /on\w+\s*=/gi,
-  /<img[^>]*src\s*=\s*["']?javascript:/gi,
-  /<object[^>]*>.*?<\/object>/gi,
-  /<embed[^>]*>.*?<\/embed>/gi,
+  /<script[^>]*>[\s\S]*?<\/script>/i,
+  /<iframe[^>]*>[\s\S]*?<\/iframe>/i,
+  /javascript:\s*/i,
+  /on\w+\s*=\s*/i,
+  /<img[^>]*src\s*=\s*["']?javascript:/i,
+  /<object[^>]*>[\s\S]*?<\/object>/i,
+  /<embed[^>]*>[\s\S]*?<\/embed>/i,
+  /eval\s*\(/i,
+  /settimeout\s*\(/i,
+  /&#x3c;\s*script/i,
+  /<img[^>]*onerror\s*=\s*/i,
+  /&#x?[0-9a-f]+;/i,
 ];
 
 export interface ValidationResult {
@@ -93,12 +101,15 @@ class InputValidationService {
     }
 
     // Remove null bytes and control characters
-    let sanitized = input
-      .replace(/\0/g, "")
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+    const sanitizedChars = Array.from(input).filter(char => {
+      const code = char.codePointAt(0) ?? 0;
+      return code >= 32 && code !== 127;
+    });
+
+    let sanitized = sanitizedChars.join("");
 
     // Normalize whitespace
-    sanitized = sanitized.trim().replace(/\s+/g, " ");
+    sanitized = sanitized.trim().replaceAll(/\s+/g, " ");
 
     return sanitized;
   }
@@ -135,21 +146,120 @@ class InputValidationService {
    * Validate file upload
    */
   validateFileUpload(file: {
-    originalname: string;
-    mimetype: string;
-    size: number;
+    originalname?: string;
+    name?: string;
+    mimetype?: string;
+    type?: string;
+    size?: number;
     buffer?: Buffer;
   }): ValidationResult {
     const errors: string[] = [];
 
+    const originalname = file.originalname ?? file.name ?? "";
+    const mimetype = file.mimetype ?? file.type ?? "";
+    const size = file.size ?? 0;
+
+    if (!originalname) {
+      errors.push("File name is required");
+    }
+
     // Check file size (10MB limit)
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
-    if (file.size > MAX_FILE_SIZE) {
+    if (size > MAX_FILE_SIZE) {
       errors.push(
-        `File size ${file.size} exceeds maximum allowed size of ${MAX_FILE_SIZE} bytes`
+        `File size ${size} exceeds maximum allowed size of ${MAX_FILE_SIZE} bytes`
       );
     }
 
+    if (size <= 0) {
+      errors.push("File is empty");
+    }
+    const fileExtension = originalname.includes(".")
+      ? originalname.toLowerCase().substring(originalname.lastIndexOf("."))
+      : "";
+
+    this.validateFileTypeAndMime(fileExtension, mimetype, errors);
+
+    // Check for malicious content in filename
+    if (
+      this.detectSqlInjection(originalname) ||
+      this.detectXssPayload(originalname)
+    ) {
+      errors.push("Malicious content detected in filename");
+    }
+
+    // Basic file content validation
+    if (file.buffer) {
+      const fileHeader = file.buffer.subarray(0, 100).toString("hex");
+
+      // Check for executable file signatures
+      const executableSignatures = [
+        "4d5a", // PE executable
+        "7f454c46", // ELF executable
+        "cafebabe", // Java class file
+      ];
+
+      for (const signature of executableSignatures) {
+        if (fileHeader.startsWith(signature)) {
+          errors.push("Executable file detected");
+          break;
+        }
+      }
+    }
+
+    const isValid = errors.length === 0;
+    return {
+      isValid,
+      errors,
+      sanitizedValue: isValid
+        ? {
+            ...file,
+            originalname: this.sanitizeString(originalname),
+            mimetype,
+            size,
+          }
+        : undefined,
+      fileInfo: isValid ? { isSafe: true } : undefined,
+    };
+  }
+
+  /**
+   * Detect SQL injection attempts
+   */
+  detectSqlInjection(input: string): boolean {
+    if (!input || typeof input !== "string") {
+      return false;
+    }
+
+    const normalizedInput = input.toLowerCase().replaceAll(/\s+/g, " ");
+
+    return SQL_INJECTION_PATTERNS.some(pattern =>
+      pattern.test(normalizedInput)
+    );
+  }
+
+  /**
+   * Detect XSS payload attempts
+   */
+  detectXssPayload(input: string): boolean {
+    if (!input || typeof input !== "string") {
+      return false;
+    }
+
+    const normalized = input.toLowerCase();
+    const decoded = this.decodeHtmlEntities(normalized);
+
+    return XSS_PATTERNS.some(pattern => {
+      pattern.lastIndex = 0;
+      return pattern.test(normalized) || pattern.test(decoded);
+    });
+  }
+
+  private validateFileTypeAndMime(
+    fileExtension: string,
+    mimetype: string,
+    errors: string[]
+  ): void {
     // Check file extension
     const allowedExtensions = [
       ".pdf",
@@ -162,9 +272,6 @@ class InputValidationService {
       ".png",
       ".gif",
     ];
-    const fileExtension = file.originalname
-      .toLowerCase()
-      .substring(file.originalname.lastIndexOf("."));
 
     if (!allowedExtensions.includes(fileExtension)) {
       errors.push(`File extension ${fileExtension} is not allowed`);
@@ -183,74 +290,50 @@ class InputValidationService {
       "image/gif",
     ];
 
-    if (!allowedMimeTypes.includes(file.mimetype)) {
-      errors.push(`MIME type ${file.mimetype} is not allowed`);
+    if (!allowedMimeTypes.includes(mimetype)) {
+      errors.push(`MIME type ${mimetype} is not allowed`);
     }
 
-    // Check for malicious content in filename
-    if (
-      this.detectSqlInjection(file.originalname) ||
-      this.detectXssPayload(file.originalname)
-    ) {
-      errors.push("Malicious content detected in filename");
-    }
-
-    // Basic file content validation
-    if (file.buffer) {
-      const fileHeader = file.buffer.slice(0, 100).toString("hex");
-
-      // Check for executable file signatures
-      const executableSignatures = [
-        "4d5a", // PE executable
-        "7f454c46", // ELF executable
-        "cafebabe", // Java class file
-      ];
-
-      for (const signature of executableSignatures) {
-        if (fileHeader.startsWith(signature)) {
-          errors.push("Executable file detected");
-          break;
-        }
-      }
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      sanitizedValue:
-        errors.length === 0
-          ? {
-              ...file,
-              originalname: this.sanitizeString(file.originalname),
-            }
-          : undefined,
+    // Ensure extension and MIME type align
+    const extensionToMime: Record<string, string[]> = {
+      ".pdf": ["application/pdf"],
+      ".doc": ["application/msword"],
+      ".docx": [
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ],
+      ".xls": ["application/vnd.ms-excel"],
+      ".xlsx": [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ],
+      ".jpg": ["image/jpeg", "image/jpg"],
+      ".jpeg": ["image/jpeg", "image/jpg"],
+      ".png": ["image/png"],
+      ".gif": ["image/gif"],
     };
+
+    const allowedForExt = extensionToMime[fileExtension] ?? [];
+    if (allowedForExt.length > 0 && !allowedForExt.includes(mimetype)) {
+      errors.push(
+        `MIME type ${mimetype} does not match file extension ${fileExtension}`
+      );
+    }
   }
 
-  /**
-   * Detect SQL injection attempts
-   */
-  detectSqlInjection(input: string): boolean {
-    if (!input || typeof input !== "string") {
-      return false;
-    }
-
-    const normalizedInput = input.toLowerCase().replace(/\s+/g, " ");
-
-    return SQL_INJECTION_PATTERNS.some(pattern =>
-      pattern.test(normalizedInput)
-    );
-  }
-
-  /**
-   * Detect XSS payload attempts
-   */
-  detectXssPayload(input: string): boolean {
-    if (!input || typeof input !== "string") {
-      return false;
-    }
-
-    return XSS_PATTERNS.some(pattern => pattern.test(input));
+  private decodeHtmlEntities(value: string): string {
+    return value
+      .replaceAll(/&#(\d+);?/g, (_match, dec) => {
+        const code = Number.parseInt(dec, 10);
+        return Number.isNaN(code) ? "" : String.fromCodePoint(code);
+      })
+      .replaceAll(/&#x([0-9a-f]+);?/gi, (_match, hex) => {
+        const code = Number.parseInt(hex, 16);
+        return Number.isNaN(code) ? "" : String.fromCodePoint(code);
+      })
+      .replaceAll("&lt;", "<")
+      .replaceAll("&gt;", ">")
+      .replaceAll("&quot;", '"')
+      .replaceAll("&apos;", "'")
+      .replaceAll("&amp;", "&");
   }
 
   /**
@@ -265,13 +348,20 @@ class InputValidationService {
   ): Promise<void> {
     try {
       // Create security event in database
+      let eventType:
+        | "sql_injection_attempt"
+        | "xss_attempt"
+        | "suspicious_activity";
+      if (threat.type === "sql_injection") {
+        eventType = "sql_injection_attempt";
+      } else if (threat.type === "xss") {
+        eventType = "xss_attempt";
+      } else {
+        eventType = "suspicious_activity";
+      }
+
       await db.createSecurityEvent({
-        type:
-          threat.type === "sql_injection"
-            ? "sql_injection_attempt"
-            : threat.type === "xss"
-              ? "xss_attempt"
-              : "suspicious_activity",
+        type: eventType,
         severity: threat.severity,
         description: threat.description,
         details: JSON.stringify({ input: threat.input }),
@@ -401,11 +491,11 @@ export const commonSchemas = {
       .min(1, "Field is required")
       .max(maxLength, `Field must be ${maxLength} characters or less`)
       .refine(
-        (val) => !inputValidationService.detectSqlInjection(val),
+        val => !inputValidationService.detectSqlInjection(val),
         "Invalid characters detected"
       )
       .refine(
-        (val) => !inputValidationService.detectXssPayload(val),
+        val => !inputValidationService.detectXssPayload(val),
         "Invalid content detected"
       ),
 
@@ -415,11 +505,11 @@ export const commonSchemas = {
       .string()
       .max(maxLength, `Field must be ${maxLength} characters or less`)
       .refine(
-        (val) => !val || !inputValidationService.detectSqlInjection(val),
+        val => !val || !inputValidationService.detectSqlInjection(val),
         "Invalid characters detected"
       )
       .refine(
-        (val) => !val || !inputValidationService.detectXssPayload(val),
+        val => !val || !inputValidationService.detectXssPayload(val),
         "Invalid content detected"
       )
       .optional(),
@@ -427,10 +517,10 @@ export const commonSchemas = {
   // Email validation
   email: z
     .string()
-    .email({ message: "Invalid email format" })
+    .regex(/^[^@\s]+@[^@\s]+\.[^@\s]+$/, "Invalid email format")
     .max(320, "Email must be 320 characters or less")
     .refine(
-      (val) => !inputValidationService.detectSqlInjection(val),
+      val => !inputValidationService.detectSqlInjection(val),
       "Invalid characters detected"
     ),
 

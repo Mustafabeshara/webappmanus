@@ -24,12 +24,26 @@ describe("XSS Prevention - Property Tests", () => {
         "javascript:alert('XSS')",
         "eval('alert(1)')",
         "&#x41;",
+        "<svg onload=alert('1')>",
+        "<iframe srcdoc=\"<script>alert('xss')</script>\"></iframe>",
+        "JaVaScRiPt:\nalert('1')",
+        "&amp;#x3c;script&amp;#x3e;alert(1)&amp;#x3c;/script&amp;#x3e;",
       ];
 
       knownXssVectors.forEach(vector => {
         const isDetected = inputValidationService.detectXssPayload(vector);
         expect(isDetected).toBe(true);
       });
+    });
+
+    it("should remain stateless across sequential detections", () => {
+      const malicious = "<script>alert('XSS')</script>";
+      const safe = "<p>hello</p>";
+
+      expect(inputValidationService.detectXssPayload(malicious)).toBe(true);
+      expect(inputValidationService.detectXssPayload(safe)).toBe(false);
+      // Re-check malicious to ensure no regex lastIndex bleed
+      expect(inputValidationService.detectXssPayload(malicious)).toBe(true);
     });
 
     it("should use property testing for safe content verification", () => {
@@ -65,20 +79,24 @@ describe("XSS Prevention - Property Tests", () => {
             fc.constant("Normal text without HTML")
           ),
           content => {
-            // Sanitization should work without throwing for safe content
-            expect(() => {
-              const sanitized = inputValidationService.sanitizeHtml(content);
-              expect(typeof sanitized).toBe("string");
+            const sanitized = inputValidationService.sanitizeHtml(content);
+            expect(typeof sanitized).toBe("string");
 
-              // Sanitized content should not contain dangerous patterns
-              expect(sanitized).not.toMatch(/<script/i);
-              expect(sanitized).not.toMatch(/javascript:/i);
-              expect(sanitized).not.toMatch(/onerror/i);
-            }).not.toThrow();
+            // Sanitized content should not contain dangerous patterns
+            expect(sanitized).not.toMatch(/<script/i);
+            expect(sanitized).not.toMatch(/javascript:/i);
+            expect(sanitized).not.toMatch(/onerror/i);
           }
         ),
         { numRuns: 50 }
       );
+    });
+
+    it("should sanitize idempotently", () => {
+      const dirty = "<script>alert('x')</script><p>ok</p>";
+      const once = inputValidationService.sanitizeHtml(dirty);
+      const twice = inputValidationService.sanitizeHtml(once);
+      expect(twice).toBe(once);
     });
 
     it("should verify XSS detection across different input types", () => {
@@ -93,11 +111,11 @@ describe("XSS Prevention - Property Tests", () => {
           }),
           xssInputs => {
             // All XSS inputs should be detected
-            Object.values(xssInputs).forEach(xssInput => {
+            for (const xssInput of Object.values(xssInputs)) {
               const isDetected =
                 inputValidationService.detectXssPayload(xssInput);
               expect(isDetected).toBe(true);
-            });
+            }
           }
         ),
         { numRuns: 20 }
@@ -134,11 +152,11 @@ describe("XSS Prevention - Property Tests", () => {
           }),
           safeInputs => {
             // All safe inputs should not be detected as XSS
-            Object.values(safeInputs).forEach(safeInput => {
+            for (const safeInput of Object.values(safeInputs)) {
               const isDetected =
                 inputValidationService.detectXssPayload(safeInput);
               expect(isDetected).toBe(false);
-            });
+            }
           }
         ),
         { numRuns: 50 }
@@ -157,21 +175,15 @@ describe("XSS Prevention - Property Tests", () => {
             fc.constant("   ")
           ),
           edgeInput => {
-            // Should not throw for edge case inputs
-            expect(() => {
-              const isDetected = inputValidationService.detectXssPayload(
-                edgeInput as any
-              );
-              expect(typeof isDetected).toBe("boolean");
-            }).not.toThrow();
+            const isDetected = inputValidationService.detectXssPayload(
+              edgeInput as any
+            );
+            expect(typeof isDetected).toBe("boolean");
 
-            // Sanitization should also handle edge cases
-            expect(() => {
-              const sanitized = inputValidationService.sanitizeHtml(
-                edgeInput as any
-              );
-              expect(typeof sanitized).toBe("string");
-            }).not.toThrow();
+            const sanitized = inputValidationService.sanitizeHtml(
+              edgeInput as any
+            );
+            expect(typeof sanitized).toBe("string");
           }
         ),
         { numRuns: 20 }

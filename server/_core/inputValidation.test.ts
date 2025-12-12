@@ -25,7 +25,11 @@ describe("Input Validation Service - Property Tests", () => {
             fc.constant("UNION SELECT * FROM users"),
             fc.constant("information_schema.tables"),
             fc.constant("CONCAT('a', 'b')"),
-            fc.constant("0x41424344")
+            fc.constant("0x41424344"),
+            fc.constant("admin'/**/OR/**/1=1--"),
+            fc.constant("1' or '1' = '1'; --"),
+            fc.constant("abc'; DROP TABLE users; --"),
+            fc.constant("1; SELECT pg_sleep(5);")
           ),
           maliciousInput => {
             const isDetected =
@@ -33,7 +37,105 @@ describe("Input Validation Service - Property Tests", () => {
             expect(isDetected).toBe(true);
           }
         ),
-        { numRuns: 20 }
+        { numRuns: 40 }
+      );
+    });
+
+    it("should catch SQL injection with inline comments and stacking", () => {
+      const cases = [
+        "admin'/**/OR/**/'1'='1",
+        "test'; SELECT * FROM users; --",
+        "1; DROP TABLE users;",
+        "name' OR 1/*comment*/=/*comment*/1 --",
+        "' UNION SELECT username, password FROM users --",
+      ];
+
+      cases.forEach(payload => {
+        const isDetected = inputValidationService.detectSqlInjection(payload);
+        expect(isDetected).toBe(true);
+      });
+    });
+
+    it("should fuzz SQL injection variants with spacing, comments, and stacking", () => {
+      const spacing = fc.constantFrom(
+        " ",
+        "\t",
+        "\n",
+        "/**/",
+        " /* */ ",
+        "%0a"
+      );
+      const commentTail = fc.constantFrom(
+        "--",
+        ";--",
+        ";",
+        "%3B",
+        "#",
+        "/*c*/"
+      );
+      const stacked = fc.constantFrom(
+        "DROP TABLE users",
+        "SELECT pg_sleep(1)",
+        "INSERT INTO logs values ('x')",
+        "UPDATE accounts SET role='admin'"
+      );
+      const tautology = fc.constantFrom("1=1", "1 = 1", "TRUE", "true", "1!=0");
+      const op = fc.constantFrom("OR", "or", "Or", "oR");
+      const prefix = fc.constantFrom("admin'", "'abc", "foo'");
+
+      fc.assert(
+        fc.property(
+          fc.record({ prefix, spacing, op, tautology, commentTail, stacked }),
+          ({ prefix, spacing, op, tautology, commentTail, stacked }) => {
+            const payload = `${prefix}${spacing}${op}${spacing}${tautology}${commentTail}${spacing}${stacked}${commentTail}`;
+            const isDetected =
+              inputValidationService.detectSqlInjection(payload);
+            expect(isDetected).toBe(true);
+          }
+        ),
+        { numRuns: 60 }
+      );
+    });
+
+    it("should not flag benign phrases containing SQL-like words", () => {
+      const safePhrases = [
+        "pick your character",
+        "combine two sets in math",
+        "logical words like and or not",
+        "add a coin to play",
+        "choose your adventure",
+      ];
+
+      safePhrases.forEach(phrase => {
+        const isDetected = inputValidationService.detectSqlInjection(phrase);
+        expect(isDetected).toBe(false);
+      });
+    });
+
+    it("should not flag randomly composed benign phrases", () => {
+      const safeWords = [
+        "sunshine",
+        "mountain",
+        "river",
+        "canvas",
+        "melody",
+        "garden",
+        "puzzle",
+        "harmony",
+        "lantern",
+        "acorn",
+      ];
+
+      const safePhrasesArb = fc
+        .array(fc.constantFrom(...safeWords), { minLength: 3, maxLength: 8 })
+        .map(words => words.join(" "));
+
+      fc.assert(
+        fc.property(safePhrasesArb, phrase => {
+          const isDetected = inputValidationService.detectSqlInjection(phrase);
+          expect(isDetected).toBe(false);
+        }),
+        { numRuns: 60 }
       );
     });
 
@@ -45,7 +147,12 @@ describe("Input Validation Service - Property Tests", () => {
             fc.constant("user123"),
             fc.constant("Product Name"),
             fc.constant("Description text"),
-            fc.constant("Normal input")
+            fc.constant("Normal input"),
+            fc.constant("selectively chosen words"),
+            fc.constant("unicorn and dragon"),
+            fc.constant("melody over rhythm"),
+            fc.constant("flowers in spring"),
+            fc.constant("sunrise over mountains")
           ),
           safeInput => {
             expect(inputValidationService.detectSqlInjection(safeInput)).toBe(
@@ -77,10 +184,8 @@ describe("Input Validation Service - Property Tests", () => {
             fc.constant("<em>Italic text</em>")
           ),
           htmlInput => {
-            expect(() => {
-              const sanitized = inputValidationService.sanitizeHtml(htmlInput);
-              expect(typeof sanitized).toBe("string");
-            }).not.toThrow();
+            const sanitized = inputValidationService.sanitizeHtml(htmlInput);
+            expect(typeof sanitized).toBe("string");
           }
         ),
         { numRuns: 30 }
@@ -138,6 +243,18 @@ describe("Input Validation Service - Property Tests", () => {
         ),
         { numRuns: 10 }
       );
+    });
+
+    it("should reject spoofed MIME and extension mismatches", () => {
+      const mismatched = {
+        name: "report.pdf",
+        size: 2048,
+        type: "image/png",
+      };
+
+      const result = inputValidationService.validateFileUpload(mismatched);
+      expect(result.isValid).toBe(false);
+      expect(result.errors?.some(e => e.includes("MIME"))).toBe(true);
     });
   });
 

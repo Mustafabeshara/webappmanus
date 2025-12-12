@@ -26,31 +26,36 @@ interface ExtractionResult {
  * OCR with fallback chain
  */
 export async function performOCR(imageUrl: string): Promise<OCRResult> {
-  // Try free OCR.space first
-  try {
-    const response = await axios.post(
-      'https://api.ocr.space/parse/imageurl',
-      new URLSearchParams({
-        url: imageUrl,
-        apikey: 'helloworld', // Free tier API key
-        language: 'eng',
-        isOverlayRequired: 'false',
-      }),
-      {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        timeout: 30000,
-      }
-    );
+  // Try OCR.space first if API key is configured
+  const ocrSpaceKey = process.env.OCR_SPACE_API_KEY;
+  if (ocrSpaceKey) {
+    try {
+      const response = await axios.post(
+        'https://api.ocr.space/parse/imageurl',
+        new URLSearchParams({
+          url: imageUrl,
+          apikey: ocrSpaceKey,
+          language: 'eng',
+          isOverlayRequired: 'false',
+        }),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 30000,
+        }
+      );
 
-    if (response.data?.ParsedResults?.[0]?.ParsedText) {
-      return {
-        text: response.data.ParsedResults[0].ParsedText,
-        success: true,
-        provider: 'ocr.space',
-      };
+      if (response.data?.ParsedResults?.[0]?.ParsedText) {
+        return {
+          text: response.data.ParsedResults[0].ParsedText,
+          success: true,
+          provider: 'ocr.space',
+        };
+      }
+    } catch (error) {
+      console.warn('[OCR] OCR.space failed, trying fallback:', error);
     }
-  } catch (error) {
-    console.warn('[OCR] OCR.space failed, trying fallback:', error);
+  } else {
+    console.warn('[OCR] OCR_SPACE_API_KEY not set; skipping OCR.space and using fallback.');
   }
 
   // Fallback: Use LLM vision capabilities for OCR
@@ -78,7 +83,7 @@ export async function performOCR(imageUrl: string): Promise<OCRResult> {
 
     const content = llmResponse.choices[0]?.message?.content;
     const extractedText = typeof content === 'string' ? content : '';
-    
+
     return {
       text: extractedText,
       success: true,
@@ -124,7 +129,7 @@ Extract the following information and return it as a JSON object:
 Return ONLY the JSON object, no additional text. If a field is not found, use null or empty string/array.`;
 
   const providers = ['groq', 'gemini', 'anthropic'];
-  
+
   for (const provider of providers) {
     try {
       const response = await invokeLLM({
@@ -176,7 +181,7 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
       if (!content || typeof content !== 'string') continue;
 
       const data = JSON.parse(content);
-      
+
       // Generate confidence scores (simplified - in production, use actual model confidence)
       const confidence: Record<string, number> = {};
       Object.keys(data).forEach(key => {
@@ -691,7 +696,7 @@ Extract the following information and return it as a JSON object:
 Return ONLY the JSON object, no additional text. If a field is not found, use null or empty string.`;
 
   const providers = ['groq', 'gemini', 'anthropic'];
-  
+
   for (const provider of providers) {
     try {
       const response = await invokeLLM({
@@ -705,7 +710,7 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
       if (!content || typeof content !== 'string') continue;
 
       const data = JSON.parse(content);
-      
+
       const confidence: Record<string, number> = {};
       Object.keys(data).forEach(key => {
         if (data[key] !== null && data[key] !== '') {
@@ -753,9 +758,9 @@ Return predictions as a JSON array with this structure:
     const response = await invokeLLM({
       messages: [
         { role: 'system', content: systemPrompt },
-        { 
-          role: 'user', 
-          content: `Historical ${type} data:\n${JSON.stringify(historicalData, null, 2)}\n\nGenerate forecasts for the next 6 months.` 
+        {
+          role: 'user',
+          content: `Historical ${type} data:\n${JSON.stringify(historicalData, null, 2)}\n\nGenerate forecasts for the next 6 months.`
         },
       ],
     });
@@ -793,9 +798,9 @@ If no anomalies are found, return an empty array.`;
     const response = await invokeLLM({
       messages: [
         { role: 'system', content: systemPrompt },
-        { 
-          role: 'user', 
-          content: `Context: ${context}\n\nData to analyze:\n${JSON.stringify(data, null, 2)}` 
+        {
+          role: 'user',
+          content: `Context: ${context}\n\nData to analyze:\n${JSON.stringify(data, null, 2)}`
         },
       ],
     });
@@ -834,9 +839,9 @@ Return analysis as a JSON object:
     const response = await invokeLLM({
       messages: [
         { role: 'system', content: systemPrompt },
-        { 
-          role: 'user', 
-          content: `Tender history:\n${JSON.stringify(tenderHistory, null, 2)}` 
+        {
+          role: 'user',
+          content: `Tender history:\n${JSON.stringify(tenderHistory, null, 2)}`
         },
       ],
     });
@@ -1237,8 +1242,8 @@ Return ONLY the JSON object.`;
  * Generic extraction helper function
  */
 async function genericExtraction(
-  documentText: string, 
-  systemPrompt: string, 
+  documentText: string,
+  systemPrompt: string,
   extractionType: string
 ): Promise<ExtractionResult> {
   const providers = ['groq', 'gemini', 'anthropic'];
@@ -1269,7 +1274,7 @@ async function genericExtraction(
         if (data[key] !== null && data[key] !== '' &&
             !(Array.isArray(data[key]) && data[key].length === 0)) {
           // Higher confidence for key identification fields
-          const keyFields = ['certificateNumber', 'registrationNumber', 'vatNumber', 'crNumber', 
+          const keyFields = ['certificateNumber', 'registrationNumber', 'vatNumber', 'crNumber',
                            'fdaNumber', 'sfdaNumber', 'companyName', 'manufacturerName'];
           if (keyFields.includes(key)) {
             confidence[key] = 0.9;

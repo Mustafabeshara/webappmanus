@@ -1,8 +1,7 @@
 import "dotenv/config";
 import express from "express";
-import { createServer } from "http";
-import net from "net";
-import path from "path";
+import { createServer } from "node:http";
+import net from "node:net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
@@ -78,7 +77,7 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
+  const preferredPort = Number.parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
 
   if (port !== preferredPort) {
