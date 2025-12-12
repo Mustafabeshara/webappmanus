@@ -52,6 +52,7 @@ export interface TaskAnalyticsInput {
 interface TenderDeadlineOptions {
   horizonDays?: number;
   reminderWindows?: number[]; // days before deadline to create reminders
+  notify?: boolean; // send notifications to tender owner
 }
 
 // =============================================================================
@@ -587,6 +588,7 @@ class TaskManagementService {
   async ensureTenderDeadlineTasks(options: TenderDeadlineOptions = {}) {
     const horizonDays = options.horizonDays ?? 30;
     const reminderWindows = options.reminderWindows ?? [14, 7, 3, 1];
+    const notify = options.notify ?? true;
 
     const now = new Date();
     const horizonEnd = new Date();
@@ -597,6 +599,7 @@ class TaskManagementService {
 
     for (const tender of tenders) {
       if (!tender.submissionDeadline) continue;
+      if (["closed", "archived"].includes(tender.status || "")) continue;
 
       const existingTasks = await db.getTasksByEntity("tender", tender.id);
       const existingTitles = new Set(
@@ -609,7 +612,8 @@ class TaskManagementService {
 
         if (reminderDate < now) continue;
 
-        const title = `Tender ${tender.referenceNumber || tender.title} closes in ${window} days`;
+        const marker = `[#tender-${tender.id}-d${window}]`;
+        const title = `${marker} Tender ${tender.referenceNumber || tender.title} closes in ${window} days`;
         if (existingTitles.has(title.toLowerCase())) continue;
 
         await db.createTask({
@@ -624,6 +628,18 @@ class TaskManagementService {
           dueDate: tender.submissionDeadline,
           createdBy: tender.createdBy ?? 1,
         });
+
+        if (notify && tender.createdBy) {
+          await db.createNotification({
+            userId: tender.createdBy,
+            type: "deadline",
+            title: "Tender deadline reminder created",
+            message: `${title}\nDeadline: ${tender.submissionDeadline.toISOString()}`,
+            entityType: "tender",
+            entityId: tender.id,
+            priority: window <= 3 ? "high" : "normal",
+          });
+        }
 
         tasksCreated += 1;
       }

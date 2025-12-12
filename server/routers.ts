@@ -5411,6 +5411,22 @@ export const appRouter = router({
 
         return await taskManagementService.getTaskAnalytics(input);
       }),
+
+    generateTenderDeadlineReminders: protectedMutationProcedure
+      .input(
+        z.object({
+          horizonDays: z.number().min(1).max(180).optional(),
+          reminderWindows: z.array(z.number().min(1).max(120)).optional(),
+          notify: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { taskManagementService } = await import(
+          "./_core/taskManagement"
+        );
+
+        return taskManagementService.ensureTenderDeadlineTasks(input);
+      }),
   }),
 
   // ============================================
