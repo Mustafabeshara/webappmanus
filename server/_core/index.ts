@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { getStorageDirectory } from "../storage";
 import { getDb } from "../db";
 import { configureSecurityHeaders } from "./securityHeaders";
+import { runSecurityMigration } from "./security-migration";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -32,6 +33,14 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // Run security migration to ensure database has required columns
+  try {
+    await runSecurityMigration();
+  } catch (error) {
+    console.error("[Startup] Security migration failed:", error);
+    // Continue startup - migration may have partially succeeded or columns may already exist
+  }
 
   // Configure security headers (Helmet)
   configureSecurityHeaders(app);
