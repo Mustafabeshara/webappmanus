@@ -2,6 +2,8 @@ import { createHmac } from "crypto";
 import type { Request } from "express";
 import * as db from "../db";
 import { ENV } from "./env";
+// Import for Express Request augmentation side effects
+import "../types/db";
 
 /**
  * Enhanced Audit Logging Service - Task 3.4, 10.1, 10.2, 10.3
@@ -367,8 +369,8 @@ class AuditLoggingService {
 
       res.send = function (data: any) {
         const duration = Date.now() - startTime;
-        const userId = (req as any).userId;
-        const sessionId = (req as any).sessionId;
+        const userId = req.userId;
+        const sessionId = req.sessionId;
 
         // Only log state-changing operations and sensitive endpoints
         const shouldLog =

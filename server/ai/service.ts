@@ -1,9 +1,11 @@
 /**
  * AI Service Manager
- * Handles the fallback chain for AI providers with rate limiting
+ * Handles the fallback chain for AI providers with rate limiting, circuit breaker, and structured logging
  */
 
 import { AI_CONFIG, AIProviderConfig, TASK_MODELS, getAvailableProviders } from './config';
+import { getCircuitBreaker, circuitBreakerRegistry, type CircuitBreakerStats } from '../_core/circuit-breaker';
+import { logAIRequest, logAIError } from '../_core/ai-logger';
 
 export interface AIRequest {
   prompt: string;
@@ -221,10 +223,38 @@ async function callOpenAI(config: AIProviderConfig, request: AIRequest): Promise
 }
 
 /**
- * Call a specific AI provider
+ * Call a specific AI provider with circuit breaker protection and structured logging
  */
-async function callProvider(provider: AIProviderConfig, request: AIRequest): Promise<AIResponse> {
+async function callProvider(
+  provider: AIProviderConfig,
+  request: AIRequest,
+  taskType?: string
+): Promise<AIResponse> {
   const startTime = Date.now();
+  const circuitBreaker = getCircuitBreaker(provider.name);
+  const cbState = circuitBreaker.getStats().state;
+
+  // Check if circuit breaker allows requests
+  if (!circuitBreaker.canExecute()) {
+    const stats = circuitBreaker.getStats();
+
+    // Log circuit breaker rejection
+    logAIError({
+      provider: provider.name,
+      error: `Circuit breaker is open for ${provider.name}. Service temporarily unavailable.`,
+      errorType: 'circuit_breaker',
+      context: { failures: stats.totalFailures, state: stats.state },
+    });
+
+    return {
+      success: false,
+      content: '',
+      provider: provider.name,
+      model: provider.model,
+      error: `Circuit breaker is open for ${provider.name}. Service temporarily unavailable.`,
+      latency: 0,
+    };
+  }
 
   try {
     let response: AIResponse;
@@ -246,13 +276,62 @@ async function callProvider(provider: AIProviderConfig, request: AIRequest): Pro
     response.latency = Date.now() - startTime;
     incrementRateLimits(provider.name);
 
-    console.log(`[AI] ${provider.name} completed in ${response.latency}ms`);
+    // Record success with circuit breaker
+    circuitBreaker.onSuccess();
+
+    // Log successful request with structured metrics
+    logAIRequest({
+      provider: provider.name,
+      model: provider.model,
+      taskType,
+      latencyMs: response.latency,
+      success: true,
+      tokens: response.usage ? {
+        prompt: response.usage.promptTokens,
+        completion: response.usage.completionTokens,
+        total: response.usage.totalTokens,
+      } : undefined,
+      cached: false,
+      circuitBreakerState: cbState,
+    });
+
     return response;
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-    console.error(`[AI] ${provider.name} failed:`, errorMessage);
+    // Record failure with circuit breaker
+    circuitBreaker.onFailure();
+
+    // Determine error type for structured logging
+    let errorType: 'rate_limit' | 'timeout' | 'api_error' | 'unknown' = 'unknown';
+    if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+      errorType = 'rate_limit';
+    } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+      errorType = 'timeout';
+    } else if (errorMessage.includes('API error') || errorMessage.includes('status')) {
+      errorType = 'api_error';
+    }
+
+    // Log failed request with structured metrics
+    logAIRequest({
+      provider: provider.name,
+      model: provider.model,
+      taskType,
+      latencyMs: latency,
+      success: false,
+      error: errorMessage,
+      cached: false,
+      circuitBreakerState: cbState,
+    });
+
+    logAIError({
+      provider: provider.name,
+      error: errorMessage,
+      errorType,
+      context: { latencyMs: latency, taskType },
+    });
+
     return {
       success: false,
       content: '',
@@ -291,7 +370,18 @@ function getProvidersForTask(taskType?: keyof typeof TASK_MODELS): AIProviderCon
 export async function complete(request: AIRequest): Promise<AIResponse> {
   // Check cache first
   const cached = getCachedResponse(request);
-  if (cached) return cached;
+  if (cached) {
+    // Log cache hit
+    logAIRequest({
+      provider: cached.provider.replace(' (cached)', ''),
+      model: cached.model,
+      taskType: request.taskType,
+      latencyMs: 0,
+      success: true,
+      cached: true,
+    });
+    return cached;
+  }
 
   // Get available providers for this task
   const providers = getProvidersForTask(request.taskType);
@@ -321,10 +411,11 @@ export async function complete(request: AIRequest): Promise<AIResponse> {
 
   // Try each provider with retries
   const errors: string[] = [];
+  const taskType = request.taskType;
 
   for (const provider of eligibleProviders) {
     for (let attempt = 0; attempt < AI_CONFIG.retryAttempts; attempt++) {
-      const response = await callProvider(provider, request);
+      const response = await callProvider(provider, request, taskType);
 
       if (response.success) {
         cacheResponse(request, response);
@@ -349,11 +440,16 @@ export async function complete(request: AIRequest): Promise<AIResponse> {
 }
 
 /**
- * Get AI service status
+ * Get AI service status including circuit breaker states
  */
 export function getAIStatus(): {
   configured: boolean;
-  providers: Array<{ name: string; available: boolean; model: string }>;
+  providers: Array<{
+    name: string;
+    available: boolean;
+    model: string;
+    circuitBreaker: CircuitBreakerStats;
+  }>;
 } {
   const available = getAvailableProviders();
 
@@ -363,6 +459,25 @@ export function getAIStatus(): {
       name: p.name,
       available: available.some(a => a.name === p.name),
       model: p.model,
+      circuitBreaker: getCircuitBreaker(p.name).getStats(),
     })),
   };
+}
+
+/**
+ * Get circuit breaker statistics for all AI providers
+ */
+export function getCircuitBreakerStats(): Record<string, CircuitBreakerStats> {
+  return circuitBreakerRegistry.getAllStats();
+}
+
+/**
+ * Reset circuit breaker for a specific provider or all providers
+ */
+export function resetCircuitBreaker(providerName?: string): void {
+  if (providerName) {
+    getCircuitBreaker(providerName).reset();
+  } else {
+    circuitBreakerRegistry.resetAll();
+  }
 }

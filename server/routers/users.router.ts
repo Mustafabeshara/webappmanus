@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { adminProcedure, router } from "../_core/trpc";
+import { adminProcedure, adminMutationProcedure, router } from "../_core/trpc";
 import { idSchema, userSchemas } from "../_core/validationSchemas";
 import * as db from "../db";
 

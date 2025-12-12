@@ -1,0 +1,8 @@
+# Authentication state files (contain sensitive session data)
+.auth/
+
+# Playwright artifacts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/

@@ -4,17 +4,47 @@
  * Configures Helmet middleware for comprehensive HTTP security headers.
  * Protects against common web vulnerabilities like XSS, clickjacking,
  * content sniffing, and other attacks.
+ *
+ * Security features:
+ * - Content Security Policy (CSP) with nonce support
+ * - HSTS for HTTPS enforcement
+ * - Frame protection against clickjacking
+ * - XSS and content sniffing protection
  */
 
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import helmet from "helmet";
+import crypto from "crypto";
+// Import for Express Request augmentation side effects
+import "../types/db";
+
+/**
+ * Generate a cryptographically secure nonce for CSP
+ */
+export function generateNonce(): string {
+  return crypto.randomBytes(16).toString("base64");
+}
+
+/**
+ * Middleware to generate and attach CSP nonce to request/response
+ */
+export function nonceMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  const nonce = generateNonce();
+  res.locals.cspNonce = nonce;
+  req.cspNonce = nonce;
+  next();
+}
 
 /**
  * Build Content Security Policy directives
  * - Development: allow inline/eval for Vite HMR convenience
- * - Production: remove unsafe-inline/unsafe-eval for stronger XSS protection
+ * - Production: use strict CSP with nonce support for inline scripts
  */
-function buildCspDirectives() {
+function buildCspDirectives(nonce?: string) {
   const isProd = process.env.NODE_ENV === "production";
   const base = {
     defaultSrc: ["'self'"],
@@ -44,15 +74,21 @@ function buildCspDirectives() {
     "https://cdn.jsdelivr.net",
     "https://unpkg.com",
   ];
+
+  // Production uses strict CSP with optional nonce
   const prodScriptSrc = [
     "'self'",
+    "'strict-dynamic'", // Allows scripts loaded by trusted scripts
     "https://cdn.jsdelivr.net",
     "https://unpkg.com",
+    ...(nonce ? [`'nonce-${nonce}'`] : []),
   ];
 
   return {
     ...base,
     scriptSrc: isProd ? prodScriptSrc : devScriptSrc,
+    // Add script-src-attr to prevent inline event handlers
+    scriptSrcAttr: isProd ? ["'none'"] : undefined,
   };
 }
 
@@ -62,14 +98,21 @@ function buildCspDirectives() {
 export function configureSecurityHeaders(app: Express): void {
   const isDev = process.env.NODE_ENV !== "production";
 
-  // Main Helmet configuration
-  app.use(
-    helmet({
+  // Add nonce middleware for CSP in production
+  if (!isDev) {
+    app.use(nonceMiddleware);
+  }
+
+  // Main Helmet configuration with dynamic CSP based on nonce
+  app.use((req, res, next) => {
+    const nonce = res.locals.cspNonce;
+
+    const helmetMiddleware = helmet({
       // Content Security Policy
       contentSecurityPolicy: isDev
         ? false // Disable in development for easier debugging
         : {
-            directives: buildCspDirectives(),
+            directives: buildCspDirectives(nonce),
             reportOnly: false,
           },
 
@@ -117,8 +160,11 @@ export function configureSecurityHeaders(app: Express): void {
 
       // XSS Filter (deprecated but still useful for older browsers)
       xssFilter: true,
-    })
-  );
+    });
+
+    // Execute helmet middleware
+    helmetMiddleware(req, res, next);
+  });
 
   // Additional custom security headers
   app.use((req, res, next) => {

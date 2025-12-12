@@ -2,6 +2,8 @@ import type { NextFunction, Request, Response } from "express";
 import { createHmac, randomBytes } from "node:crypto";
 import { ENV } from "./env";
 import { createSecurityEvent } from "./input-validation";
+// Import for Express Request augmentation side effects
+import "../types/db";
 
 /**
  * CSRF Protection Service - Task 1.4
@@ -168,7 +170,7 @@ class CsrfProtectionService {
 
       try {
         // Get session ID from request (assuming it's available from auth middleware)
-        const sessionId = (req as any).sessionId;
+        const sessionId = req.sessionId;
         if (!sessionId) {
           return res.status(401).json({ error: "No active session" });
         }
@@ -216,7 +218,7 @@ class CsrfProtectionService {
             "x-csrf-token": req.headers["x-csrf-token"],
           },
         }),
-        userId: (req as any).userId,
+        userId: req.userId,
         ipAddress: this.getClientIp(req),
         userAgent: req.headers["user-agent"],
         endpoint: `${req.method} ${req.path}`,

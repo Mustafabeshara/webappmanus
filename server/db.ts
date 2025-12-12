@@ -12,6 +12,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { getInsertId } from "./types/db";
 import {
   InsertUser,
   anomalies,
@@ -379,7 +380,7 @@ export async function createRequirementRequest(
     ...request,
     totalValue,
   });
-  const requestId = Number((result as any).insertId);
+  const requestId = getInsertId(result);
 
   if (items.length > 0 && requestId) {
     for (const item of items) {
@@ -481,7 +482,7 @@ export async function addCommitteeApproval(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [result] = await db.insert(committeeApprovals).values(approval);
-  return { insertId: (result as any).insertId };
+  return { insertId: getInsertId(result) };
 }
 
 export async function upsertCmsCase(
@@ -508,14 +509,14 @@ export async function upsertCmsCase(
     ...data,
     requestId,
   });
-  return Number((result as any).insertId);
+  return getInsertId(result);
 }
 
 export async function addCmsFollowup(entry: typeof cmsFollowups.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [result] = await db.insert(cmsFollowups).values(entry);
-  return { insertId: (result as any).insertId };
+  return { insertId: getInsertId(result) };
 }
 
 // ============================================
@@ -601,7 +602,7 @@ export async function createSupplierPrice(
   if (!db) throw new Error("Database not available");
 
   const [result] = await db.insert(supplierPrices).values(data);
-  return Number((result as any).insertId);
+  return getInsertId(result);
 }
 
 export async function createPriceHistory(
@@ -611,7 +612,7 @@ export async function createPriceHistory(
   if (!db) throw new Error("Database not available");
 
   const [result] = await db.insert(priceHistory).values(data);
-  return { insertId: (result as any).insertId };
+  return { insertId: getInsertId(result) };
 }
 
 export async function getProductSupplierPrices(productId: number) {
@@ -656,7 +657,7 @@ export async function createProductSpecification(
   if (!db) throw new Error("Database not available");
 
   const [result] = await db.insert(productSpecifications).values(data);
-  return { insertId: (result as any).insertId };
+  return { insertId: getInsertId(result) };
 }
 
 export async function getSupplierOrders(
@@ -1198,6 +1199,26 @@ export async function getAllExpenses() {
   return db.select().from(expenses).orderBy(desc(expenses.createdAt));
 }
 
+export async function getExpensesPaginated(page: number, pageSize: number) {
+  const db = await getDb();
+  if (!db) return { data: [], totalCount: 0 };
+
+  const offset = (page - 1) * pageSize;
+
+  const [data, countResult] = await Promise.all([
+    db
+      .select()
+      .from(expenses)
+      .orderBy(desc(expenses.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db.select({ count: sql<number>`count(*)` }).from(expenses),
+  ]);
+
+  const totalCount = countResult[0]?.count ?? 0;
+  return { data, totalCount };
+}
+
 export async function getExpenseById(id: number) {
   const db = await getDb();
   if (!db) return null;
@@ -1215,7 +1236,7 @@ export async function createExpense(expense: typeof expenses.$inferInsert) {
   if (!db) throw new Error("Database not available");
 
   const [result] = await db.insert(expenses).values(expense);
-  return { insertId: (result as any).insertId };
+  return { insertId: getInsertId(result) };
 }
 
 export async function updateExpense(
@@ -1644,7 +1665,7 @@ export async function createFile(file: typeof files.$inferInsert) {
   if (!db) throw new Error("Database not available");
 
   const result = await db.insert(files).values(file);
-  return { id: Number((result as any)[0]?.insertId ?? 0), ...file };
+  return { id: getInsertId(result), ...file };
 }
 
 export async function getFileById(id: number) {
@@ -1721,7 +1742,7 @@ export async function createFileVersion(file: typeof files.$inferInsert) {
   if (!db) throw new Error("Database not available");
 
   const result = await db.insert(files).values(file);
-  return { id: Number((result as any)[0]?.insertId ?? 0), ...file };
+  return { id: getInsertId(result), ...file };
 }
 
 export async function markFileAsReplaced(fileId: number) {
@@ -1798,7 +1819,7 @@ export async function createPurchaseOrder(
   if (!db) throw new Error("Database not available");
 
   const result = await db.insert(purchaseOrders).values(po);
-  const poId = Number((result as any)[0]?.insertId ?? 0);
+  const poId = getInsertId(result);
 
   if (items.length > 0) {
     const itemsWithPoId = items.map(item => ({
@@ -1879,7 +1900,7 @@ export async function createTask(task: typeof tasks.$inferInsert) {
   if (!db) throw new Error("Database not available");
 
   const result = await db.insert(tasks).values(task);
-  return { id: Number((result as any)[0]?.insertId ?? 0), ...task };
+  return { id: getInsertId(result), ...task };
 }
 
 export async function updateTask(
@@ -1910,7 +1931,7 @@ export async function createTaskDependency(
   if (!db) throw new Error("Database not available");
 
   const [result] = await db.insert(taskDependencies).values(dependency);
-  return { insertId: (result as any).insertId };
+  return { insertId: getInsertId(result) };
 }
 
 export async function getTaskDependencies(taskId: number) {
@@ -1941,7 +1962,7 @@ export async function createWorkflowTemplate(
   if (!db) throw new Error("Database not available");
 
   const [result] = await db.insert(workflowTemplates).values(template);
-  return Number((result as any).insertId);
+  return getInsertId(result);
 }
 
 export async function getWorkflowTemplateById(id: number) {
@@ -1975,7 +1996,7 @@ export async function createWorkflowStep(
   if (!db) throw new Error("Database not available");
 
   const [result] = await db.insert(workflowSteps).values(step);
-  return { insertId: (result as any).insertId };
+  return { insertId: getInsertId(result) };
 }
 
 export async function getWorkflowSteps(templateId: number) {
@@ -1996,7 +2017,7 @@ export async function createWorkflowInstance(
   if (!db) throw new Error("Database not available");
 
   const [result] = await db.insert(workflowInstances).values(instance);
-  return Number((result as any).insertId);
+  return getInsertId(result);
 }
 
 export async function updateWorkflowInstance(
@@ -2105,7 +2126,7 @@ export async function createTaskEscalation(
   if (!db) throw new Error("Database not available");
 
   const [result] = await db.insert(taskEscalations).values(escalation);
-  return { insertId: (result as any).insertId };
+  return { insertId: getInsertId(result) };
 }
 
 export async function resolveTaskEscalation(
@@ -2188,7 +2209,7 @@ export async function createOpportunity(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [result] = await db.insert(opportunities).values(opp);
-  return { id: Number((result as any).insertId), ...opp };
+  return { id: getInsertId(result), ...opp };
 }
 
 export async function updateOpportunity(
@@ -2219,7 +2240,7 @@ export async function createCommissionRule(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [result] = await db.insert(commissionRules).values(rule);
-  return { id: Number((result as any).insertId), ...rule };
+  return { id: getInsertId(result), ...rule };
 }
 
 export async function listCommissionAssignments() {
@@ -2237,7 +2258,7 @@ export async function createCommissionAssignment(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [result] = await db.insert(commissionAssignments).values(assign);
-  return { id: Number((result as any).insertId), ...assign };
+  return { id: getInsertId(result), ...assign };
 }
 
 export async function listCommissionEntries() {
@@ -2255,7 +2276,7 @@ export async function createCommissionEntry(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [result] = await db.insert(commissionEntries).values(entry);
-  return { id: Number((result as any).insertId), ...entry };
+  return { id: getInsertId(result), ...entry };
 }
 
 export async function updateCommissionEntry(
@@ -2284,7 +2305,7 @@ export async function createEmployee(emp: typeof employees.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [result] = await db.insert(employees).values(emp);
-  return { id: Number((result as any).insertId), ...emp };
+  return { id: getInsertId(result), ...emp };
 }
 
 export async function updateEmployee(
@@ -2308,7 +2329,7 @@ export async function createLeaveRequest(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [result] = await db.insert(leaveRequests).values(req);
-  return { id: Number((result as any).insertId), ...req };
+  return { id: getInsertId(result), ...req };
 }
 
 export async function updateLeaveRequest(

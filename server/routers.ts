@@ -345,6 +345,10 @@ async function generateSalesHistoryFromData(productId: number) {
     // Get invoice items for this product (if we have invoice line items)
     const invoices = await db.getAllInvoices();
 
+    // FIXED: Fetch product ONCE before the loop to avoid N+1 query issue
+    const product = await db.getProductById(productId);
+    const unitPrice = product?.unitPrice || 10000; // Default $100
+
     // Generate some synthetic sales data based on historical patterns
     // This would be replaced with actual sales records in production
     const now = new Date();
@@ -358,10 +362,6 @@ async function generateSalesHistoryFromData(productId: number) {
         1,
         Math.round(baseQuantity + variance + (Math.random() * 10 - 5))
       );
-
-      // Get product price
-      const product = await db.getProductById(productId);
-      const unitPrice = product?.unitPrice || 10000; // Default $100
 
       salesHistory.push({
         date: monthDate,

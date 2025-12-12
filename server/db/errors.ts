@@ -4,6 +4,27 @@
  */
 
 /**
+ * MySQL error interface for type-safe error checking
+ */
+interface MySqlError extends Error {
+  code?: string;
+  errno?: number;
+  sqlMessage?: string;
+  sqlState?: string;
+}
+
+/**
+ * Type guard to check if error has MySQL error code
+ */
+function hasMySqlCode(error: unknown): error is MySqlError {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    typeof (error as MySqlError).code === "string"
+  );
+}
+
+/**
  * Custom database error class for better error categorization
  */
 export class DatabaseError extends Error {
@@ -32,8 +53,12 @@ export type DatabaseErrorCode =
  */
 export function isDuplicateKeyError(error: unknown): boolean {
   if (error instanceof Error) {
-    return error.message.includes("Duplicate entry") ||
-           (error as any).code === "ER_DUP_ENTRY";
+    if (error.message.includes("Duplicate entry")) {
+      return true;
+    }
+    if (hasMySqlCode(error)) {
+      return error.code === "ER_DUP_ENTRY";
+    }
   }
   return false;
 }
@@ -43,9 +68,15 @@ export function isDuplicateKeyError(error: unknown): boolean {
  */
 export function isConstraintError(error: unknown): boolean {
   if (error instanceof Error) {
-    return error.message.includes("foreign key constraint") ||
-           (error as any).code === "ER_NO_REFERENCED_ROW_2" ||
-           (error as any).code === "ER_ROW_IS_REFERENCED_2";
+    if (error.message.includes("foreign key constraint")) {
+      return true;
+    }
+    if (hasMySqlCode(error)) {
+      return (
+        error.code === "ER_NO_REFERENCED_ROW_2" ||
+        error.code === "ER_ROW_IS_REFERENCED_2"
+      );
+    }
   }
   return false;
 }

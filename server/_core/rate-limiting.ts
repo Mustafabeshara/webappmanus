@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import * as db from "../db";
 import { createSecurityEvent } from "./input-validation";
+// Import for Express Request augmentation side effects
+import "../types/db";
 
 /**
  * Rate Limiting Service - Task 7.1, 7.2, 7.3
@@ -65,7 +67,7 @@ class RateLimitingService {
   private getRateLimitConfig(req: Request): RateLimitConfig {
     const path = req.path;
     const method = req.method;
-    const isAuthenticated = !!(req as any).userId;
+    const isAuthenticated = !!req.userId;
 
     // API endpoints have stricter limits
     if (path.startsWith("/api/")) {
@@ -212,7 +214,7 @@ class RateLimitingService {
           violations: entry.violations,
           penaltyUntil: entry.penaltyUntil,
         }),
-        userId: (req as any).userId,
+        userId: req.userId,
         ipAddress: key,
         userAgent: req.headers["user-agent"],
         endpoint: `${req.method} ${req.path}`,
