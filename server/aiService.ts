@@ -8,19 +8,66 @@ import { invokeLLM } from "./_core/llm";
  * OCR: Free OCR.space → Paid OCR fallback
  */
 
+type JsonRecord = Record<string, unknown>;
+
+interface InvoiceLineItem {
+  description?: string;
+  quantity?: number;
+  unitPriceCents?: number;
+  totalCents?: number;
+}
+
 interface OCRResult {
   text: string;
   success: boolean;
   provider: string;
 }
 
-interface ExtractionResult {
+interface ExtractionResult<T = JsonRecord> {
   success: boolean;
-  data: any;
+  data: T;
   confidence: Record<string, number>;
   provider: string;
   ocrProvider?: string;
   errors?: string[];
+}
+
+interface InvoiceRegexResult {
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  dueDate: string | null;
+  supplierName: string | null;
+  totalAmount: number | null;
+  items: InvoiceLineItem[];
+}
+
+interface ForecastPoint {
+  period: string;
+  predictedValue: number;
+  confidence: number;
+}
+
+interface ForecastInputPoint {
+  period: string;
+  value: number;
+}
+
+interface AnomalyFinding {
+  type: "expense_outlier" | "trend_shift" | "missed_deadline" | "other";
+  severity: "low" | "medium" | "high" | "critical";
+  description: string;
+  explanation: string;
+  entityId: number;
+}
+
+type AnalyzableRow = Record<string, string | number | boolean | null>;
+
+interface TenderWinRateAnalysis {
+  winRate: number;
+  averageWinningBid: number;
+  competitorInsights: string;
+  pricingRecommendations: string;
+  riskFactors: string[];
 }
 
 function isPrivateIpv4(ip: string): boolean {
@@ -430,8 +477,8 @@ IMPORTANT:
 /**
  * Regex-based invoice extraction fallback
  */
-function extractInvoiceWithRegex(text: string): any {
-  const data: any = {
+function extractInvoiceWithRegex(text: string): InvoiceRegexResult {
+  const data: InvoiceRegexResult = {
     invoiceNumber: null,
     invoiceDate: null,
     dueDate: null,
@@ -678,7 +725,7 @@ IMPORTANT:
         );
         // Higher confidence if products have specifications
         const withSpecs = data.products.filter(
-          (p: any) =>
+          (p: { specifications?: Record<string, unknown> }) =>
             p.specifications && Object.keys(p.specifications).length > 0
         ).length;
         if (withSpecs > 0) {
@@ -879,9 +926,9 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
  * Generate business forecast using AI
  */
 export async function generateForecast(
-  historicalData: any[],
+  historicalData: ForecastInputPoint[],
   type: string
-): Promise<any> {
+): Promise<ForecastPoint[]> {
   const systemPrompt = `You are an AI assistant specialized in business forecasting.
 Analyze the historical data and generate forecasts for the next 6 months.
 Return predictions as a JSON array with this structure:
@@ -907,7 +954,7 @@ Return predictions as a JSON array with this structure:
     const content = response.choices[0]?.message?.content;
     if (!content || typeof content !== "string") return [];
 
-    return JSON.parse(content);
+    return JSON.parse(content) as ForecastPoint[];
   } catch (error) {
     console.error("[AI] Forecast generation failed:", error);
     return [];
@@ -918,9 +965,9 @@ Return predictions as a JSON array with this structure:
  * Detect anomalies using AI
  */
 export async function detectAnomalies(
-  data: any[],
+  data: AnalyzableRow[],
   context: string
-): Promise<any[]> {
+): Promise<AnomalyFinding[]> {
   const systemPrompt = `You are an AI assistant specialized in detecting anomalies and outliers in business data.
 Analyze the data and identify any anomalies, outliers, or unusual patterns.
 Return findings as a JSON array with this structure:
@@ -950,7 +997,7 @@ If no anomalies are found, return an empty array.`;
     const content = response.choices[0]?.message?.content;
     if (!content || typeof content !== "string") return [];
 
-    return JSON.parse(content);
+    return JSON.parse(content) as AnomalyFinding[];
   } catch (error) {
     console.error("[AI] Anomaly detection failed:", error);
     return [];
@@ -960,7 +1007,9 @@ If no anomalies are found, return an empty array.`;
 /**
  * Calculate win rate and pricing analytics for tenders
  */
-export async function analyzeTenderWinRate(tenderHistory: any[]): Promise<any> {
+export async function analyzeTenderWinRate(
+  tenderHistory: ReadonlyArray<JsonRecord>
+): Promise<TenderWinRateAnalysis | null> {
   const systemPrompt = `You are an AI assistant specialized in tender analysis and pricing strategy.
 Analyze the historical tender data and provide insights on:
 1. Win rate percentage
@@ -991,7 +1040,7 @@ Return analysis as a JSON object:
     const content = response.choices[0]?.message?.content;
     if (!content || typeof content !== "string") return null;
 
-    return JSON.parse(content);
+    return JSON.parse(content) as TenderWinRateAnalysis;
   } catch (error) {
     console.error("[AI] Win rate analysis failed:", error);
     return null;

@@ -3,8 +3,8 @@
  * Provides auto-categorization and anomaly detection for expenses
  */
 
-import { complete } from './service';
-import { isAIConfigured } from './config';
+import { isAIConfigured } from "./config";
+import { complete } from "./service";
 
 export interface ExpenseItem {
   id: number;
@@ -34,8 +34,13 @@ export interface AnomalyDetection {
   expenseId: number;
   expenseTitle: string;
   amount: number;
-  anomalyType: 'unusual_amount' | 'duplicate' | 'unusual_timing' | 'unusual_category' | 'potential_fraud';
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  anomalyType:
+    | "unusual_amount"
+    | "duplicate"
+    | "unusual_timing"
+    | "unusual_category"
+    | "potential_fraud";
+  severity: "low" | "medium" | "high" | "critical";
   description: string;
   suggestedAction: string;
   relatedExpenseIds?: number[];
@@ -45,10 +50,10 @@ export interface ExpenseAnalysisResult {
   categorySuggestions: CategorySuggestion[];
   anomalies: AnomalyDetection[];
   insights: Array<{
-    type: 'trend' | 'savings' | 'policy' | 'optimization';
+    type: "trend" | "savings" | "policy" | "optimization";
     title: string;
     description: string;
-    impact: 'high' | 'medium' | 'low';
+    impact: "high" | "medium" | "low";
     suggestedAction?: string;
   }>;
   summary: {
@@ -66,6 +71,12 @@ export interface ExpenseAnalysisResult {
   };
 }
 
+interface AIExpenseAnalysisPayload {
+  categorySuggestions?: CategorySuggestion[];
+  anomalies?: AnomalyDetection[];
+  insights?: ExpenseAnalysisResult["insights"];
+}
+
 export async function analyzeExpenses(
   expenses: ExpenseItem[],
   availableCategories: string[]
@@ -75,13 +86,16 @@ export async function analyzeExpenses(
 
   // Calculate basic statistics
   const amounts = expenses.map(e => e.amount);
-  const avgAmount = amounts.length > 0 ? amounts.reduce((a, b) => a + b, 0) / amounts.length : 0;
+  const avgAmount =
+    amounts.length > 0
+      ? amounts.reduce((a, b) => a + b, 0) / amounts.length
+      : 0;
   const stdDev = calculateStdDev(amounts, avgAmount);
 
   // Group by category
   const categoryGroups = new Map<string, { count: number; total: number }>();
   for (const expense of expenses) {
-    const cat = expense.category || 'Uncategorized';
+    const cat = expense.category || "Uncategorized";
     const existing = categoryGroups.get(cat) || { count: 0, total: 0 };
     categoryGroups.set(cat, {
       count: existing.count + 1,
@@ -101,34 +115,46 @@ export async function analyzeExpenses(
 
       const aiResponse = await complete({
         prompt,
-        systemPrompt: 'You are an expense analysis AI. Return only valid JSON.',
+        systemPrompt: "You are an expense analysis AI. Return only valid JSON.",
       });
 
       if (!aiResponse.success) {
-        throw new Error(aiResponse.error || 'AI request failed');
+        throw new Error(aiResponse.error || "AI request failed");
       }
 
       const cleanContent = aiResponse.content
-        .replaceAll(/```json\n?/g, '')
-        .replaceAll(/```\n?/g, '')
+        .replaceAll(/```json\n?/g, "")
+        .replaceAll(/```\n?/g, "")
         .trim();
 
       const aiResult = JSON.parse(cleanContent);
 
       return buildResult(expenses, totalAmount, categoryGroups, aiResult);
     } catch (error) {
-      console.error('AI expense analysis failed, using fallback:', error);
+      console.error("AI expense analysis failed, using fallback:", error);
     }
   }
 
   // Fallback statistical analysis
-  return buildFallbackResult(expenses, totalAmount, avgAmount, stdDev, categoryGroups, availableCategories);
+  return buildFallbackResult(
+    expenses,
+    totalAmount,
+    avgAmount,
+    stdDev,
+    categoryGroups,
+    availableCategories
+  );
 }
 
 function buildAnalysisPrompt(
   expenses: ExpenseItem[],
   categories: string[],
-  stats: { totalAmount: number; avgAmount: number; stdDev: number; uncategorizedCount: number }
+  stats: {
+    totalAmount: number;
+    avgAmount: number;
+    stdDev: number;
+    uncategorizedCount: number;
+  }
 ): string {
   const sampleExpenses = expenses.slice(0, 20).map(e => ({
     id: e.id,
@@ -142,7 +168,7 @@ function buildAnalysisPrompt(
 
   return `Analyze these expenses for categorization suggestions and anomaly detection.
 
-**Available Categories:** ${categories.join(', ')}
+**Available Categories:** ${categories.join(", ")}
 
 **Expense Statistics:**
 - Total Expenses: ${expenses.length}
@@ -192,18 +218,23 @@ function buildResult(
   expenses: ExpenseItem[],
   totalAmount: number,
   categoryGroups: Map<string, { count: number; total: number }>,
-  aiResult: any
+  aiResult: AIExpenseAnalysisPayload
 ): ExpenseAnalysisResult {
-  const categoryBreakdown = Array.from(categoryGroups.entries()).map(([category, data]) => ({
-    category,
-    count: data.count,
-    totalAmount: data.total,
-    percentOfTotal: totalAmount > 0 ? (data.total / totalAmount) * 100 : 0,
-  })).sort((a, b) => b.totalAmount - a.totalAmount);
+  const categoryBreakdown = Array.from(categoryGroups.entries())
+    .map(([category, data]) => ({
+      category,
+      count: data.count,
+      totalAmount: data.total,
+      percentOfTotal: totalAmount > 0 ? (data.total / totalAmount) * 100 : 0,
+    }))
+    .sort((a, b) => b.totalAmount - a.totalAmount);
 
-  const anomalyCount = aiResult.anomalies?.length || 0;
-  const criticalAnomalies = aiResult.anomalies?.filter((a: any) => a.severity === 'critical').length || 0;
-  const highAnomalies = aiResult.anomalies?.filter((a: any) => a.severity === 'high').length || 0;
+  const anomalies = aiResult.anomalies ?? [];
+  const anomalyCount = anomalies.length;
+  const criticalAnomalies = anomalies.filter(
+    a => a.severity === "critical"
+  ).length;
+  const highAnomalies = anomalies.filter(a => a.severity === "high").length;
 
   // Calculate risk score
   let riskScore = 100;
@@ -214,12 +245,13 @@ function buildResult(
 
   return {
     categorySuggestions: aiResult.categorySuggestions || [],
-    anomalies: aiResult.anomalies || [],
+    anomalies,
     insights: aiResult.insights || [],
     summary: {
       totalExpenses: expenses.length,
       totalAmount,
-      uncategorizedCount: expenses.filter(e => !e.category && !e.categoryId).length,
+      uncategorizedCount: expenses.filter(e => !e.category && !e.categoryId)
+        .length,
       anomalyCount,
       riskScore,
       categoryBreakdown,
@@ -241,7 +273,11 @@ function buildFallbackResult(
   // Suggest categories for uncategorized expenses
   const uncategorized = expenses.filter(e => !e.category && !e.categoryId);
   for (const expense of uncategorized.slice(0, 10)) {
-    const suggestedCategory = suggestCategory(expense.title, expense.description, availableCategories);
+    const suggestedCategory = suggestCategory(
+      expense.title,
+      expense.description,
+      availableCategories
+    );
     categorySuggestions.push({
       expenseId: expense.id,
       suggestedCategory,
@@ -255,15 +291,16 @@ function buildFallbackResult(
   for (const expense of expenses) {
     // Unusual amount detection (more than 2 standard deviations)
     if (expense.amount > avgAmount + 2 * stdDev) {
-      const severity = expense.amount > avgAmount + 3 * stdDev ? 'high' : 'medium';
+      const severity =
+        expense.amount > avgAmount + 3 * stdDev ? "high" : "medium";
       anomalies.push({
         expenseId: expense.id,
         expenseTitle: expense.title,
         amount: expense.amount,
-        anomalyType: 'unusual_amount',
+        anomalyType: "unusual_amount",
         severity,
         description: `Amount $${(expense.amount / 100).toFixed(2)} is significantly higher than average $${(avgAmount / 100).toFixed(2)}`,
-        suggestedAction: 'Review expense and verify legitimacy',
+        suggestedAction: "Review expense and verify legitimacy",
       });
     }
   }
@@ -287,59 +324,71 @@ function buildFallbackResult(
             expenseId: expense.id,
             expenseTitle: expense.title,
             amount: expense.amount,
-            anomalyType: 'duplicate',
-            severity: 'medium',
+            anomalyType: "duplicate",
+            severity: "medium",
             description: `Potential duplicate of "${title}" with similar amount`,
-            suggestedAction: 'Verify this is not a duplicate submission',
-            relatedExpenseIds: group.map(e => e.id).filter(id => id !== expense.id),
+            suggestedAction: "Verify this is not a duplicate submission",
+            relatedExpenseIds: group
+              .map(e => e.id)
+              .filter(id => id !== expense.id),
           });
         }
       }
     }
   }
 
-  const categoryBreakdown = Array.from(categoryGroups.entries()).map(([category, data]) => ({
-    category,
-    count: data.count,
-    totalAmount: data.total,
-    percentOfTotal: totalAmount > 0 ? (data.total / totalAmount) * 100 : 0,
-  })).sort((a, b) => b.totalAmount - a.totalAmount);
+  const categoryBreakdown = Array.from(categoryGroups.entries())
+    .map(([category, data]) => ({
+      category,
+      count: data.count,
+      totalAmount: data.total,
+      percentOfTotal: totalAmount > 0 ? (data.total / totalAmount) * 100 : 0,
+    }))
+    .sort((a, b) => b.totalAmount - a.totalAmount);
 
   const insights = [];
 
   // Add insights based on analysis
   if (uncategorized.length > expenses.length * 0.2) {
     insights.push({
-      type: 'policy' as const,
-      title: 'High Uncategorized Rate',
+      type: "policy" as const,
+      title: "High Uncategorized Rate",
       description: `${uncategorized.length} expenses (${((uncategorized.length / expenses.length) * 100).toFixed(1)}%) are uncategorized. This may indicate a need for clearer categorization guidelines.`,
-      impact: 'medium' as const,
-      suggestedAction: 'Review and categorize uncategorized expenses, consider mandatory category selection',
+      impact: "medium" as const,
+      suggestedAction:
+        "Review and categorize uncategorized expenses, consider mandatory category selection",
     });
   }
 
-  if (categoryBreakdown.length > 0 && categoryBreakdown[0].percentOfTotal > 50) {
+  if (
+    categoryBreakdown.length > 0 &&
+    categoryBreakdown[0].percentOfTotal > 50
+  ) {
     insights.push({
-      type: 'trend' as const,
-      title: 'Category Concentration',
+      type: "trend" as const,
+      title: "Category Concentration",
       description: `${categoryBreakdown[0].category} accounts for ${categoryBreakdown[0].percentOfTotal.toFixed(1)}% of total expenses.`,
-      impact: 'low' as const,
+      impact: "low" as const,
     });
   }
 
   if (anomalies.length > 0) {
     insights.push({
-      type: 'optimization' as const,
-      title: 'Anomalies Detected',
+      type: "optimization" as const,
+      title: "Anomalies Detected",
       description: `${anomalies.length} expense anomalies detected that require review.`,
-      impact: anomalies.some(a => a.severity === 'high' || a.severity === 'critical') ? 'high' as const : 'medium' as const,
-      suggestedAction: 'Review flagged expenses in the anomaly report',
+      impact: anomalies.some(
+        a => a.severity === "high" || a.severity === "critical"
+      )
+        ? ("high" as const)
+        : ("medium" as const),
+      suggestedAction: "Review flagged expenses in the anomaly report",
     });
   }
 
   // Calculate risk score
-  const criticalCount = anomalies.filter(a => a.severity === 'critical').length;
-  const highCount = anomalies.filter(a => a.severity === 'high').length;
+  const criticalCount = anomalies.filter(a => a.severity === "critical").length;
+  const highCount = anomalies.filter(a => a.severity === "high").length;
   let riskScore = 100;
   riskScore -= criticalCount * 20;
   riskScore -= highCount * 10;
@@ -361,37 +410,57 @@ function buildFallbackResult(
   };
 }
 
-function suggestCategory(title: string, description: string | null | undefined, categories: string[]): string {
-  const text = `${title} ${description || ''}`.toLowerCase();
+function suggestCategory(
+  title: string,
+  description: string | null | undefined,
+  categories: string[]
+): string {
+  const text = `${title} ${description || ""}`.toLowerCase();
 
   // Simple keyword matching
   const categoryKeywords: Record<string, string[]> = {
-    'Travel': ['travel', 'flight', 'hotel', 'transportation', 'taxi', 'uber', 'airline'],
-    'Office Supplies': ['office', 'supplies', 'paper', 'printer', 'stationery'],
-    'Software': ['software', 'subscription', 'license', 'app', 'saas'],
-    'Equipment': ['equipment', 'hardware', 'computer', 'laptop', 'phone'],
-    'Marketing': ['marketing', 'advertising', 'campaign', 'promotion'],
-    'Professional Services': ['consulting', 'legal', 'accounting', 'professional'],
-    'Utilities': ['utility', 'electric', 'water', 'internet', 'phone bill'],
-    'Maintenance': ['maintenance', 'repair', 'cleaning', 'service'],
-    'Training': ['training', 'course', 'education', 'conference', 'seminar'],
-    'Medical': ['medical', 'healthcare', 'pharmacy', 'hospital'],
+    Travel: [
+      "travel",
+      "flight",
+      "hotel",
+      "transportation",
+      "taxi",
+      "uber",
+      "airline",
+    ],
+    "Office Supplies": ["office", "supplies", "paper", "printer", "stationery"],
+    Software: ["software", "subscription", "license", "app", "saas"],
+    Equipment: ["equipment", "hardware", "computer", "laptop", "phone"],
+    Marketing: ["marketing", "advertising", "campaign", "promotion"],
+    "Professional Services": [
+      "consulting",
+      "legal",
+      "accounting",
+      "professional",
+    ],
+    Utilities: ["utility", "electric", "water", "internet", "phone bill"],
+    Maintenance: ["maintenance", "repair", "cleaning", "service"],
+    Training: ["training", "course", "education", "conference", "seminar"],
+    Medical: ["medical", "healthcare", "pharmacy", "hospital"],
   };
 
   for (const [category, keywords] of Object.entries(categoryKeywords)) {
     if (keywords.some(keyword => text.includes(keyword))) {
       // Check if this category exists in available categories
-      const matchedCategory = categories.find(c => c.toLowerCase().includes(category.toLowerCase()));
+      const matchedCategory = categories.find(c =>
+        c.toLowerCase().includes(category.toLowerCase())
+      );
       if (matchedCategory) return matchedCategory;
     }
   }
 
-  return categories[0] || 'General';
+  return categories[0] || "General";
 }
 
 function calculateStdDev(values: number[], mean: number): number {
   if (values.length === 0) return 0;
   const squaredDiffs = values.map(v => Math.pow(v - mean, 2));
-  const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / values.length;
+  const avgSquaredDiff =
+    squaredDiffs.reduce((a, b) => a + b, 0) / values.length;
   return Math.sqrt(avgSquaredDiff);
 }

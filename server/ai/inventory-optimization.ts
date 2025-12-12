@@ -3,7 +3,7 @@
  * Demand forecasting, reorder recommendations, and stock optimization
  */
 
-import { complete } from './service';
+import { complete } from "./service";
 
 export interface InventoryItem {
   id: number;
@@ -26,7 +26,7 @@ export interface OptimizationResult {
     next3Months: number;
     next6Months: number;
     confidence: number;
-    trend: 'increasing' | 'decreasing' | 'stable' | 'seasonal';
+    trend: "increasing" | "decreasing" | "stable" | "seasonal";
   };
   reorderRecommendations: Array<{
     productId: number;
@@ -35,7 +35,7 @@ export interface OptimizationResult {
     currentStock: number;
     reorderPoint: number;
     suggestedOrderQty: number;
-    urgency: 'critical' | 'high' | 'medium' | 'low';
+    urgency: "critical" | "high" | "medium" | "low";
     estimatedCost: number;
     reason: string;
   }>;
@@ -51,7 +51,7 @@ export interface OptimizationResult {
       productId: number;
       productName: string;
       shortfallQty: number;
-      riskLevel: 'high' | 'medium' | 'low';
+      riskLevel: "high" | "medium" | "low";
       recommendation: string;
     }>;
     expiringItems: Array<{
@@ -64,10 +64,10 @@ export interface OptimizationResult {
     }>;
   };
   insights: Array<{
-    type: 'opportunity' | 'risk' | 'recommendation' | 'trend';
+    type: "opportunity" | "risk" | "recommendation" | "trend";
     title: string;
     description: string;
-    impact: 'high' | 'medium' | 'low';
+    impact: "high" | "medium" | "low";
     actionable: boolean;
   }>;
   metrics: {
@@ -97,22 +97,24 @@ export async function analyzeInventory(
 
   // Identify critical items
   const criticalItems = inventoryItems.filter(
-    (inv) => inv.quantity <= inv.minStockLevel
+    inv => inv.quantity <= inv.minStockLevel
   );
 
   const lowStockItems = inventoryItems.filter(
-    (inv) => inv.quantity <= inv.minStockLevel * 1.5 && inv.quantity > inv.minStockLevel
+    inv =>
+      inv.quantity <= inv.minStockLevel * 1.5 &&
+      inv.quantity > inv.minStockLevel
   );
 
   const overstockItems = inventoryItems.filter(
-    (inv) => inv.maxStockLevel && inv.quantity > inv.maxStockLevel
+    inv => inv.maxStockLevel && inv.quantity > inv.maxStockLevel
   );
 
   // Items expiring within 30 days
   const thirtyDaysFromNow = new Date();
   thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
   const expiringItems = inventoryItems.filter(
-    (inv) => inv.expiryDate && new Date(inv.expiryDate) <= thirtyDaysFromNow
+    inv => inv.expiryDate && new Date(inv.expiryDate) <= thirtyDaysFromNow
   );
 
   // Build AI prompt
@@ -142,11 +144,14 @@ Return ONLY valid JSON matching the exact structure requested. No markdown, no e
       systemPrompt,
       maxTokens: 4000,
       temperature: 0.3,
-      taskType: 'analysis',
+      taskType: "analysis",
     });
 
     if (!response.success) {
-      console.warn('[Inventory AI] AI analysis failed, using fallback:', response.error);
+      console.warn(
+        "[Inventory AI] AI analysis failed, using fallback:",
+        response.error
+      );
       return generateFallbackOptimization(
         inventoryItems,
         criticalItems,
@@ -159,13 +164,13 @@ Return ONLY valid JSON matching the exact structure requested. No markdown, no e
 
     try {
       const cleanContent = response.content
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
+        .replaceAll("```json\n", "")
+        .replaceAll("```", "")
         .trim();
       const parsed = JSON.parse(cleanContent);
       return validateAndNormalizeResult(parsed);
     } catch (parseError) {
-      console.warn('[Inventory AI] Failed to parse AI response:', parseError);
+      console.warn("[Inventory AI] Failed to parse AI response:", parseError);
       return generateFallbackOptimization(
         inventoryItems,
         criticalItems,
@@ -176,7 +181,7 @@ Return ONLY valid JSON matching the exact structure requested. No markdown, no e
       );
     }
   } catch (error) {
-    console.error('[Inventory AI] Error:', error);
+    console.error("[Inventory AI] Error:", error);
     return generateFallbackOptimization(
       inventoryItems,
       criticalItems,
@@ -209,23 +214,42 @@ function buildOptimizationPrompt(
 - Expiring Soon (30 days): ${expiringItems.length} items
 
 **Critical Items (Below Minimum Stock):**
-${criticalItems.slice(0, 10).map((inv) => `
+${criticalItems
+  .slice(0, 10)
+  .map(
+    inv => `
 - ${inv.productName} (${inv.productSku})
   Stock: ${inv.quantity} / Min: ${inv.minStockLevel}
-  Category: ${inv.category || 'General'}
+  Category: ${inv.category || "General"}
   Unit Price: $${((inv.unitPrice || 0) / 100).toFixed(2)}
-`).join('')}
+`
+  )
+  .join("")}
 
 **Overstocked Items:**
-${overstockItems.slice(0, 5).map((inv) => `
+${
+  overstockItems
+    .slice(0, 5)
+    .map(
+      inv => `
 - ${inv.productName}: ${inv.quantity} (Max: ${inv.maxStockLevel})
   Excess: ${inv.quantity - (inv.maxStockLevel || 0)} units
-`).join('') || 'None'}
+`
+    )
+    .join("") || "None"
+}
 
 **Expiring Items:**
-${expiringItems.slice(0, 5).map((inv) => `
-- ${inv.productName}: ${inv.quantity} units expiring ${inv.expiryDate ? new Date(inv.expiryDate).toLocaleDateString() : 'soon'}
-`).join('') || 'None'}
+${
+  expiringItems
+    .slice(0, 5)
+    .map(
+      inv => `
+- ${inv.productName}: ${inv.quantity} units expiring ${inv.expiryDate ? new Date(inv.expiryDate).toLocaleDateString() : "soon"}
+`
+    )
+    .join("") || "None"
+}
 
 **Return this exact JSON structure:**
 {
@@ -314,87 +338,130 @@ function generateFallbackOptimization(
       next3Months: Math.round(totalStock * 0.45),
       next6Months: Math.round(totalStock * 0.9),
       confidence: 60,
-      trend: 'stable',
+      trend: "stable",
     },
-    reorderRecommendations: criticalItems.slice(0, 10).map((inv) => ({
-      productId: inv.productId,
-      productName: inv.productName,
-      sku: inv.productSku,
-      currentStock: inv.quantity,
-      reorderPoint: inv.minStockLevel,
-      suggestedOrderQty: Math.max(
-        (inv.maxStockLevel || inv.minStockLevel * 3) - inv.quantity,
+    reorderRecommendations: criticalItems.slice(0, 10).map(inv => {
+      const maxTarget = inv.maxStockLevel || inv.minStockLevel * 3;
+      const suggestedOrderQty = Math.max(
+        maxTarget - inv.quantity,
         inv.minStockLevel
-      ),
-      urgency: inv.quantity === 0 ? 'critical' as const :
-               inv.quantity < inv.minStockLevel * 0.5 ? 'high' as const : 'medium' as const,
-      estimatedCost: ((inv.maxStockLevel || inv.minStockLevel * 3) - inv.quantity) * (inv.unitPrice || 0),
-      reason: `Stock ${inv.quantity} below minimum ${inv.minStockLevel}`,
-    })),
+      );
+      let urgency: OptimizationResult["reorderRecommendations"][number]["urgency"] =
+        "medium";
+      if (inv.quantity === 0) {
+        urgency = "critical";
+      } else if (inv.quantity < inv.minStockLevel * 0.5) {
+        urgency = "high";
+      }
+
+      return {
+        productId: inv.productId,
+        productName: inv.productName,
+        sku: inv.productSku,
+        currentStock: inv.quantity,
+        reorderPoint: inv.minStockLevel,
+        suggestedOrderQty,
+        urgency,
+        estimatedCost: (maxTarget - inv.quantity) * (inv.unitPrice || 0),
+        reason: `Stock ${inv.quantity} below minimum ${inv.minStockLevel}`,
+      };
+    }),
     stockOptimization: {
-      overstock: overstockItems.slice(0, 5).map((inv) => ({
+      overstock: overstockItems.slice(0, 5).map(inv => ({
         productId: inv.productId,
         productName: inv.productName,
         excessQty: inv.quantity - (inv.maxStockLevel || 0),
-        tiedUpCapital: (inv.quantity - (inv.maxStockLevel || 0)) * (inv.unitPrice || 0),
-        recommendation: 'Consider promotional pricing or redistribution',
+        tiedUpCapital:
+          (inv.quantity - (inv.maxStockLevel || 0)) * (inv.unitPrice || 0),
+        recommendation: "Consider promotional pricing or redistribution",
       })),
-      understock: lowStockItems.slice(0, 5).map((inv) => ({
+      understock: lowStockItems.slice(0, 5).map(inv => ({
         productId: inv.productId,
         productName: inv.productName,
         shortfallQty: inv.minStockLevel - inv.quantity,
-        riskLevel: inv.quantity === 0 ? 'high' as const : 'medium' as const,
-        recommendation: 'Place reorder immediately',
+        riskLevel: inv.quantity === 0 ? ("high" as const) : ("medium" as const),
+        recommendation: "Place reorder immediately",
       })),
-      expiringItems: expiringItems.slice(0, 5).map((inv) => {
+      expiringItems: expiringItems.slice(0, 5).map(inv => {
         const expiry = inv.expiryDate ? new Date(inv.expiryDate) : now;
-        const daysUntil = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        const daysUntil = Math.ceil(
+          (expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+        );
         return {
           productId: inv.productId,
           productName: inv.productName,
           qty: inv.quantity,
-          expiryDate: inv.expiryDate?.toISOString().split('T')[0] || '',
+          expiryDate: inv.expiryDate?.toISOString().split("T")[0] || "",
           daysUntilExpiry: Math.max(0, daysUntil),
-          recommendation: daysUntil < 7 ? 'Urgent: Consider returns or disposal' : 'Prioritize for upcoming orders',
+          recommendation:
+            daysUntil < 7
+              ? "Urgent: Consider returns or disposal"
+              : "Prioritize for upcoming orders",
         };
       }),
     },
     insights: [
-      ...(criticalItems.length > 0 ? [{
-        type: 'risk' as const,
-        title: `${criticalItems.length} Critical Stock Items`,
-        description: `${criticalItems.length} products are below minimum stock levels and need immediate attention.`,
-        impact: 'high' as const,
-        actionable: true,
-      }] : []),
-      ...(expiringItems.length > 0 ? [{
-        type: 'risk' as const,
-        title: `${expiringItems.length} Items Expiring Soon`,
-        description: `${expiringItems.length} products will expire within 30 days. Consider promotional sales or returns.`,
-        impact: 'medium' as const,
-        actionable: true,
-      }] : []),
-      ...(overstockItems.length > 0 ? [{
-        type: 'opportunity' as const,
-        title: 'Capital Optimization Opportunity',
-        description: `${overstockItems.length} overstocked items are tying up capital. Consider redistribution.`,
-        impact: 'medium' as const,
-        actionable: true,
-      }] : []),
+      ...(criticalItems.length > 0
+        ? [
+            {
+              type: "risk" as const,
+              title: `${criticalItems.length} Critical Stock Items`,
+              description: `${criticalItems.length} products are below minimum stock levels and need immediate attention.`,
+              impact: "high" as const,
+              actionable: true,
+            },
+          ]
+        : []),
+      ...(expiringItems.length > 0
+        ? [
+            {
+              type: "risk" as const,
+              title: `${expiringItems.length} Items Expiring Soon`,
+              description: `${expiringItems.length} products will expire within 30 days. Consider promotional sales or returns.`,
+              impact: "medium" as const,
+              actionable: true,
+            },
+          ]
+        : []),
+      ...(overstockItems.length > 0
+        ? [
+            {
+              type: "opportunity" as const,
+              title: "Capital Optimization Opportunity",
+              description: `${overstockItems.length} overstocked items are tying up capital. Consider redistribution.`,
+              impact: "medium" as const,
+              actionable: true,
+            },
+          ]
+        : []),
       {
-        type: 'recommendation' as const,
-        title: 'Regular Stock Review',
-        description: 'Schedule weekly inventory reviews to maintain optimal stock levels.',
-        impact: 'low' as const,
+        type: "recommendation" as const,
+        title: "Regular Stock Review",
+        description:
+          "Schedule weekly inventory reviews to maintain optimal stock levels.",
+        impact: "low" as const,
         actionable: true,
       },
     ],
     metrics: {
       turnoverRate: 4.2,
-      stockoutRisk: Math.min(100, (criticalItems.length / Math.max(1, inventory.length)) * 100 * 2),
-      inventoryHealth: Math.max(0, 100 - (criticalItems.length * 5) - (expiringItems.length * 3) - (overstockItems.length * 2)),
-      potentialSavings: overstockItems.reduce((sum, inv) =>
-        sum + ((inv.quantity - (inv.maxStockLevel || 0)) * (inv.unitPrice || 0) * 0.1),
+      stockoutRisk: Math.min(
+        100,
+        (criticalItems.length / Math.max(1, inventory.length)) * 100 * 2
+      ),
+      inventoryHealth: Math.max(
+        0,
+        100 -
+          criticalItems.length * 5 -
+          expiringItems.length * 3 -
+          overstockItems.length * 2
+      ),
+      potentialSavings: overstockItems.reduce(
+        (sum, inv) =>
+          sum +
+          (inv.quantity - (inv.maxStockLevel || 0)) *
+            (inv.unitPrice || 0) *
+            0.1,
         0
       ),
     },
@@ -408,7 +475,7 @@ function getEmptyOptimization(): OptimizationResult {
       next3Months: 0,
       next6Months: 0,
       confidence: 0,
-      trend: 'stable',
+      trend: "stable",
     },
     reorderRecommendations: [],
     stockOptimization: {
@@ -416,13 +483,15 @@ function getEmptyOptimization(): OptimizationResult {
       understock: [],
       expiringItems: [],
     },
-    insights: [{
-      type: 'recommendation',
-      title: 'No inventory data',
-      description: 'Add inventory items to get AI optimization insights',
-      impact: 'high',
-      actionable: true,
-    }],
+    insights: [
+      {
+        type: "recommendation",
+        title: "No inventory data",
+        description: "Add inventory items to get AI optimization insights",
+        impact: "high",
+        actionable: true,
+      },
+    ],
     metrics: {
       turnoverRate: 0,
       stockoutRisk: 0,
@@ -432,36 +501,174 @@ function getEmptyOptimization(): OptimizationResult {
   };
 }
 
-function validateAndNormalizeResult(parsed: any): OptimizationResult {
-  // Validate and fill in defaults for missing fields
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const numberOr = (value: unknown, fallback: number): number =>
+  typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+const stringOr = (value: unknown, fallback: string): string =>
+  typeof value === "string" ? value : fallback;
+
+const booleanOr = (value: unknown, fallback: boolean): boolean =>
+  typeof value === "boolean" ? value : fallback;
+
+const clampNumber = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
+function normalizeTrend(
+  value: unknown
+): OptimizationResult["demandForecast"]["trend"] {
+  return value === "increasing" ||
+    value === "decreasing" ||
+    value === "seasonal"
+    ? value
+    : "stable";
+}
+
+function normalizeUrgency(
+  value: unknown
+): OptimizationResult["reorderRecommendations"][number]["urgency"] {
+  return value === "critical" || value === "high" || value === "medium"
+    ? value
+    : "low";
+}
+
+function normalizeRisk(
+  value: unknown
+): OptimizationResult["stockOptimization"]["understock"][number]["riskLevel"] {
+  return value === "high" || value === "medium" ? value : "low";
+}
+
+function normalizeInsightType(
+  value: unknown
+): OptimizationResult["insights"][number]["type"] {
+  return value === "opportunity" || value === "risk" || value === "trend"
+    ? value
+    : "recommendation";
+}
+
+function validateAndNormalizeResult(parsed: unknown): OptimizationResult {
+  if (!isRecord(parsed)) {
+    return getEmptyOptimization();
+  }
+
+  const demandSource = isRecord(parsed.demandForecast)
+    ? parsed.demandForecast
+    : {};
+  const metricsSource = isRecord(parsed.metrics) ? parsed.metrics : {};
+  const stockSource = isRecord(parsed.stockOptimization)
+    ? parsed.stockOptimization
+    : {};
+
+  const reorderRecommendations: OptimizationResult["reorderRecommendations"] =
+    [];
+  if (Array.isArray(parsed.reorderRecommendations)) {
+    parsed.reorderRecommendations.forEach(entry => {
+      if (!isRecord(entry)) return;
+      reorderRecommendations.push({
+        productId: numberOr(entry.productId, 0),
+        productName: stringOr(entry.productName, "Unknown Product"),
+        sku: stringOr(entry.sku, ""),
+        currentStock: numberOr(entry.currentStock, 0),
+        reorderPoint: numberOr(entry.reorderPoint, 0),
+        suggestedOrderQty: numberOr(entry.suggestedOrderQty, 0),
+        urgency: normalizeUrgency(entry.urgency),
+        estimatedCost: numberOr(entry.estimatedCost, 0),
+        reason: stringOr(entry.reason, ""),
+      });
+    });
+  }
+
+  const overstock: OptimizationResult["stockOptimization"]["overstock"] = [];
+  if (Array.isArray(stockSource.overstock)) {
+    stockSource.overstock.forEach(entry => {
+      if (!isRecord(entry)) return;
+      overstock.push({
+        productId: numberOr(entry.productId, 0),
+        productName: stringOr(entry.productName, "Unknown Product"),
+        excessQty: numberOr(entry.excessQty, 0),
+        tiedUpCapital: numberOr(entry.tiedUpCapital, 0),
+        recommendation: stringOr(entry.recommendation, ""),
+      });
+    });
+  }
+
+  const understock: OptimizationResult["stockOptimization"]["understock"] = [];
+  if (Array.isArray(stockSource.understock)) {
+    stockSource.understock.forEach(entry => {
+      if (!isRecord(entry)) return;
+      understock.push({
+        productId: numberOr(entry.productId, 0),
+        productName: stringOr(entry.productName, "Unknown Product"),
+        shortfallQty: numberOr(entry.shortfallQty, 0),
+        riskLevel: normalizeRisk(entry.riskLevel),
+        recommendation: stringOr(entry.recommendation, ""),
+      });
+    });
+  }
+
+  const expiringItems: OptimizationResult["stockOptimization"]["expiringItems"] =
+    [];
+  if (Array.isArray(stockSource.expiringItems)) {
+    stockSource.expiringItems.forEach(entry => {
+      if (!isRecord(entry)) return;
+      expiringItems.push({
+        productId: numberOr(entry.productId, 0),
+        productName: stringOr(entry.productName, "Unknown Product"),
+        qty: numberOr(entry.qty, 0),
+        expiryDate: stringOr(entry.expiryDate, ""),
+        daysUntilExpiry: numberOr(entry.daysUntilExpiry, 0),
+        recommendation: stringOr(entry.recommendation, ""),
+      });
+    });
+  }
+
+  const insights: OptimizationResult["insights"] = [];
+  if (Array.isArray(parsed.insights)) {
+    parsed.insights.forEach(entry => {
+      if (!isRecord(entry)) return;
+      insights.push({
+        type: normalizeInsightType(entry.type),
+        title: stringOr(entry.title, "Insight"),
+        description: stringOr(entry.description, ""),
+        impact:
+          entry.impact === "high" || entry.impact === "medium"
+            ? entry.impact
+            : "low",
+        actionable: booleanOr(entry.actionable, false),
+      });
+    });
+  }
+
   return {
     demandForecast: {
-      nextMonth: parsed.demandForecast?.nextMonth ?? 0,
-      next3Months: parsed.demandForecast?.next3Months ?? 0,
-      next6Months: parsed.demandForecast?.next6Months ?? 0,
-      confidence: parsed.demandForecast?.confidence ?? 50,
-      trend: parsed.demandForecast?.trend ?? 'stable',
+      nextMonth: numberOr(demandSource.nextMonth, 0),
+      next3Months: numberOr(demandSource.next3Months, 0),
+      next6Months: numberOr(demandSource.next6Months, 0),
+      confidence: clampNumber(numberOr(demandSource.confidence, 50), 0, 100),
+      trend: normalizeTrend(demandSource.trend),
     },
-    reorderRecommendations: Array.isArray(parsed.reorderRecommendations)
-      ? parsed.reorderRecommendations
-      : [],
+    reorderRecommendations,
     stockOptimization: {
-      overstock: Array.isArray(parsed.stockOptimization?.overstock)
-        ? parsed.stockOptimization.overstock
-        : [],
-      understock: Array.isArray(parsed.stockOptimization?.understock)
-        ? parsed.stockOptimization.understock
-        : [],
-      expiringItems: Array.isArray(parsed.stockOptimization?.expiringItems)
-        ? parsed.stockOptimization.expiringItems
-        : [],
+      overstock,
+      understock,
+      expiringItems,
     },
-    insights: Array.isArray(parsed.insights) ? parsed.insights : [],
+    insights,
     metrics: {
-      turnoverRate: parsed.metrics?.turnoverRate ?? 0,
-      stockoutRisk: parsed.metrics?.stockoutRisk ?? 0,
-      inventoryHealth: parsed.metrics?.inventoryHealth ?? 50,
-      potentialSavings: parsed.metrics?.potentialSavings ?? 0,
+      turnoverRate: numberOr(metricsSource.turnoverRate, 0),
+      stockoutRisk: clampNumber(
+        numberOr(metricsSource.stockoutRisk, 0),
+        0,
+        100
+      ),
+      inventoryHealth: clampNumber(
+        numberOr(metricsSource.inventoryHealth, 50),
+        0,
+        100
+      ),
+      potentialSavings: numberOr(metricsSource.potentialSavings, 0),
     },
   };
 }

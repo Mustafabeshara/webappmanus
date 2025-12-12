@@ -5,16 +5,18 @@
  * for products, tenders, suppliers, and documents.
  */
 
-import { complete } from './service';
+import { complete } from "./service";
 
 // Vector embedding type
+type Metadata = Record<string, unknown>;
+
 export interface VectorEmbedding {
   id: string;
-  entityType: 'product' | 'tender' | 'supplier' | 'document';
+  entityType: "product" | "tender" | "supplier" | "document";
   entityId: number;
   vector: number[];
   text: string;
-  metadata: Record<string, any>;
+  metadata: Metadata;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,13 +27,13 @@ export interface SimilarityResult {
   entityId: number;
   text: string;
   similarity: number;
-  metadata: Record<string, any>;
+  metadata: Metadata;
 }
 
 // In-memory vector store (would use Pinecone/Weaviate/Qdrant in production)
 class VectorStore {
-  private embeddings: Map<string, VectorEmbedding> = new Map();
-  private embeddingDimension = 384; // Typical for small models
+  private readonly embeddings: Map<string, VectorEmbedding> = new Map();
+  private readonly embeddingDimension = 384; // Typical for small models
 
   /**
    * Generate embedding using AI service
@@ -52,14 +54,14 @@ Text: "${text.substring(0, 500)}"
 Numbers only, comma-separated:`,
         maxTokens: 100,
         temperature: 0.1,
-        taskType: 'fast_analysis',
+        taskType: "fast_analysis",
       });
 
       if (response.success && response.content) {
         const numbers = response.content
-          .split(',')
-          .map(n => parseFloat(n.trim()))
-          .filter(n => !isNaN(n))
+          .split(",")
+          .map(n => Number.parseFloat(n.trim()))
+          .filter(n => !Number.isNaN(n))
           .slice(0, 20);
 
         if (numbers.length >= 10) {
@@ -67,11 +69,13 @@ Numbers only, comma-separated:`,
           while (numbers.length < this.embeddingDimension) {
             numbers.push(0);
           }
-          return this.normalizeVector(numbers.slice(0, this.embeddingDimension));
+          return this.normalizeVector(
+            numbers.slice(0, this.embeddingDimension)
+          );
         }
       }
     } catch (error) {
-      console.log('[Vector] AI embedding failed, using fallback');
+      console.warn("[Vector] AI embedding failed, using fallback", error);
     }
 
     // Fallback: Simple TF-IDF style embedding
@@ -87,22 +91,75 @@ Numbers only, comma-separated:`,
 
     // Category detection
     const categories: Record<string, string[]> = {
-      medical: ['medical', 'healthcare', 'clinical', 'hospital', 'patient', 'diagnostic', 'treatment'],
-      equipment: ['equipment', 'device', 'machine', 'apparatus', 'instrument', 'tool', 'system'],
-      surgical: ['surgical', 'surgery', 'operation', 'procedure', 'sterile', 'operating'],
-      monitor: ['monitor', 'display', 'screen', 'tracking', 'vital', 'signal'],
-      laboratory: ['laboratory', 'lab', 'testing', 'analysis', 'sample', 'reagent'],
-      imaging: ['imaging', 'xray', 'mri', 'ct', 'ultrasound', 'scan', 'radiology'],
-      cardiac: ['cardiac', 'heart', 'cardiovascular', 'ecg', 'ekg', 'defibrillator'],
-      respiratory: ['respiratory', 'ventilator', 'oxygen', 'breathing', 'pulmonary'],
-      orthopedic: ['orthopedic', 'bone', 'joint', 'implant', 'prosthetic'],
-      dental: ['dental', 'tooth', 'oral', 'dentistry'],
+      medical: [
+        "medical",
+        "healthcare",
+        "clinical",
+        "hospital",
+        "patient",
+        "diagnostic",
+        "treatment",
+      ],
+      equipment: [
+        "equipment",
+        "device",
+        "machine",
+        "apparatus",
+        "instrument",
+        "tool",
+        "system",
+      ],
+      surgical: [
+        "surgical",
+        "surgery",
+        "operation",
+        "procedure",
+        "sterile",
+        "operating",
+      ],
+      monitor: ["monitor", "display", "screen", "tracking", "vital", "signal"],
+      laboratory: [
+        "laboratory",
+        "lab",
+        "testing",
+        "analysis",
+        "sample",
+        "reagent",
+      ],
+      imaging: [
+        "imaging",
+        "xray",
+        "mri",
+        "ct",
+        "ultrasound",
+        "scan",
+        "radiology",
+      ],
+      cardiac: [
+        "cardiac",
+        "heart",
+        "cardiovascular",
+        "ecg",
+        "ekg",
+        "defibrillator",
+      ],
+      respiratory: [
+        "respiratory",
+        "ventilator",
+        "oxygen",
+        "breathing",
+        "pulmonary",
+      ],
+      orthopedic: ["orthopedic", "bone", "joint", "implant", "prosthetic"],
+      dental: ["dental", "tooth", "oral", "dentistry"],
     };
 
     // Calculate category scores
     let dimIndex = 0;
-    for (const [category, keywords] of Object.entries(categories)) {
-      const matches = words.filter(w => keywords.some(k => w.includes(k))).length;
+    for (const keywords of Object.values(categories)) {
+      const matches = words.filter(w =>
+        keywords.some(k => w.includes(k))
+      ).length;
       vector[dimIndex] = Math.min(matches / 5, 1);
       dimIndex++;
     }
@@ -113,8 +170,10 @@ Numbers only, comma-separated:`,
 
     // Character distribution
     const chars = text.toLowerCase();
-    vector[dimIndex++] = (chars.match(/[0-9]/g) || []).length / Math.max(chars.length, 1);
-    vector[dimIndex++] = (chars.match(/[a-z]/g) || []).length / Math.max(chars.length, 1);
+    vector[dimIndex++] =
+      (chars.match(/\d/g) || []).length / Math.max(chars.length, 1);
+    vector[dimIndex++] =
+      (chars.match(/[a-z]/g) || []).length / Math.max(chars.length, 1);
 
     // Add hash-based features for remaining dimensions
     for (let i = dimIndex; i < this.embeddingDimension; i++) {
@@ -131,8 +190,8 @@ Numbers only, comma-separated:`,
   private simpleHash(str: string): number {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      const char = str.codePointAt(i) ?? 0;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash;
     }
     return Math.abs(hash);
@@ -171,10 +230,10 @@ Numbers only, comma-separated:`,
    * Store an embedding
    */
   async upsert(
-    entityType: VectorEmbedding['entityType'],
+    entityType: VectorEmbedding["entityType"],
     entityId: number,
     text: string,
-    metadata: Record<string, any> = {}
+    metadata: Metadata = {}
   ): Promise<void> {
     const id = `${entityType}-${entityId}`;
     const vector = await this.generateEmbedding(text);
@@ -199,7 +258,7 @@ Numbers only, comma-separated:`,
   async search(
     query: string,
     options: {
-      entityTypes?: VectorEmbedding['entityType'][];
+      entityTypes?: VectorEmbedding["entityType"][];
       limit?: number;
       minSimilarity?: number;
     } = {}
@@ -237,7 +296,7 @@ Numbers only, comma-separated:`,
   /**
    * Delete an embedding
    */
-  delete(entityType: VectorEmbedding['entityType'], entityId: number): boolean {
+  delete(entityType: VectorEmbedding["entityType"], entityId: number): boolean {
     const id = `${entityType}-${entityId}`;
     return this.embeddings.delete(id);
   }
@@ -281,17 +340,19 @@ export async function indexProduct(product: {
   description?: string;
   category?: string;
   sku?: string;
-  specifications?: Record<string, any>;
+  specifications?: Record<string, unknown>;
 }): Promise<void> {
   const text = [
     product.name,
     product.description,
     product.category,
     product.sku,
-    product.specifications ? JSON.stringify(product.specifications) : '',
-  ].filter(Boolean).join(' ');
+    product.specifications ? JSON.stringify(product.specifications) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  await vectorStore.upsert('product', product.id, text, {
+  await vectorStore.upsert("product", product.id, text, {
     name: product.name,
     category: product.category,
     sku: product.sku,
@@ -314,10 +375,12 @@ export async function indexTender(tender: {
     tender.description,
     tender.department,
     tender.referenceNumber,
-    tender.requirements?.join(' '),
-  ].filter(Boolean).join(' ');
+    tender.requirements?.join(" "),
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  await vectorStore.upsert('tender', tender.id, text, {
+  await vectorStore.upsert("tender", tender.id, text, {
     title: tender.title,
     department: tender.department,
     referenceNumber: tender.referenceNumber,
@@ -337,11 +400,13 @@ export async function indexSupplier(supplier: {
   const text = [
     supplier.name,
     supplier.description,
-    supplier.categories?.join(' '),
+    supplier.categories?.join(" "),
     supplier.contactPerson,
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  await vectorStore.upsert('supplier', supplier.id, text, {
+  await vectorStore.upsert("supplier", supplier.id, text, {
     name: supplier.name,
     categories: supplier.categories,
   });
@@ -361,10 +426,12 @@ export async function indexDocument(document: {
     document.title,
     document.content?.substring(0, 5000), // Limit content length
     document.type,
-    document.tags?.join(' '),
-  ].filter(Boolean).join(' ');
+    document.tags?.join(" "),
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  await vectorStore.upsert('document', document.id, text, {
+  await vectorStore.upsert("document", document.id, text, {
     title: document.title,
     type: document.type,
     tags: document.tags,
@@ -377,7 +444,7 @@ export async function indexDocument(document: {
 export async function semanticSearch(
   query: string,
   options?: {
-    entityTypes?: ('product' | 'tender' | 'supplier' | 'document')[];
+    entityTypes?: ("product" | "tender" | "supplier" | "document")[];
     limit?: number;
     minSimilarity?: number;
   }
@@ -392,11 +459,11 @@ export async function findSimilarProducts(
   productId: number,
   limit: number = 5
 ): Promise<SimilarityResult[]> {
-  const embedding = vectorStore['embeddings'].get(`product-${productId}`);
+  const embedding = vectorStore["embeddings"].get(`product-${productId}`);
   if (!embedding) return [];
 
   const results = await vectorStore.search(embedding.text, {
-    entityTypes: ['product'],
+    entityTypes: ["product"],
     limit: limit + 1, // Include self
     minSimilarity: 0.5,
   });
@@ -412,11 +479,11 @@ export async function matchProductsToTender(
   tenderId: number,
   limit: number = 10
 ): Promise<SimilarityResult[]> {
-  const tenderEmbedding = vectorStore['embeddings'].get(`tender-${tenderId}`);
+  const tenderEmbedding = vectorStore["embeddings"].get(`tender-${tenderId}`);
   if (!tenderEmbedding) return [];
 
   return vectorStore.search(tenderEmbedding.text, {
-    entityTypes: ['product'],
+    entityTypes: ["product"],
     limit,
     minSimilarity: 0.4,
   });

@@ -8,22 +8,22 @@
  * - "What products did we buy from MedSupply last month?"
  */
 
-import { complete } from './service';
+import { complete } from "./service";
 
 // Query intent types
 export type QueryIntent =
-  | 'search_products'
-  | 'search_tenders'
-  | 'search_suppliers'
-  | 'search_documents'
-  | 'get_statistics'
-  | 'compare_items'
-  | 'get_recommendations'
-  | 'filter_by_date'
-  | 'filter_by_price'
-  | 'filter_by_category'
-  | 'aggregate_data'
-  | 'unknown';
+  | "search_products"
+  | "search_tenders"
+  | "search_suppliers"
+  | "search_documents"
+  | "get_statistics"
+  | "compare_items"
+  | "get_recommendations"
+  | "filter_by_date"
+  | "filter_by_price"
+  | "filter_by_category"
+  | "aggregate_data"
+  | "unknown";
 
 // Parsed query structure
 export interface ParsedQuery {
@@ -39,7 +39,15 @@ export interface ParsedQuery {
 
 // Entity extracted from query
 export interface QueryEntity {
-  type: 'product' | 'tender' | 'supplier' | 'document' | 'category' | 'date' | 'price' | 'quantity';
+  type:
+    | "product"
+    | "tender"
+    | "supplier"
+    | "document"
+    | "category"
+    | "date"
+    | "price"
+    | "quantity";
   value: string;
   confidence: number;
 }
@@ -47,20 +55,30 @@ export interface QueryEntity {
 // Filter condition
 export interface QueryFilter {
   field: string;
-  operator: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'startsWith' | 'endsWith' | 'between';
-  value: any;
-  value2?: any; // For 'between' operator
+  operator:
+    | "eq"
+    | "ne"
+    | "gt"
+    | "gte"
+    | "lt"
+    | "lte"
+    | "contains"
+    | "startsWith"
+    | "endsWith"
+    | "between";
+  value: unknown;
+  value2?: unknown; // For 'between' operator
 }
 
 // Sort specification
 export interface QuerySort {
   field: string;
-  direction: 'asc' | 'desc';
+  direction: "asc" | "desc";
 }
 
 // Aggregation specification
 export interface QueryAggregation {
-  type: 'count' | 'sum' | 'avg' | 'min' | 'max' | 'group';
+  type: "count" | "sum" | "avg" | "min" | "max" | "group";
   field?: string;
   groupBy?: string;
 }
@@ -82,7 +100,7 @@ function patternBasedParse(query: string): ParsedQuery | null {
 
   // Initialize default parsed query
   const parsed: ParsedQuery = {
-    intent: 'unknown',
+    intent: "unknown",
     entities: [],
     filters: [],
     originalQuery: query,
@@ -145,10 +163,13 @@ function patternBasedParse(query: string): ParsedQuery | null {
   };
 
   // Find best matching intent
-  let bestIntent: QueryIntent = 'unknown';
+  let bestIntent: QueryIntent = "unknown";
   let bestScore = 0;
 
-  for (const [intent, patterns] of Object.entries(intentPatterns) as [QueryIntent, RegExp[]][]) {
+  for (const [intent, patterns] of Object.entries(intentPatterns) as [
+    QueryIntent,
+    RegExp[],
+  ][]) {
     for (const pattern of patterns) {
       if (pattern.test(q)) {
         const score = pattern.source.length / 100; // Longer patterns = more specific
@@ -168,48 +189,96 @@ function patternBasedParse(query: string): ParsedQuery | null {
   // Price extraction
   const priceMatch = q.match(/\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/);
   if (priceMatch) {
-    const price = parseFloat(priceMatch[1].replace(/,/g, ''));
+    const price = parseFloat(priceMatch[1].replace(/,/g, ""));
     parsed.entities.push({
-      type: 'price',
+      type: "price",
       value: String(price),
       confidence: 0.9,
     });
 
     // Determine filter operator
     if (/under|below|less than|cheaper|maximum|max|up to/.test(q)) {
-      parsed.filters.push({ field: 'price', operator: 'lte', value: price * 100 }); // Convert to cents
+      parsed.filters.push({
+        field: "price",
+        operator: "lte",
+        value: price * 100,
+      }); // Convert to cents
     } else if (/over|above|more than|expensive|minimum|min|at least/.test(q)) {
-      parsed.filters.push({ field: 'price', operator: 'gte', value: price * 100 });
+      parsed.filters.push({
+        field: "price",
+        operator: "gte",
+        value: price * 100,
+      });
     }
   }
 
   // Date extraction
   const datePatterns: Record<string, () => Date> = {
-    'today': () => new Date(),
-    'tomorrow': () => { const d = new Date(); d.setDate(d.getDate() + 1); return d; },
-    'yesterday': () => { const d = new Date(); d.setDate(d.getDate() - 1); return d; },
-    'this week': () => { const d = new Date(); d.setDate(d.getDate() + 7); return d; },
-    'next week': () => { const d = new Date(); d.setDate(d.getDate() + 14); return d; },
-    'this month': () => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d; },
-    'next month': () => { const d = new Date(); d.setMonth(d.getMonth() + 2); return d; },
-    'last week': () => { const d = new Date(); d.setDate(d.getDate() - 7); return d; },
-    'last month': () => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d; },
+    today: () => new Date(),
+    tomorrow: () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      return d;
+    },
+    yesterday: () => {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return d;
+    },
+    "this week": () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      return d;
+    },
+    "next week": () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 14);
+      return d;
+    },
+    "this month": () => {
+      const d = new Date();
+      d.setMonth(d.getMonth() + 1);
+      return d;
+    },
+    "next month": () => {
+      const d = new Date();
+      d.setMonth(d.getMonth() + 2);
+      return d;
+    },
+    "last week": () => {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      return d;
+    },
+    "last month": () => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 1);
+      return d;
+    },
   };
 
   for (const [datePhrase, getDate] of Object.entries(datePatterns)) {
     if (q.includes(datePhrase)) {
       const date = getDate();
       parsed.entities.push({
-        type: 'date',
+        type: "date",
         value: date.toISOString(),
         confidence: 0.85,
       });
 
       // Add date filter
       if (/due|deadline|expires?|closing/.test(q)) {
-        parsed.filters.push({ field: 'deadline', operator: 'lte', value: date });
+        parsed.filters.push({
+          field: "deadline",
+          operator: "lte",
+          value: date,
+        });
       } else if (/created|added/.test(q)) {
-        parsed.filters.push({ field: 'createdAt', operator: 'gte', value: date });
+        parsed.filters.push({
+          field: "createdAt",
+          operator: "gte",
+          value: date,
+        });
       }
       break;
     }
@@ -217,19 +286,34 @@ function patternBasedParse(query: string): ParsedQuery | null {
 
   // Category extraction
   const categories = [
-    'medical', 'surgical', 'diagnostic', 'laboratory', 'imaging',
-    'cardiac', 'respiratory', 'orthopedic', 'dental', 'ophthalmology',
-    'patient monitoring', 'sterilization', 'emergency', 'rehabilitation',
+    "medical",
+    "surgical",
+    "diagnostic",
+    "laboratory",
+    "imaging",
+    "cardiac",
+    "respiratory",
+    "orthopedic",
+    "dental",
+    "ophthalmology",
+    "patient monitoring",
+    "sterilization",
+    "emergency",
+    "rehabilitation",
   ];
 
   for (const category of categories) {
     if (q.includes(category)) {
       parsed.entities.push({
-        type: 'category',
+        type: "category",
         value: category,
         confidence: 0.9,
       });
-      parsed.filters.push({ field: 'category', operator: 'contains', value: category });
+      parsed.filters.push({
+        field: "category",
+        operator: "contains",
+        value: category,
+      });
     }
   }
 
@@ -241,29 +325,29 @@ function patternBasedParse(query: string): ParsedQuery | null {
 
   // Sort extraction
   if (/(?:cheapest|lowest price|least expensive)/.test(q)) {
-    parsed.sort = { field: 'price', direction: 'asc' };
+    parsed.sort = { field: "price", direction: "asc" };
   } else if (/(?:most expensive|highest price)/.test(q)) {
-    parsed.sort = { field: 'price', direction: 'desc' };
+    parsed.sort = { field: "price", direction: "desc" };
   } else if (/(?:newest|latest|recent|most recent)/.test(q)) {
-    parsed.sort = { field: 'createdAt', direction: 'desc' };
+    parsed.sort = { field: "createdAt", direction: "desc" };
   } else if (/(?:oldest|earliest)/.test(q)) {
-    parsed.sort = { field: 'createdAt', direction: 'asc' };
+    parsed.sort = { field: "createdAt", direction: "asc" };
   } else if (/(?:due soon|soonest|earliest deadline)/.test(q)) {
-    parsed.sort = { field: 'deadline', direction: 'asc' };
+    parsed.sort = { field: "deadline", direction: "asc" };
   }
 
   // Aggregation extraction
   if (/how many|count|number of/.test(q)) {
-    parsed.aggregation = { type: 'count' };
+    parsed.aggregation = { type: "count" };
   } else if (/total.*(?:price|cost|value|amount)/.test(q)) {
-    parsed.aggregation = { type: 'sum', field: 'price' };
+    parsed.aggregation = { type: "sum", field: "price" };
   } else if (/average.*(?:price|cost)/.test(q)) {
-    parsed.aggregation = { type: 'avg', field: 'price' };
+    parsed.aggregation = { type: "avg", field: "price" };
   } else if (/(?:group by|by category|per category)/.test(q)) {
-    parsed.aggregation = { type: 'group', groupBy: 'category' };
+    parsed.aggregation = { type: "group", groupBy: "category" };
   }
 
-  return parsed.intent !== 'unknown' ? parsed : null;
+  return parsed.intent !== "unknown" ? parsed : null;
 }
 
 /**
@@ -291,7 +375,7 @@ JSON only:`;
       prompt,
       maxTokens: 500,
       temperature: 0.1,
-      taskType: 'fast_analysis',
+      taskType: "fast_analysis",
     });
 
     if (response.success && response.content) {
@@ -307,7 +391,7 @@ JSON only:`;
       }
     }
   } catch (error) {
-    console.error('[NLP] AI parsing failed:', error);
+    console.error("[NLP] AI parsing failed:", error);
   }
 
   return null;
@@ -317,7 +401,9 @@ JSON only:`;
  * Main NLP query parser
  * Uses pattern matching first, falls back to AI for complex queries
  */
-export async function parseNaturalLanguageQuery(query: string): Promise<NLPQueryResponse> {
+export async function parseNaturalLanguageQuery(
+  query: string
+): Promise<NLPQueryResponse> {
   // Try pattern-based parsing first (fast)
   const patternParsed = patternBasedParse(query);
 
@@ -357,13 +443,14 @@ export async function parseNaturalLanguageQuery(query: string): Promise<NLPQuery
   return {
     success: false,
     parsedQuery: {
-      intent: 'unknown',
+      intent: "unknown",
       entities: [],
       filters: [],
       originalQuery: query,
       confidence: 0,
     },
-    explanation: 'Unable to understand the query. Try rephrasing or use simpler terms.',
+    explanation:
+      "Unable to understand the query. Try rephrasing or use simpler terms.",
   };
 }
 
@@ -375,18 +462,18 @@ function generateExplanation(parsed: ParsedQuery): string {
 
   // Intent explanation
   const intentDescriptions: Record<QueryIntent, string> = {
-    search_products: 'Searching for products',
-    search_tenders: 'Searching for tenders',
-    search_suppliers: 'Searching for suppliers',
-    search_documents: 'Searching for documents',
-    get_statistics: 'Getting statistics',
-    compare_items: 'Comparing items',
-    get_recommendations: 'Getting recommendations',
-    filter_by_date: 'Filtering by date',
-    filter_by_price: 'Filtering by price',
-    filter_by_category: 'Filtering by category',
-    aggregate_data: 'Aggregating data',
-    unknown: 'Unknown query type',
+    search_products: "Searching for products",
+    search_tenders: "Searching for tenders",
+    search_suppliers: "Searching for suppliers",
+    search_documents: "Searching for documents",
+    get_statistics: "Getting statistics",
+    compare_items: "Comparing items",
+    get_recommendations: "Getting recommendations",
+    filter_by_date: "Filtering by date",
+    filter_by_price: "Filtering by price",
+    filter_by_category: "Filtering by category",
+    aggregate_data: "Aggregating data",
+    unknown: "Unknown query type",
   };
 
   parts.push(intentDescriptions[parsed.intent]);
@@ -395,20 +482,20 @@ function generateExplanation(parsed: ParsedQuery): string {
   if (parsed.filters.length > 0) {
     const filterDescs = parsed.filters.map(f => {
       const opDescs: Record<string, string> = {
-        eq: 'equals',
-        ne: 'not equals',
-        gt: 'greater than',
-        gte: 'at least',
-        lt: 'less than',
-        lte: 'at most',
-        contains: 'contains',
-        startsWith: 'starts with',
-        endsWith: 'ends with',
-        between: 'between',
+        eq: "equals",
+        ne: "not equals",
+        gt: "greater than",
+        gte: "at least",
+        lt: "less than",
+        lte: "at most",
+        contains: "contains",
+        startsWith: "starts with",
+        endsWith: "ends with",
+        between: "between",
       };
       return `${f.field} ${opDescs[f.operator] || f.operator} ${f.value}`;
     });
-    parts.push(`with filters: ${filterDescs.join(', ')}`);
+    parts.push(`with filters: ${filterDescs.join(", ")}`);
   }
 
   // Sort explanation
@@ -423,14 +510,16 @@ function generateExplanation(parsed: ParsedQuery): string {
 
   // Aggregation explanation
   if (parsed.aggregation) {
-    if (parsed.aggregation.type === 'group') {
+    if (parsed.aggregation.type === "group") {
       parts.push(`grouped by ${parsed.aggregation.groupBy}`);
     } else {
-      parts.push(`calculating ${parsed.aggregation.type}${parsed.aggregation.field ? ` of ${parsed.aggregation.field}` : ''}`);
+      parts.push(
+        `calculating ${parsed.aggregation.type}${parsed.aggregation.field ? ` of ${parsed.aggregation.field}` : ""}`
+      );
     }
   }
 
-  return parts.join(' ');
+  return parts.join(" ");
 }
 
 /**
@@ -438,39 +527,39 @@ function generateExplanation(parsed: ParsedQuery): string {
  */
 function generateSuggestedSQL(parsed: ParsedQuery): string {
   const tableMap: Record<string, string> = {
-    search_products: 'products',
-    search_tenders: 'tenders',
-    search_suppliers: 'suppliers',
-    search_documents: 'documents',
+    search_products: "products",
+    search_tenders: "tenders",
+    search_suppliers: "suppliers",
+    search_documents: "documents",
   };
 
-  const table = tableMap[parsed.intent] || 'products';
+  const table = tableMap[parsed.intent] || "products";
   let sql = `SELECT * FROM ${table}`;
 
   // WHERE clause
   if (parsed.filters.length > 0) {
     const conditions = parsed.filters.map(f => {
       const opMap: Record<string, string> = {
-        eq: '=',
-        ne: '!=',
-        gt: '>',
-        gte: '>=',
-        lt: '<',
-        lte: '<=',
-        contains: 'LIKE',
-        startsWith: 'LIKE',
-        endsWith: 'LIKE',
+        eq: "=",
+        ne: "!=",
+        gt: ">",
+        gte: ">=",
+        lt: "<",
+        lte: "<=",
+        contains: "LIKE",
+        startsWith: "LIKE",
+        endsWith: "LIKE",
       };
-      const op = opMap[f.operator] || '=';
+      const op = opMap[f.operator] || "=";
       let value = f.value;
 
-      if (f.operator === 'contains') value = `%${value}%`;
-      if (f.operator === 'startsWith') value = `${value}%`;
-      if (f.operator === 'endsWith') value = `%${value}`;
+      if (f.operator === "contains") value = `%${value}%`;
+      if (f.operator === "startsWith") value = `${value}%`;
+      if (f.operator === "endsWith") value = `%${value}`;
 
       return `${f.field} ${op} '${value}'`;
     });
-    sql += ` WHERE ${conditions.join(' AND ')}`;
+    sql += ` WHERE ${conditions.join(" AND ")}`;
   }
 
   // ORDER BY clause
@@ -495,39 +584,46 @@ export function getQuerySuggestions(partialQuery: string): string[] {
 
   // Common query templates
   const templates = [
-    'Show me all {category} equipment',
-    'Find tenders due this week',
-    'List products under ${price}',
-    'What are the top 10 {category} products?',
-    'Compare prices from different suppliers',
-    'Show me invoices from last month',
-    'Find suppliers who provide {category}',
-    'What products need restocking?',
-    'Show recent tenders in {department}',
-    'Get total inventory value',
+    "Show me all {category} equipment",
+    "Find tenders due this week",
+    "List products under ${price}",
+    "What are the top 10 {category} products?",
+    "Compare prices from different suppliers",
+    "Show me invoices from last month",
+    "Find suppliers who provide {category}",
+    "What products need restocking?",
+    "Show recent tenders in {department}",
+    "Get total inventory value",
   ];
 
   // Filter templates based on partial input
   for (const template of templates) {
-    if (template.toLowerCase().includes(q) || q.split(' ').some(word => template.toLowerCase().includes(word))) {
+    if (
+      template.toLowerCase().includes(q) ||
+      q.split(" ").some(word => template.toLowerCase().includes(word))
+    ) {
       suggestions.push(template);
     }
   }
 
   // Add category-specific suggestions
-  if (q.includes('medical') || q.includes('product') || q.includes('equipment')) {
+  if (
+    q.includes("medical") ||
+    q.includes("product") ||
+    q.includes("equipment")
+  ) {
     suggestions.push(
-      'Show me medical monitoring equipment',
-      'List surgical instruments under $5000',
-      'Find diagnostic equipment from approved suppliers',
+      "Show me medical monitoring equipment",
+      "List surgical instruments under $5000",
+      "Find diagnostic equipment from approved suppliers"
     );
   }
 
-  if (q.includes('tender') || q.includes('deadline') || q.includes('due')) {
+  if (q.includes("tender") || q.includes("deadline") || q.includes("due")) {
     suggestions.push(
-      'Find tenders due this week',
-      'Show active tenders in healthcare',
-      'List tenders with deadline next month',
+      "Find tenders due this week",
+      "Show active tenders in healthcare",
+      "List tenders with deadline next month"
     );
   }
 

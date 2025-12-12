@@ -1,6 +1,11 @@
-import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -9,9 +14,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FileText, Edit, Trash2, CheckCircle, Plus } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import type { LucideIcon } from "lucide-react";
+import { CheckCircle, Edit, FileText, Plus, Trash2 } from "lucide-react";
 
-const actionConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: any }> = {
+const actionConfig: Record<
+  string,
+  {
+    label: string;
+    variant: "default" | "secondary" | "destructive" | "outline";
+    icon: LucideIcon;
+  }
+> = {
   create: { label: "Created", variant: "default", icon: Plus },
   update: { label: "Updated", variant: "secondary", icon: Edit },
   delete: { label: "Deleted", variant: "destructive", icon: Trash2 },
@@ -42,7 +56,9 @@ export default function AuditLogs() {
       {/* Stats Card */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Activities</CardTitle>
+          <CardTitle className="text-sm font-medium">
+            Total Activities
+          </CardTitle>
           <FileText className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -71,8 +87,12 @@ export default function AuditLogs() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {logs?.map((log) => {
-                const config = actionConfig[log.action] || { label: log.action, variant: "outline" as const, icon: FileText };
+              {logs?.map(log => {
+                const config = actionConfig[log.action] || {
+                  label: log.action,
+                  variant: "outline" as const,
+                  icon: FileText,
+                };
                 const Icon = config.icon;
                 return (
                   <TableRow key={log.id}>
@@ -86,15 +106,22 @@ export default function AuditLogs() {
                         {config.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="capitalize">{log.entityType}</TableCell>
+                    <TableCell className="capitalize">
+                      {log.entityType}
+                    </TableCell>
                     <TableCell>#{log.entityId}</TableCell>
-                    <TableCell className="text-muted-foreground">{log.ipAddress || "-"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {log.ipAddress || "-"}
+                    </TableCell>
                   </TableRow>
                 );
               })}
               {(!logs || logs.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={6}
+                    className="text-center text-muted-foreground"
+                  >
                     No audit logs found
                   </TableCell>
                 </TableRow>

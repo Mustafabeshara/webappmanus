@@ -1,6 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import { parse as parseCookieHeader } from "cookie";
 import type { NextFunction, Request, Response } from "express";
+import type { User, UserPermission } from "../../drizzle/schema";
 import * as db from "../db";
 import { auditLogging } from "./audit-logging";
 import { csrfProtection } from "./csrf-protection";
@@ -13,18 +14,22 @@ import { sdk } from "./sdk";
  * Integrates all security services for comprehensive protection
  */
 
-export interface AuthenticatedRequest extends Request {
-  user: any;
-  userId: number;
-  sessionId: string;
-  ipAddress: string;
+export interface AuthenticatedUser extends User {
+  sessionId?: string;
+}
+
+export interface RequestWithAuth extends Request {
+  user?: AuthenticatedUser | null;
+  userId?: number;
+  sessionId?: string;
+  ipAddress?: string;
 }
 
 /**
  * Authentication middleware with enhanced security
  */
 export function authenticateRequest() {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: RequestWithAuth, res: Response, next: NextFunction) => {
     try {
       // Rate limiting check
       const rateLimitResult = await rateLimiting.checkRateLimit(req);
@@ -52,10 +57,10 @@ export function authenticateRequest() {
       const user = await sdk.authenticateRequest(req);
 
       // Add user info to request
-      (req as any).user = user;
-      (req as any).userId = user.id;
-      (req as any).sessionId = user.sessionId || "";
-      (req as any).ipAddress = getClientIp(req);
+      req.user = user;
+      req.userId = user.id;
+      req.sessionId = user.sessionId || "";
+      req.ipAddress = getClientIp(req);
 
       // Add CSRF token to response for authenticated users
       if (user.sessionId) {
@@ -74,9 +79,9 @@ export function authenticateRequest() {
  * Optional authentication middleware (doesn't fail if no auth)
  */
 export function optionalAuthentication() {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: RequestWithAuth, res: Response, next: NextFunction) => {
     const ipAddress = getClientIp(req);
-    (req as any).ipAddress = ipAddress;
+    req.ipAddress = ipAddress;
 
     const cookies = parseCookieHeader(req.headers.cookie || "");
     const hasSessionCookie = Boolean(cookies[COOKIE_NAME]);
@@ -89,9 +94,9 @@ export function optionalAuthentication() {
 
     try {
       const user = await sdk.authenticateRequest(req);
-      (req as any).user = user;
-      (req as any).userId = user.id;
-      (req as any).sessionId = user.sessionId || "";
+      req.user = user;
+      req.userId = user.id;
+      req.sessionId = user.sessionId || "";
       return next();
     } catch (error) {
       console.warn("[Auth] Optional auth failed:", error);
@@ -107,9 +112,9 @@ export function requirePermission(
   module: string,
   action: "view" | "create" | "edit" | "delete" | "approve"
 ) {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: RequestWithAuth, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).userId;
+      const userId = req.userId;
       if (!userId) {
         return res.status(401).json({ error: "Authentication required" });
       }
@@ -126,7 +131,9 @@ export function requirePermission(
 
       // Check specific permissions
       const permissions = await db.getUserPermissions(userId);
-      const modulePermission = permissions.find(p => p.module === module);
+      const modulePermission = permissions.find(
+        (p: UserPermission) => p.module === module
+      );
 
       if (!modulePermission) {
         await auditLogging.logAction({
@@ -137,7 +144,7 @@ export function requirePermission(
           metadata: { module, action, reason: "no_permission_record" },
           ipAddress: getClientIp(req),
           userAgent: req.headers["user-agent"],
-          sessionId: (req as any).sessionId,
+          sessionId: req.sessionId,
         });
 
         return res
@@ -173,7 +180,7 @@ export function requirePermission(
           metadata: { module, action, reason: "insufficient_permission" },
           ipAddress: getClientIp(req),
           userAgent: req.headers["user-agent"],
-          sessionId: (req as any).sessionId,
+          sessionId: req.sessionId,
         });
 
         return res
@@ -193,9 +200,9 @@ export function requirePermission(
  * Admin-only middleware
  */
 export function requireAdmin() {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: RequestWithAuth, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).userId;
+      const userId = req.userId;
       if (!userId) {
         return res.status(401).json({ error: "Authentication required" });
       }
@@ -210,7 +217,7 @@ export function requireAdmin() {
           metadata: { reason: "not_admin", userRole: user?.role },
           ipAddress: getClientIp(req),
           userAgent: req.headers["user-agent"],
-          sessionId: (req as any).sessionId,
+          sessionId: req.sessionId,
         });
 
         return res.status(403).json({ error: "Admin access required" });
@@ -227,14 +234,14 @@ export function requireAdmin() {
 /**
  * Input validation middleware
  */
-export function validateInput(schema: any) {
-  return async (req: Request, res: Response, next: NextFunction) => {
+export function validateInput(schema: unknown) {
+  return async (req: RequestWithAuth, res: Response, next: NextFunction) => {
     try {
       const validatedData = await inputValidation.validateWithThreatDetection(
         req.body,
         schema,
         {
-          userId: (req as any).userId,
+          userId: req.userId,
           ipAddress: getClientIp(req),
           userAgent: req.headers["user-agent"],
           endpoint: `${req.method} ${req.path}`,

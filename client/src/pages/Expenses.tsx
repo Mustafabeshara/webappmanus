@@ -1,16 +1,15 @@
-import { useState } from "react";
-import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { ExpenseAnalysis } from "@/components/ExpenseAnalysis";
+import { ExportButton } from "@/components/ExportButton";
+import { FileUpload } from "@/components/FileUpload";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +20,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -29,15 +27,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, CheckCircle, XCircle, Clock, DollarSign, Upload } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { trpc } from "@/lib/trpc";
+import type { LucideIcon } from "lucide-react";
+import {
+  CheckCircle,
+  Clock,
+  DollarSign,
+  FileText,
+  Plus,
+  XCircle,
+} from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { FileUpload } from "@/components/FileUpload";
-import { ExpenseAnalysis } from "@/components/ExpenseAnalysis";
-import { ExportButton } from "@/components/ExportButton";
 
 type ExpenseStatus = "draft" | "pending" | "approved" | "rejected" | "paid";
 
-const statusConfig: Record<ExpenseStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: any }> = {
+const statusConfig: Record<
+  ExpenseStatus,
+  {
+    label: string;
+    variant: "default" | "secondary" | "destructive" | "outline";
+    icon: LucideIcon;
+  }
+> = {
   draft: { label: "Draft", variant: "outline", icon: FileText },
   pending: { label: "Pending", variant: "secondary", icon: Clock },
   approved: { label: "Approved", variant: "default", icon: CheckCircle },
@@ -47,30 +68,32 @@ const statusConfig: Record<ExpenseStatus, { label: string; variant: "default" | 
 
 export default function Expenses() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<ExpenseStatus | "all">("all");
-  
+  const [selectedStatus, setSelectedStatus] = useState<ExpenseStatus | "all">(
+    "all"
+  );
+
   const { data: expenses, isLoading, refetch } = trpc.expenses.list.useQuery();
   const { data: categories } = trpc.budgetCategories.list.useQuery();
   const { data: budgets } = trpc.budgets.list.useQuery();
   const { data: departments } = trpc.departments.list.useQuery();
-  
+
   const createMutation = trpc.expenses.create.useMutation({
     onSuccess: () => {
       toast.success("Expense created successfully");
       setIsCreateDialogOpen(false);
       refetch();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(`Failed to create expense: ${error.message}`);
     },
   });
-  
+
   const approveMutation = trpc.expenses.approve.useMutation({
     onSuccess: () => {
       toast.success("Expense status updated");
       refetch();
     },
-    onError: (error) => {
+    onError: error => {
       toast.error(`Failed to update expense: ${error.message}`);
     },
   });
@@ -84,11 +107,11 @@ export default function Expenses() {
     amount: "",
     notes: "",
   });
-  
+
   const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
-  
+
   const uploadToS3Mutation = trpc.files.uploadToS3.useMutation();
-  
+
   const handleReceiptUpload = async (files: File[]) => {
     setReceiptFiles(files);
     toast.success(`${files.length} receipt(s) ready to upload`);
@@ -96,7 +119,7 @@ export default function Expenses() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.title || !formData.categoryId || !formData.amount) {
       toast.error("Please fill in all required fields");
       return;
@@ -109,11 +132,13 @@ export default function Expenses() {
         description: formData.description || undefined,
         categoryId: parseInt(formData.categoryId),
         budgetId: formData.budgetId ? parseInt(formData.budgetId) : undefined,
-        departmentId: formData.departmentId ? parseInt(formData.departmentId) : undefined,
+        departmentId: formData.departmentId
+          ? parseInt(formData.departmentId)
+          : undefined,
         amount: Math.round(parseFloat(formData.amount) * 100), // Convert to cents
         notes: formData.notes || undefined,
       });
-      
+
       // Upload receipts if any
       if (receiptFiles.length > 0) {
         for (const file of receiptFiles) {
@@ -124,15 +149,15 @@ export default function Expenses() {
               fileName: file.name,
               fileData: base64,
               mimeType: file.type,
-              entityType: 'expense',
+              entityType: "expense",
               entityId: expense.id,
-              category: 'receipt',
+              category: "receipt",
             });
           };
           reader.readAsDataURL(file);
         }
       }
-      
+
       toast.success("Expense created successfully");
       setIsCreateDialogOpen(false);
       setReceiptFiles([]);
@@ -146,8 +171,9 @@ export default function Expenses() {
         notes: "",
       });
       refetch();
-    } catch (error: any) {
-      toast.error(`Failed to create expense: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to create expense: ${message}`);
     }
   };
 
@@ -155,8 +181,8 @@ export default function Expenses() {
     approveMutation.mutate({ id, approved });
   };
 
-  const filteredExpenses = expenses?.filter(expense => 
-    selectedStatus === "all" || expense.status === selectedStatus
+  const filteredExpenses = expenses?.filter(
+    expense => selectedStatus === "all" || expense.status === selectedStatus
   );
 
   const stats = {
@@ -199,7 +225,9 @@ export default function Expenses() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Expenses
+            </CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -208,7 +236,9 @@ export default function Expenses() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Approval</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Pending Approval
+            </CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -230,7 +260,9 @@ export default function Expenses() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${(stats.totalAmount / 100).toFixed(2)}</div>
+            <div className="text-2xl font-bold">
+              ${(stats.totalAmount / 100).toFixed(2)}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -244,7 +276,12 @@ export default function Expenses() {
           <div className="flex gap-4">
             <div className="flex-1">
               <Label>Status</Label>
-              <Select value={selectedStatus} onValueChange={(value: any) => setSelectedStatus(value)}>
+              <Select
+                value={selectedStatus}
+                onValueChange={value =>
+                  setSelectedStatus(value as ExpenseStatus | "all")
+                }
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -283,17 +320,21 @@ export default function Expenses() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredExpenses?.map((expense) => {
+              {filteredExpenses?.map(expense => {
                 const config = statusConfig[expense.status];
                 const Icon = config.icon;
                 return (
                   <TableRow key={expense.id}>
-                    <TableCell className="font-medium">{expense.expenseNumber}</TableCell>
+                    <TableCell className="font-medium">
+                      {expense.expenseNumber}
+                    </TableCell>
                     <TableCell>
                       <div>
                         <div className="font-medium">{expense.title}</div>
                         {expense.description && (
-                          <div className="text-sm text-muted-foreground">{expense.description}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {expense.description}
+                          </div>
                         )}
                       </div>
                     </TableCell>
@@ -332,7 +373,10 @@ export default function Expenses() {
               })}
               {(!filteredExpenses || filteredExpenses.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={6}
+                    className="text-center text-muted-foreground"
+                  >
                     No expenses found
                   </TableCell>
                 </TableRow>
@@ -358,7 +402,9 @@ export default function Expenses() {
                 <Input
                   id="title"
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={e =>
+                    setFormData({ ...formData, title: e.target.value })
+                  }
                   placeholder="Enter expense title"
                   required
                 />
@@ -368,7 +414,9 @@ export default function Expenses() {
                 <Textarea
                   id="description"
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={e =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
                   placeholder="Enter expense description"
                 />
               </div>
@@ -377,13 +425,15 @@ export default function Expenses() {
                   <Label htmlFor="categoryId">Category *</Label>
                   <Select
                     value={formData.categoryId}
-                    onValueChange={(value) => setFormData({ ...formData, categoryId: value })}
+                    onValueChange={value =>
+                      setFormData({ ...formData, categoryId: value })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories?.map((cat) => (
+                      {categories?.map(cat => (
                         <SelectItem key={cat.id} value={cat.id.toString()}>
                           {cat.name}
                         </SelectItem>
@@ -395,14 +445,19 @@ export default function Expenses() {
                   <Label htmlFor="budgetId">Budget</Label>
                   <Select
                     value={formData.budgetId}
-                    onValueChange={(value) => setFormData({ ...formData, budgetId: value })}
+                    onValueChange={value =>
+                      setFormData({ ...formData, budgetId: value })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select budget" />
                     </SelectTrigger>
                     <SelectContent>
-                      {budgets?.map((budget) => (
-                        <SelectItem key={budget.id} value={budget.id.toString()}>
+                      {budgets?.map(budget => (
+                        <SelectItem
+                          key={budget.id}
+                          value={budget.id.toString()}
+                        >
                           {budget.name}
                         </SelectItem>
                       ))}
@@ -415,13 +470,15 @@ export default function Expenses() {
                   <Label htmlFor="departmentId">Department</Label>
                   <Select
                     value={formData.departmentId}
-                    onValueChange={(value) => setFormData({ ...formData, departmentId: value })}
+                    onValueChange={value =>
+                      setFormData({ ...formData, departmentId: value })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                     <SelectContent>
-                      {departments?.map((dept) => (
+                      {departments?.map(dept => (
                         <SelectItem key={dept.id} value={dept.id.toString()}>
                           {dept.name}
                         </SelectItem>
@@ -436,7 +493,9 @@ export default function Expenses() {
                     type="number"
                     step="0.01"
                     value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                    onChange={e =>
+                      setFormData({ ...formData, amount: e.target.value })
+                    }
                     placeholder="0.00"
                     required
                   />
@@ -447,7 +506,9 @@ export default function Expenses() {
                 <Textarea
                   id="notes"
                   value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  onChange={e =>
+                    setFormData({ ...formData, notes: e.target.value })
+                  }
                   placeholder="Additional notes"
                 />
               </div>
@@ -467,7 +528,11 @@ export default function Expenses() {
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateDialogOpen(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>

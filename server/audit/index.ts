@@ -6,22 +6,27 @@
 import * as db from "../db";
 
 export enum AuditAction {
-  CREATE = 'CREATE',
-  UPDATE = 'UPDATE',
-  DELETE = 'DELETE',
-  VIEW = 'VIEW',
-  EXPORT = 'EXPORT',
-  LOGIN = 'LOGIN',
-  LOGOUT = 'LOGOUT',
-  APPROVE = 'APPROVE',
-  REJECT = 'REJECT',
+  CREATE = "CREATE",
+  UPDATE = "UPDATE",
+  DELETE = "DELETE",
+  VIEW = "VIEW",
+  EXPORT = "EXPORT",
+  LOGIN = "LOGIN",
+  LOGOUT = "LOGOUT",
+  APPROVE = "APPROVE",
+  REJECT = "REJECT",
 }
 
 export interface AuditChanges {
-  before?: Record<string, unknown>;
-  after?: Record<string, unknown>;
-  diff?: Record<string, { from: unknown; to: unknown }>;
+  before?: AuditState;
+  after?: AuditState;
+  diff?: Record<string, AuditDiffEntry>;
 }
+
+type AuditPrimitive = string | number | boolean | null;
+type AuditValue = AuditPrimitive | Date | Record<string, unknown>;
+type AuditState = Record<string, AuditValue>;
+type AuditDiffEntry = { from: AuditValue; to: AuditValue };
 
 export interface AuditLogEntry {
   userId: number;
@@ -48,7 +53,7 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
       userAgent: entry.userAgent || null,
     });
   } catch (error) {
-    console.error('Failed to create audit log:', error);
+    console.error("Failed to create audit log:", error);
   }
 }
 
@@ -58,7 +63,7 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
 export async function logCreate(
   entityType: string,
   entityId: number,
-  data: Record<string, unknown>,
+  data: AuditState,
   userId: number,
   ipAddress?: string,
   userAgent?: string
@@ -80,8 +85,8 @@ export async function logCreate(
 export async function logUpdate(
   entityType: string,
   entityId: number,
-  before: Record<string, unknown>,
-  after: Record<string, unknown>,
+  before: AuditState,
+  after: AuditState,
   userId: number,
   ipAddress?: string,
   userAgent?: string
@@ -105,7 +110,7 @@ export async function logUpdate(
 export async function logDelete(
   entityType: string,
   entityId: number,
-  data: Record<string, unknown>,
+  data: AuditState,
   userId: number,
   ipAddress?: string,
   userAgent?: string
@@ -199,10 +204,7 @@ export async function getEntityAuditTrail(
 /**
  * Get user activity log
  */
-export async function getUserActivity(
-  userId: number,
-  limit: number = 100
-) {
+export async function getUserActivity(userId: number, limit: number = 100) {
   return db.getAuditLogsByUser(userId, limit);
 }
 
@@ -241,13 +243,16 @@ export async function getAuditStats(startDate?: Date, endDate?: Date) {
 
   for (const log of logs) {
     // Action breakdown
-    stats.actionBreakdown[log.action] = (stats.actionBreakdown[log.action] || 0) + 1;
+    stats.actionBreakdown[log.action] =
+      (stats.actionBreakdown[log.action] || 0) + 1;
 
     // Entity breakdown
-    stats.entityBreakdown[log.entityType] = (stats.entityBreakdown[log.entityType] || 0) + 1;
+    stats.entityBreakdown[log.entityType] =
+      (stats.entityBreakdown[log.entityType] || 0) + 1;
 
     // User breakdown
-    stats.userBreakdown[log.userId] = (stats.userBreakdown[log.userId] || 0) + 1;
+    stats.userBreakdown[log.userId] =
+      (stats.userBreakdown[log.userId] || 0) + 1;
   }
 
   return stats;
@@ -257,10 +262,10 @@ export async function getAuditStats(startDate?: Date, endDate?: Date) {
  * Calculate diff between two objects
  */
 function calculateDiff(
-  before: Record<string, unknown>,
-  after: Record<string, unknown>
-): Record<string, { from: unknown; to: unknown }> {
-  const diff: Record<string, { from: unknown; to: unknown }> = {};
+  before: AuditState,
+  after: AuditState
+): Record<string, AuditDiffEntry> {
+  const diff: Record<string, AuditDiffEntry> = {};
   const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
 
   for (const key of allKeys) {
@@ -268,7 +273,7 @@ function calculateDiff(
     const afterVal = after[key];
 
     // Skip timestamp fields that auto-update
-    if (key === 'updatedAt' || key === 'createdAt') continue;
+    if (key === "updatedAt" || key === "createdAt") continue;
 
     if (JSON.stringify(beforeVal) !== JSON.stringify(afterVal)) {
       diff[key] = {

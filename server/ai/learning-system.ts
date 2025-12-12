@@ -22,9 +22,9 @@ export type CorrectionType =
 export interface CorrectionRecord {
   id: string;
   type: CorrectionType;
-  originalValue: any;
-  correctedValue: any;
-  context: Record<string, any>;
+  originalValue: unknown;
+  correctedValue: unknown;
+  context: Record<string, unknown>;
   userId?: number;
   timestamp: Date;
   applied: boolean;
@@ -38,15 +38,15 @@ export interface LearningPattern {
   frequency: number;
   lastSeen: Date;
   examples: Array<{
-    input: any;
-    expected: any;
+    input: unknown;
+    expected: unknown;
   }>;
 }
 
 // In-memory storage for corrections and patterns
 class LearningStore {
-  private corrections: Map<string, CorrectionRecord> = new Map();
-  private patterns: Map<string, LearningPattern> = new Map();
+  private readonly corrections: Map<string, CorrectionRecord> = new Map();
+  private readonly patterns: Map<string, LearningPattern> = new Map();
   private correctionCounter = 0;
 
   /**
@@ -54,9 +54,9 @@ class LearningStore {
    */
   recordCorrection(
     type: CorrectionType,
-    originalValue: any,
-    correctedValue: any,
-    context: Record<string, any> = {},
+    originalValue: unknown,
+    correctedValue: unknown,
+    context: Record<string, unknown> = {},
     userId?: number
   ): CorrectionRecord {
     const id = `correction-${Date.now()}-${++this.correctionCounter}`;
@@ -129,24 +129,24 @@ class LearningStore {
   private extractPatternKey(correction: CorrectionRecord): string {
     switch (correction.type) {
       case "product_match":
-        return `pm-${correction.context.tenderId || "any"}-${this.normalizeValue(correction.originalValue)}`;
+        return `pm-${this.normalizeValue(correction.context["tenderId"] ?? "any")}-${this.normalizeValue(correction.originalValue)}`;
 
       case "category_suggestion":
         return `cs-${this.normalizeValue(correction.originalValue)}-${this.normalizeValue(correction.correctedValue)}`;
 
       case "price_prediction": {
         const priceRange = this.getPriceRange(correction.correctedValue);
-        return `pp-${correction.context.category || "any"}-${priceRange}`;
+        return `pp-${this.normalizeValue(correction.context["category"] ?? "any")}-${priceRange}`;
       }
 
       case "search_relevance":
-        return `sr-${this.normalizeValue(correction.context.query)}-${correction.correctedValue ? "relevant" : "irrelevant"}`;
+        return `sr-${this.normalizeValue(correction.context["query"])}-${correction.correctedValue ? "relevant" : "irrelevant"}`;
 
       case "tender_match":
-        return `tm-${correction.context.tenderId || "any"}-${correction.context.productId || "any"}`;
+        return `tm-${this.normalizeValue(correction.context["tenderId"] ?? "any")}-${this.normalizeValue(correction.context["productId"] ?? "any")}`;
 
       case "supplier_recommendation":
-        return `sup-${correction.context.category || "any"}-${this.normalizeValue(correction.correctedValue)}`;
+        return `sup-${this.normalizeValue(correction.context["category"] ?? "any")}-${this.normalizeValue(correction.correctedValue)}`;
 
       default:
         return `${correction.type}-${Date.now()}`;
@@ -156,9 +156,13 @@ class LearningStore {
   /**
    * Normalize value for pattern matching
    */
-  private normalizeValue(value: any): string {
+  private normalizeValue(value: unknown): string {
     if (typeof value === "string") {
-      return value.toLowerCase().trim().replace(/\s+/g, "-").substring(0, 50);
+      return value
+        .toLowerCase()
+        .trim()
+        .replaceAll(/\s+/g, "-")
+        .substring(0, 50);
     }
     return String(value).substring(0, 50);
   }
@@ -178,11 +182,11 @@ class LearningStore {
    */
   getAdjustments(
     type: CorrectionType,
-    context: Record<string, any>
+    context: Record<string, unknown>
   ): {
     adjustment: number;
     confidence: number;
-    suggestions: any[];
+    suggestions: unknown[];
   } {
     const relevantPatterns: LearningPattern[] = [];
 
@@ -203,14 +207,14 @@ class LearningStore {
     // Calculate weighted adjustment
     let totalWeight = 0;
     let weightedAdjustment = 0;
-    const suggestions: any[] = [];
+    const suggestions: unknown[] = [];
 
     for (const pattern of relevantPatterns) {
       totalWeight += pattern.weight * pattern.frequency;
 
       // Extract suggestion from examples
       if (pattern.examples.length > 0) {
-        const recentExample = pattern.examples[pattern.examples.length - 1];
+        const recentExample = pattern.examples.at(-1);
         suggestions.push(recentExample.expected);
       }
     }
@@ -229,7 +233,7 @@ class LearningStore {
    */
   private calculatePatternRelevance(
     pattern: LearningPattern,
-    context: Record<string, any>
+    context: Record<string, unknown>
   ): number {
     let relevance = 0;
 
@@ -399,7 +403,7 @@ export function recordProductMatchCorrection(
 export function recordCategoryCorrection(
   suggestedCategory: string,
   actualCategory: string,
-  productContext: Record<string, any>,
+  productContext: Record<string, unknown>,
   userId?: number
 ): CorrectionRecord {
   return learningStore.recordCorrection(
@@ -435,11 +439,11 @@ export function recordSearchRelevanceCorrection(
  */
 export function getLearnedPredictions(
   type: CorrectionType,
-  context: Record<string, any>
+  context: Record<string, unknown>
 ): {
   adjustment: number;
   confidence: number;
-  suggestions: any[];
+  suggestions: unknown[];
 } {
   return learningStore.getAdjustments(type, context);
 }
@@ -450,7 +454,7 @@ export function getLearnedPredictions(
 export function applyLearningToScore(
   baseScore: number,
   type: CorrectionType,
-  context: Record<string, any>
+  context: Record<string, unknown>
 ): number {
   const { adjustment, confidence } = learningStore.getAdjustments(
     type,
