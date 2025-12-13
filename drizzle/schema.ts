@@ -109,7 +109,7 @@ export const budgets = mysqlTable("budgets", {
 });
 
 /**
- * Annual requirements requests (hospital/department) feeding the tender process
+ * Hospital Requests (hospital/department) feeding the tender process
  */
 export const requirementsRequests = mysqlTable("requirements_requests", {
   id: int("id").autoincrement().primaryKey(),
