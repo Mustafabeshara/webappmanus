@@ -14,11 +14,17 @@ async function columnExists(database: any, tableName: string, columnName: string
       SELECT COUNT(*) as count
       FROM INFORMATION_SCHEMA.COLUMNS
       WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = ?
-        AND COLUMN_NAME = ?
-    `, [tableName, columnName]);
-    return result[0]?.[0]?.count > 0;
-  } catch {
+        AND TABLE_NAME = '${tableName}'
+        AND COLUMN_NAME = '${columnName}'
+    `);
+    // Drizzle returns [rows, fields] - rows is an array of objects
+    const rows = Array.isArray(result) ? result[0] : result;
+    const firstRow = Array.isArray(rows) ? rows[0] : rows;
+    const count = firstRow?.count ?? 0;
+    console.log(`    Checking column ${columnName}: count=${count}`);
+    return count > 0;
+  } catch (error) {
+    console.log(`    Error checking column ${columnName}: ${error}`);
     return false;
   }
 }
