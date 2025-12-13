@@ -8,6 +8,14 @@ import {
 } from "../_core/trpc";
 import * as db from "../db";
 import * as utils from "../_core/utils";
+import type {
+  CreateTenderInput,
+  CreateTenderItemInput,
+  CreateTenderParticipantInput,
+  UpdateTenderInput,
+  TenderStatus,
+} from "../types/db";
+import { getInsertId } from "../types/db";
 
 /**
  * Helper function to send notifications to the project owner
@@ -142,21 +150,27 @@ export const tendersRouter = router({
       const { items, ...tenderData } = input;
       const referenceNumber = utils.generateTenderReference();
 
-      const result = await db.createTender({
+      const createInput: CreateTenderInput = {
         ...tenderData,
         referenceNumber,
         createdBy: ctx.user.id,
-      } as any);
+      };
 
-      const tenderId = Number(result.insertId);
+      const result = await db.createTender(createInput);
+      const tenderId = getInsertId(result);
 
       // Use bulk insert for better performance
       if (items && items.length > 0) {
-        const itemsWithTenderId = items.map(item => ({
+        const itemsWithTenderId: CreateTenderItemInput[] = items.map(item => ({
           tenderId,
-          ...item,
+          description: item.description,
+          quantity: item.quantity,
+          productId: item.productId,
+          unit: item.unit,
+          specifications: item.specifications,
+          estimatedPrice: item.estimatedPrice,
         }));
-        await db.createTenderItemsBulk(itemsWithTenderId as any);
+        await db.createTenderItemsBulk(itemsWithTenderId);
       }
 
       return { success: true, tenderId, referenceNumber };
@@ -212,21 +226,25 @@ export const tendersRouter = router({
           const { items, ...tender } = tenderData;
           const referenceNumber = utils.generateTenderReference();
 
-          const result = await db.createTender({
+          const createInput: CreateTenderInput = {
             ...tender,
             referenceNumber,
             createdBy: ctx.user.id,
-          } as any);
+          };
 
-          const tenderId = Number(result.insertId);
+          const result = await db.createTender(createInput);
+          const tenderId = getInsertId(result);
 
           // Use bulk insert for better performance
           if (items && items.length > 0) {
-            const itemsWithTenderId = items.map(item => ({
+            const itemsWithTenderId: CreateTenderItemInput[] = items.map(item => ({
               tenderId,
-              ...item,
+              description: item.description,
+              quantity: item.quantity,
+              unit: item.unit,
+              estimatedPrice: item.estimatedPrice,
             }));
-            await db.createTenderItemsBulk(itemsWithTenderId as any);
+            await db.createTenderItemsBulk(itemsWithTenderId);
           }
 
           results.push({
@@ -275,7 +293,7 @@ export const tendersRouter = router({
       const templateItems = await db.getTemplateItems(input.templateId);
       const referenceNumber = utils.generateTenderReference();
 
-      const result = await db.createTender({
+      const createInput: CreateTenderInput = {
         title: input.title,
         customerId: input.customerId,
         departmentId: template.departmentId,
@@ -287,12 +305,14 @@ export const tendersRouter = router({
         terms: template.defaultTerms,
         referenceNumber,
         createdBy: ctx.user.id,
-      } as any);
+      };
 
-      const tenderId = Number(result.insertId);
+      const result = await db.createTender(createInput);
+      const tenderId = getInsertId(result);
 
-      for (const item of templateItems) {
-        await db.createTenderItem({
+      // Create items from template
+      if (templateItems.length > 0) {
+        const itemsToCreate: CreateTenderItemInput[] = templateItems.map(item => ({
           tenderId,
           productId: item.productId,
           description: item.description || "",
@@ -300,7 +320,8 @@ export const tendersRouter = router({
           unit: item.unit,
           specifications: item.specifications,
           estimatedPrice: item.estimatedPrice,
-        } as any);
+        }));
+        await db.createTenderItemsBulk(itemsToCreate);
       }
 
       return { success: true, tenderId, referenceNumber };
@@ -331,8 +352,10 @@ export const tendersRouter = router({
     .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
 
+      const updateData: UpdateTenderInput = { ...data };
+
       if (data.status === "awarded" && data.awardedSupplierId) {
-        (data as any).awardedAt = new Date();
+        updateData.awardedAt = new Date();
 
         // Notify owner of tender award
         const tender = await db.getTenderById(id);
@@ -344,7 +367,7 @@ export const tendersRouter = router({
         }
       }
 
-      await db.updateTender(id, data);
+      await db.updateTender(id, updateData);
       return { success: true };
     }),
 
@@ -374,15 +397,26 @@ export const tendersRouter = router({
     .mutation(async ({ input }) => {
       const { bidItems, ...participantData } = input;
 
-      const result = await db.createTenderParticipant(participantData as any);
-      const participantId = Number(result.insertId);
+      const createParticipant: CreateTenderParticipantInput = {
+        tenderId: participantData.tenderId,
+        supplierId: participantData.supplierId,
+        totalBidAmount: participantData.totalBidAmount,
+        notes: participantData.notes,
+      };
+
+      const result = await db.createTenderParticipant(createParticipant);
+      const participantId = getInsertId(result);
 
       if (bidItems) {
         for (const item of bidItems) {
           await db.createParticipantBidItem({
             participantId,
-            ...item,
-          } as any);
+            tenderItemId: item.tenderItemId,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+            deliveryTime: item.deliveryTime,
+            notes: item.notes,
+          });
         }
       }
 

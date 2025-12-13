@@ -191,3 +191,167 @@ export type CreateEntityInput<T extends BaseEntity> = Omit<
 export type UpdateEntityInput<T extends BaseEntity> = Partial<
   Omit<T, "id" | "createdAt" | "updatedAt">
 >;
+
+/**
+ * Tender entity creation input
+ */
+export interface CreateTenderInput {
+  referenceNumber: string;
+  title: string;
+  description?: string | null;
+  customerId?: number | null;
+  departmentId?: number | null;
+  categoryId?: number | null;
+  templateId?: number | null;
+  status?: TenderStatus;
+  submissionDeadline?: Date | null;
+  evaluationDeadline?: Date | null;
+  requirements?: string | null;
+  terms?: string | null;
+  estimatedValue?: number | null;
+  createdBy: number;
+}
+
+/**
+ * Tender entity update input
+ */
+export interface UpdateTenderInput {
+  title?: string;
+  description?: string | null;
+  status?: TenderStatus;
+  submissionDeadline?: Date | null;
+  evaluationDeadline?: Date | null;
+  requirements?: string | null;
+  terms?: string | null;
+  estimatedValue?: number | null;
+  awardedSupplierId?: number | null;
+  awardedValue?: number | null;
+  awardedAt?: Date | null;
+  notes?: string | null;
+  isParticipating?: boolean;
+}
+
+/**
+ * Tender item creation input
+ */
+export interface CreateTenderItemInput {
+  tenderId: number;
+  productId?: number | null;
+  description: string;
+  quantity: number;
+  unit?: string | null;
+  specifications?: string | null;
+  estimatedPrice?: number | null;
+}
+
+/**
+ * Tender participant creation input
+ */
+export interface CreateTenderParticipantInput {
+  tenderId: number;
+  supplierId: number;
+  totalBidAmount?: number | null;
+  notes?: string | null;
+}
+
+/**
+ * Tender template creation input
+ */
+export interface CreateTenderTemplateInput {
+  name: string;
+  description?: string | null;
+  categoryId?: number | null;
+  departmentId?: number | null;
+  defaultRequirements?: string | null;
+  defaultTerms?: string | null;
+  createdBy: number;
+}
+
+/**
+ * Tender template update input
+ */
+export interface UpdateTenderTemplateInput {
+  name?: string;
+  description?: string | null;
+  defaultRequirements?: string | null;
+  defaultTerms?: string | null;
+}
+
+/**
+ * Invoice creation input
+ */
+export interface CreateInvoiceInput {
+  invoiceNumber: string;
+  customerId: number;
+  tenderId?: number | null;
+  purchaseOrderId?: number | null;
+  status?: InvoiceStatus;
+  issueDate?: Date | null;
+  dueDate?: Date | null;
+  subtotal: number;
+  taxAmount?: number;
+  totalAmount: number;
+  notes?: string | null;
+  createdBy: number;
+}
+
+/**
+ * Budget creation input
+ */
+export interface CreateBudgetInput {
+  name: string;
+  categoryId: number;
+  departmentId?: number | null;
+  fiscalYear: number;
+  allocatedAmount: number;
+  spentAmount?: number;
+  status?: "draft" | "active" | "closed";
+  approvalStatus?: "pending" | "approved" | "rejected";
+  notes?: string | null;
+  createdBy: number;
+}
+
+/**
+ * Product creation input
+ */
+export interface CreateProductInput {
+  name: string;
+  sku?: string | null;
+  categoryId?: number | null;
+  description?: string | null;
+  specifications?: string | null;
+  unitPrice?: number | null;
+  minOrderQuantity?: number;
+  leadTimeDays?: number;
+  supplierId?: number | null;
+  isActive?: boolean;
+}
+
+/**
+ * Expense creation input
+ */
+export interface CreateExpenseInput {
+  description: string;
+  categoryId?: number | null;
+  departmentId?: number | null;
+  budgetId?: number | null;
+  amount: number;
+  expenseDate: Date;
+  vendor?: string | null;
+  receiptUrl?: string | null;
+  status?: "pending" | "approved" | "rejected" | "paid";
+  notes?: string | null;
+  createdBy: number;
+}
+
+/**
+ * Participant bid item creation input
+ */
+export interface CreateParticipantBidItemInput {
+  participantId: number;
+  tenderItemId: number;
+  unitPrice: number;
+  totalPrice: number;
+  deliveryTime?: string | null;
+  notes?: string | null;
+}
