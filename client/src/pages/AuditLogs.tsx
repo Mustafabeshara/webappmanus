@@ -15,8 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import type { LucideIcon } from "lucide-react";
-import { CheckCircle, Edit, FileText, Plus, Trash2 } from "lucide-react";
+import { CheckCircle, Edit, FileText, Plus, Trash2, type LucideIcon } from "lucide-react";
 
 const actionConfig: Record<
   string,
