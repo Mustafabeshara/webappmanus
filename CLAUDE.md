@@ -7,7 +7,7 @@ Business management system for tender tracking, budgets, invoices, expenses, and
 - **Frontend**: React 18 + TypeScript + Vite
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **Backend**: Express.js + tRPC
-- **Database**: PostgreSQL with Drizzle ORM
+- **Database**: MySQL with Drizzle ORM
 - **Deployment**: Railway (auto-deploys from GitHub main branch)
 
 ## Directory Structure
