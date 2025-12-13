@@ -6,6 +6,26 @@
 import * as db from "../db";
 
 /**
+ * Wait for database connection with retries
+ */
+async function waitForDatabase(maxRetries = 5, delayMs = 2000): Promise<any> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const database = await db.getDb();
+      if (database) {
+        // Test the connection
+        await database.execute("SELECT 1");
+        return database;
+      }
+    } catch (error) {
+      console.log(`  Database not ready, attempt ${i + 1}/${maxRetries}...`);
+    }
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+  return null;
+}
+
+/**
  * Check if a column exists in a table
  */
 async function columnExists(database: any, tableName: string, columnName: string): Promise<boolean> {
@@ -50,9 +70,10 @@ async function addColumnIfNotExists(
 export async function runSecurityMigration() {
   console.log("🔄 Running security migration...");
 
-  const database = await db.getDb();
+  const database = await waitForDatabase();
   if (!database) {
-    throw new Error("Database not available");
+    console.log("⚠️ Database not available after retries, skipping migration");
+    return false;
   }
 
   try {
