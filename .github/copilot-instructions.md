@@ -264,8 +264,8 @@ See `.env.example` for complete list.
 
 ```bash
 # DO NOT manually create in components/ui/
-# Use the CLI:
-npx shadcn-ui@latest add <component-name>
+# Use the CLI with pnpm:
+pnpm dlx shadcn-ui@latest add <component-name>
 ```
 
 ### Modifying Authentication
