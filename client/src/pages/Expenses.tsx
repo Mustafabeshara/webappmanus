@@ -37,7 +37,6 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import type { LucideIcon } from "lucide-react";
 import {
   CheckCircle,
   Clock,
@@ -45,6 +44,7 @@ import {
   FileText,
   Plus,
   XCircle,
+  type LucideIcon
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";

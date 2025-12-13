@@ -233,6 +233,9 @@ class InputValidationService {
             size,
           }
         : undefined,
+      fileInfo: {
+        isSafe: isValid,
+      },
     };
   }
 
