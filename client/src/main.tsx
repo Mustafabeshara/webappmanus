@@ -10,6 +10,9 @@ import "./index.css";
 
 const queryClient = new QueryClient();
 
+// Store CSRF token from response headers
+let csrfToken: string | null = null;
+
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
@@ -43,9 +46,24 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       fetch(input, init) {
+        const headers = new Headers(init?.headers);
+        
+        // Include CSRF token if available
+        if (csrfToken) {
+          headers.set("X-CSRF-Token", csrfToken);
+        }
+        
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
+          headers,
+        }).then(async (response) => {
+          // Capture CSRF token from response headers
+          const newCsrfToken = response.headers.get("X-CSRF-Token");
+          if (newCsrfToken) {
+            csrfToken = newCsrfToken;
+          }
+          return response;
         });
       },
     }),

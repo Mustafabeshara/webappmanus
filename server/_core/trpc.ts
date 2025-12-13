@@ -190,7 +190,7 @@ const csrfProtectionMiddleware = t.middleware(async opts => {
   const tokenFromCookie = csrfProtectionService.getTokenFromCookies(ctx);
 
   // Validate CSRF tokens
-  const csrfContext = { user: ctx.user ? { sessionId: undefined } : undefined };
+  const csrfContext = { user: ctx.user ? { sessionId: ctx.user.sessionId } : undefined };
   if (
     !csrfProtectionService.validateToken(tokenFromHeader, tokenFromCookie, csrfContext)
   ) {
