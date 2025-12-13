@@ -51,6 +51,10 @@ export default tseslint.config(
         ...globals.node,
       },
     },
+    rules: {
+      // Allow namespace in Express type extensions
+      "@typescript-eslint/no-namespace": "off",
+    },
   },
 
   // Common rules for all TypeScript files

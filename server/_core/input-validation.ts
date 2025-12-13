@@ -39,6 +39,9 @@ export interface ValidationResult {
   isValid: boolean;
   errors: string[];
   sanitizedValue?: any;
+  fileInfo?: {
+    isSafe: boolean;
+  };
 }
 
 export interface SecurityThreat {
@@ -219,6 +222,9 @@ class InputValidationService {
             size,
           }
         : undefined,
+      fileInfo: {
+        isSafe: isValid,
+      },
     };
   }
 
