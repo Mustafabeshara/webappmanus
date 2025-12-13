@@ -4,20 +4,21 @@
  */
 
 import * as db from "../db";
+import { sql } from "drizzle-orm";
 
 /**
  * Wait for database connection with retries
  */
-async function waitForDatabase(maxRetries = 5, delayMs = 3000): Promise<any> {
+async function waitForDatabase(maxRetries = 10, delayMs = 3000): Promise<any> {
   for (let i = 0; i < maxRetries; i++) {
     try {
       console.log(`  Attempting database connection ${i + 1}/${maxRetries}...`);
       const database = await db.getDb();
       if (database) {
-        // Test the connection
+        // Test the connection using drizzle's sql template
         console.log(`  Testing connection...`);
-        await database.execute("SELECT 1");
-        console.log(`  Database connection successful!`);
+        const result = await database.execute(sql`SELECT 1 as test`);
+        console.log(`  Database connection successful! Result: ${JSON.stringify(result)}`);
         return database;
       } else {
         console.log(`  getDb() returned null`);
@@ -35,12 +36,12 @@ async function waitForDatabase(maxRetries = 5, delayMs = 3000): Promise<any> {
  */
 async function columnExists(database: any, tableName: string, columnName: string): Promise<boolean> {
   try {
-    const result = await database.execute(`
+    const result = await database.execute(sql`
       SELECT COUNT(*) as count
       FROM INFORMATION_SCHEMA.COLUMNS
       WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = '${tableName}'
-        AND COLUMN_NAME = '${columnName}'
+        AND TABLE_NAME = ${tableName}
+        AND COLUMN_NAME = ${columnName}
     `);
     // Drizzle returns [rows, fields] - rows is an array of objects
     const rows = Array.isArray(result) ? result[0] : result;
@@ -65,7 +66,8 @@ async function addColumnIfNotExists(
 ): Promise<void> {
   const exists = await columnExists(database, tableName, columnName);
   if (!exists) {
-    await database.execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
+    // Use sql.raw for dynamic identifiers in ALTER TABLE
+    await database.execute(sql.raw(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`));
     console.log(`  Added column: ${columnName}`);
   } else {
     console.log(`  Column exists: ${columnName}`);
@@ -106,7 +108,7 @@ export async function runSecurityMigration() {
 
     // Create sessions table
     console.log("Creating sessions table...");
-    await database.execute(`
+    await database.execute(sql.raw(`
       CREATE TABLE IF NOT EXISTS sessions (
         id INT AUTO_INCREMENT PRIMARY KEY,
         sessionId VARCHAR(64) NOT NULL UNIQUE,
@@ -121,11 +123,11 @@ export async function runSecurityMigration() {
         INDEX idx_sessions_session_id (sessionId),
         INDEX idx_sessions_expires_at (expiresAt)
       )
-    `);
+    `));
 
     // Create security_events table
     console.log("Creating security_events table...");
-    await database.execute(`
+    await database.execute(sql.raw(`
       CREATE TABLE IF NOT EXISTS security_events (
         id INT AUTO_INCREMENT PRIMARY KEY,
         type ENUM('sql_injection_attempt', 'xss_attempt', 'invalid_file_upload', 'rate_limit_exceeded', 'unauthorized_access', 'suspicious_activity', 'csrf_violation', 'session_hijack_attempt') NOT NULL,
@@ -146,11 +148,11 @@ export async function runSecurityMigration() {
         INDEX idx_security_events_user_id (userId),
         INDEX idx_security_events_created_at (createdAt)
       )
-    `);
+    `));
 
     // Create password_history table
     console.log("Creating password_history table...");
-    await database.execute(`
+    await database.execute(sql.raw(`
       CREATE TABLE IF NOT EXISTS password_history (
         id INT AUTO_INCREMENT PRIMARY KEY,
         userId INT NOT NULL,
@@ -158,11 +160,11 @@ export async function runSecurityMigration() {
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
         INDEX idx_password_history_user_id (userId)
       )
-    `);
+    `));
 
     // Create rate_limit_violations table
     console.log("Creating rate_limit_violations table...");
-    await database.execute(`
+    await database.execute(sql.raw(`
       CREATE TABLE IF NOT EXISTS rate_limit_violations (
         id INT AUTO_INCREMENT PRIMARY KEY,
         identifier VARCHAR(100) NOT NULL,
@@ -176,11 +178,11 @@ export async function runSecurityMigration() {
         INDEX idx_rate_limit_identifier (identifier),
         INDEX idx_rate_limit_endpoint (endpoint)
       )
-    `);
+    `));
 
     // Create file_uploads table
     console.log("Creating file_uploads table...");
-    await database.execute(`
+    await database.execute(sql.raw(`
       CREATE TABLE IF NOT EXISTS file_uploads (
         id INT AUTO_INCREMENT PRIMARY KEY,
         originalName VARCHAR(255) NOT NULL,
@@ -199,14 +201,12 @@ export async function runSecurityMigration() {
         INDEX idx_file_uploads_entity (entityType, entityId),
         INDEX idx_file_uploads_uploaded_by (uploadedBy)
       )
-    `);
+    `));
 
     // Add checksum column to audit_logs if it doesn't exist
     console.log("Adding checksum to audit_logs table...");
     try {
-      await database.execute(`
-        ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS checksum VARCHAR(64)
-      `);
+      await addColumnIfNotExists(database, "audit_logs", "checksum", "VARCHAR(64)");
     } catch (error) {
       console.log("Checksum column might already exist:", error);
     }
