@@ -38,6 +38,9 @@ import HR from "./pages/HR";
 import SupplierCatalog from "./pages/SupplierCatalog";
 import DocumentCenter from "./pages/DocumentCenter";
 import AIInsights from "./pages/AIInsights";
+import Customers from "./pages/Customers";
+import CreateCustomer from "./pages/CreateCustomer";
+import CustomerDetails from "./pages/CustomerDetails";
 
 function Router() {
   return (
@@ -172,6 +175,31 @@ function Router() {
         )}
       </Route>
       
+      {/* Customers - specific routes BEFORE dynamic routes */}
+      <Route path={"/customers/create"}>
+        {() => (
+          <DashboardLayout>
+            <CreateCustomer />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      <Route path={"/customers/:id"}>
+        {() => (
+          <DashboardLayout>
+            <CustomerDetails />
+          </DashboardLayout>
+        )}
+      </Route>
+
+      <Route path={"/customers"}>
+        {() => (
+          <DashboardLayout>
+            <Customers />
+          </DashboardLayout>
+        )}
+      </Route>
+
       {/* Suppliers - specific routes BEFORE dynamic routes */}
       <Route path={"/suppliers/create"}>
         {() => (
