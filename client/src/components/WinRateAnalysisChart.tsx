@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   BarChart,
   Bar,
@@ -170,7 +170,7 @@ export function WinRateAnalysisChart() {
     return [...new Set(tenders.map(t => t.categoryId ? String(t.categoryId) : "Uncategorized"))].sort((a, b) => a.localeCompare(b));
   }, [tenders]);
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     if (!chartData.byMonth.length) return;
 
     const csvContent = [
@@ -187,7 +187,7 @@ export function WinRateAnalysisChart() {
     a.download = `win-rate-analysis-${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [chartData.byMonth]);
 
   if (isLoading) {
     return (

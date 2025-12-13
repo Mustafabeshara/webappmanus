@@ -112,28 +112,29 @@ export const tendersRouter = router({
   create: protectedProcedure
     .input(
       z.object({
-        title: z.string(),
-        description: z.string().optional(),
-        customerId: z.number().optional(),
-        departmentId: z.number().optional(),
-        categoryId: z.number().optional(),
-        templateId: z.number().optional(),
+        title: z.string().min(3, "Title must be at least 3 characters").max(255, "Title cannot exceed 255 characters"),
+        description: z.string().max(10000, "Description cannot exceed 10000 characters").optional(),
+        customerId: z.number().int().positive().optional(),
+        departmentId: z.number().int().positive().optional(),
+        categoryId: z.number().int().positive().optional(),
+        templateId: z.number().int().positive().optional(),
         submissionDeadline: z.date().optional(),
         evaluationDeadline: z.date().optional(),
-        requirements: z.string().optional(),
-        terms: z.string().optional(),
-        estimatedValue: z.number().optional(),
+        requirements: z.string().max(50000, "Requirements cannot exceed 50000 characters").optional(),
+        terms: z.string().max(50000, "Terms cannot exceed 50000 characters").optional(),
+        estimatedValue: z.number().nonnegative("Estimated value must be non-negative").max(999999999999, "Value exceeds maximum").optional(),
         items: z
           .array(
             z.object({
-              productId: z.number().optional(),
-              description: z.string(),
-              quantity: z.number(),
-              unit: z.string().optional(),
-              specifications: z.string().optional(),
-              estimatedPrice: z.number().optional(),
+              productId: z.number().int().positive().optional(),
+              description: z.string().min(1, "Item description required").max(1000, "Item description too long"),
+              quantity: z.number().int().positive("Quantity must be positive").max(1000000, "Quantity too large"),
+              unit: z.string().max(50, "Unit too long").optional(),
+              specifications: z.string().max(5000, "Specifications too long").optional(),
+              estimatedPrice: z.number().nonnegative().max(999999999999, "Price exceeds maximum").optional(),
             })
           )
+          .max(100, "Cannot add more than 100 items at once")
           .optional(),
       })
     )
@@ -149,13 +150,13 @@ export const tendersRouter = router({
 
       const tenderId = Number(result.insertId);
 
-      if (items) {
-        for (const item of items) {
-          await db.createTenderItem({
-            tenderId,
-            ...item,
-          } as any);
-        }
+      // Use bulk insert for better performance
+      if (items && items.length > 0) {
+        const itemsWithTenderId = items.map(item => ({
+          tenderId,
+          ...item,
+        }));
+        await db.createTenderItemsBulk(itemsWithTenderId as any);
       }
 
       return { success: true, tenderId, referenceNumber };
@@ -170,25 +171,26 @@ export const tendersRouter = router({
         tenders: z
           .array(
             z.object({
-              title: z.string(),
-              description: z.string().optional(),
+              title: z.string().min(3).max(255),
+              description: z.string().max(10000).optional(),
               submissionDeadline: z.date().optional(),
               evaluationDeadline: z.date().optional(),
-              requirements: z.string().optional(),
-              terms: z.string().optional(),
-              estimatedValue: z.number().optional(),
+              requirements: z.string().max(50000).optional(),
+              terms: z.string().max(50000).optional(),
+              estimatedValue: z.number().nonnegative().max(999999999999).optional(),
               status: z
                 .enum(["draft", "open", "awarded", "closed", "archived"])
                 .optional(),
               items: z
                 .array(
                   z.object({
-                    description: z.string(),
-                    quantity: z.number(),
-                    unit: z.string().optional(),
-                    estimatedPrice: z.number().optional(),
+                    description: z.string().min(1).max(1000),
+                    quantity: z.number().int().positive().max(1000000),
+                    unit: z.string().max(50).optional(),
+                    estimatedPrice: z.number().nonnegative().max(999999999999).optional(),
                   })
                 )
+                .max(100)
                 .optional(),
             })
           )
@@ -218,13 +220,13 @@ export const tendersRouter = router({
 
           const tenderId = Number(result.insertId);
 
+          // Use bulk insert for better performance
           if (items && items.length > 0) {
-            for (const item of items) {
-              await db.createTenderItem({
-                tenderId,
-                ...item,
-              } as any);
-            }
+            const itemsWithTenderId = items.map(item => ({
+              tenderId,
+              ...item,
+            }));
+            await db.createTenderItemsBulk(itemsWithTenderId as any);
           }
 
           results.push({

@@ -1275,6 +1275,19 @@ export async function createTenderItem(item: typeof tenderItems.$inferInsert) {
   return { insertId: result.insertId };
 }
 
+/**
+ * Bulk insert tender items for better performance
+ * Uses single INSERT statement instead of multiple queries
+ */
+export async function createTenderItemsBulk(items: (typeof tenderItems.$inferInsert)[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (items.length === 0) return { insertedCount: 0 };
+
+  await db.insert(tenderItems).values(items);
+  return { insertedCount: items.length };
+}
+
 export async function updateTender(
   id: number,
   data: Partial<typeof tenders.$inferInsert>
@@ -2529,9 +2542,26 @@ export async function createSecurityEvent(
   return { insertId: result.insertId };
 }
 
+// Valid enum values for security events - used to prevent SQL injection
+const SECURITY_EVENT_TYPES = [
+  "sql_injection_attempt",
+  "xss_attempt",
+  "invalid_file_upload",
+  "rate_limit_exceeded",
+  "unauthorized_access",
+  "suspicious_activity",
+  "csrf_violation",
+  "session_hijack_attempt",
+] as const;
+
+const SECURITY_SEVERITY_LEVELS = ["low", "medium", "high", "critical"] as const;
+
+type SecurityEventType = (typeof SECURITY_EVENT_TYPES)[number];
+type SecuritySeverity = (typeof SECURITY_SEVERITY_LEVELS)[number];
+
 export async function getSecurityEvents(filters?: {
-  type?: string;
-  severity?: string;
+  type?: SecurityEventType;
+  severity?: SecuritySeverity;
   userId?: number;
   resolved?: boolean;
   startDate?: Date;
@@ -2542,13 +2572,15 @@ export async function getSecurityEvents(filters?: {
   const db = await getDb();
   if (!db) return [];
 
-  const conditions: any[] = [];
+  const conditions: ReturnType<typeof eq>[] = [];
 
-  if (filters?.type) {
-    conditions.push(eq(securityEvents.type, filters.type as any));
+  // Validate type against allowed enum values to prevent injection
+  if (filters?.type && SECURITY_EVENT_TYPES.includes(filters.type)) {
+    conditions.push(eq(securityEvents.type, filters.type));
   }
-  if (filters?.severity) {
-    conditions.push(eq(securityEvents.severity, filters.severity as any));
+  // Validate severity against allowed enum values to prevent injection
+  if (filters?.severity && SECURITY_SEVERITY_LEVELS.includes(filters.severity)) {
+    conditions.push(eq(securityEvents.severity, filters.severity));
   }
   if (filters?.userId) {
     conditions.push(eq(securityEvents.userId, filters.userId));
@@ -2563,15 +2595,15 @@ export async function getSecurityEvents(filters?: {
     conditions.push(lte(securityEvents.createdAt, filters.endDate));
   }
 
-  let query = db.select().from(securityEvents);
+  const baseQuery = db.select().from(securityEvents);
 
-  if (conditions.length > 0) {
-    query = query.where(and(...conditions)) as any;
-  }
+  const query = conditions.length > 0
+    ? baseQuery.where(and(...conditions))
+    : baseQuery;
 
   return query
     .orderBy(desc(securityEvents.createdAt))
-    .limit(filters?.limit || 100)
+    .limit(Math.min(filters?.limit || 100, 1000)) // Cap at 1000 max
     .offset(filters?.offset || 0);
 }
 

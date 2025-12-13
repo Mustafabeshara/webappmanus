@@ -1135,6 +1135,58 @@ export const productSpecifications = mysqlTable("product_specifications", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+/**
+ * Extended product information for catalog management
+ */
+export const productCatalogInfo = mysqlTable("product_catalog_info", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("productId").notNull(),
+  productCode: varchar("productCode", { length: 100 }), // Supplier/manufacturer product code
+  barcode: varchar("barcode", { length: 100 }),
+  // Market information
+  targetCustomers: text("targetCustomers"), // JSON array of target customer segments
+  indication: text("indication"), // Medical indication or use case
+  prevalence: varchar("prevalence", { length: 255 }), // Market prevalence info
+  marketDemand: mysqlEnum("marketDemand", ["low", "medium", "high", "very_high"]).default("medium"),
+  demandNotes: text("demandNotes"),
+  // Competitive landscape
+  competitors: text("competitors"), // JSON array of competitor products
+  competitorPricing: text("competitorPricing"), // JSON with competitor price data
+  marketPosition: varchar("marketPosition", { length: 255 }),
+  uniqueSellingPoints: text("uniqueSellingPoints"), // JSON array
+  // Additional details
+  certifications: text("certifications"), // JSON array
+  countryOfOrigin: varchar("countryOfOrigin", { length: 100 }),
+  warranty: varchar("warranty", { length: 255 }),
+  shelfLife: varchar("shelfLife", { length: 100 }),
+  storageRequirements: text("storageRequirements"),
+  // Import/regulatory
+  hsCode: varchar("hsCode", { length: 20 }),
+  regulatoryStatus: varchar("regulatoryStatus", { length: 255 }),
+  sfdaRegistration: varchar("sfdaRegistration", { length: 100 }),
+  // Pricing tiers
+  pricingTiers: text("pricingTiers"), // JSON for volume-based pricing
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Product competitors tracking
+ */
+export const productCompetitors = mysqlTable("product_competitors", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("productId").notNull(),
+  competitorName: varchar("competitorName", { length: 255 }).notNull(),
+  competitorProduct: varchar("competitorProduct", { length: 255 }),
+  competitorPrice: int("competitorPrice"), // in cents
+  competitorStrengths: text("competitorStrengths"),
+  competitorWeaknesses: text("competitorWeaknesses"),
+  marketShare: varchar("marketShare", { length: 50 }),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 // =============================================================================
 // WORKFLOW AND TASK MANAGEMENT TABLES
 // =============================================================================
@@ -1287,3 +1339,7 @@ export type InsertTaskDependency = typeof taskDependencies.$inferInsert;
 export type TaskEscalation = typeof taskEscalations.$inferSelect;
 export type InsertTaskEscalation = typeof taskEscalations.$inferInsert;
 export type InsertSecurityEvent = typeof securityEvents.$inferInsert;
+export type ProductCatalogInfo = typeof productCatalogInfo.$inferSelect;
+export type InsertProductCatalogInfo = typeof productCatalogInfo.$inferInsert;
+export type ProductCompetitor = typeof productCompetitors.$inferSelect;
+export type InsertProductCompetitor = typeof productCompetitors.$inferInsert;

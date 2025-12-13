@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -72,7 +72,7 @@ export function TemplateDetailModal({
     },
   });
 
-  const handleStartEdit = () => {
+  const handleStartEdit = useCallback(() => {
     if (template) {
       setEditedName(template.name);
       setEditedDescription(template.description || "");
@@ -80,13 +80,13 @@ export function TemplateDetailModal({
       setEditedTerms(template.defaultTerms || "");
       setIsEditing(true);
     }
-  };
+  }, [template]);
 
-  const handleCancelEdit = () => {
+  const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
-  };
+  }, []);
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = useCallback(() => {
     if (!template) return;
     if (!editedName.trim()) {
       toast.error("Template name is required");
@@ -100,9 +100,9 @@ export function TemplateDetailModal({
       defaultRequirements: editedRequirements || undefined,
       defaultTerms: editedTerms || undefined,
     });
-  };
+  }, [template, editedName, editedDescription, editedRequirements, editedTerms, updateTemplate]);
 
-  const handleDuplicate = () => {
+  const handleDuplicate = useCallback(() => {
     if (!template) return;
     // Copy template data to clipboard for easy creation of a new template
     const templateData = {
@@ -113,17 +113,19 @@ export function TemplateDetailModal({
     };
     navigator.clipboard.writeText(JSON.stringify(templateData, null, 2));
     toast.success("Template data copied to clipboard");
-  };
+  }, [template]);
+
+  const requirementsList = useMemo(() => {
+    if (!template?.defaultRequirements) return [];
+    return template.defaultRequirements.split("\n").filter((r) => r.trim());
+  }, [template?.defaultRequirements]);
+
+  const termsList = useMemo(() => {
+    if (!template?.defaultTerms) return [];
+    return template.defaultTerms.split("\n").filter((t) => t.trim());
+  }, [template?.defaultTerms]);
 
   if (!template) return null;
-
-  const requirementsList = template.defaultRequirements
-    ? template.defaultRequirements.split("\n").filter((r) => r.trim())
-    : [];
-
-  const termsList = template.defaultTerms
-    ? template.defaultTerms.split("\n").filter((t) => t.trim())
-    : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

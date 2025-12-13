@@ -28,15 +28,44 @@ export const filesRouter = router({
   uploadToS3: uploadProcedure
     .input(
       z.object({
-        fileName: z.string(),
+        fileName: z.string().min(1).max(255),
         fileData: z.string(), // base64 encoded file data
         mimeType: z.string(),
-        entityType: z.string(),
-        entityId: z.number(),
-        category: z.string().optional(),
+        entityType: z.enum(["tender", "invoice", "expense", "product", "supplier", "customer", "delivery", "document"]),
+        entityId: z.number().int().positive(),
+        category: z.string().max(100).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
+      // Sanitize filename to prevent path traversal attacks
+      const sanitizeFilename = (name: string): string => {
+        // Remove any path components and dangerous characters
+        let sanitized = name;
+        // Remove path prefixes (everything before last slash)
+        const lastSlash = Math.max(sanitized.lastIndexOf("/"), sanitized.lastIndexOf("\\"));
+        if (lastSlash >= 0) {
+          sanitized = sanitized.substring(lastSlash + 1);
+        }
+        // Remove directory traversal sequences
+        sanitized = sanitized.replaceAll("..", "");
+        // Remove invalid/dangerous characters: < > : " | ? *
+        sanitized = sanitized.replaceAll("<", "").replaceAll(">", "").replaceAll(":", "")
+          .replaceAll('"', "").replaceAll("|", "").replaceAll("?", "").replaceAll("*", "");
+        // Remove control characters (0x00-0x1f) using character code filtering
+        sanitized = Array.from(sanitized).filter(char => (char.codePointAt(0) ?? 0) > 31).join("");
+        sanitized = sanitized.trim();
+
+        if (!sanitized || sanitized.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid filename",
+          });
+        }
+        return sanitized;
+      };
+
+      const safeFileName = sanitizeFilename(input.fileName);
+
       // Basic safety checks
       const allowedMimeTypes = [
         "application/pdf",
@@ -70,17 +99,17 @@ export const filesRouter = router({
         });
       }
 
-      // Generate unique file key
+      // Generate unique file key with sanitized filename
       const timestamp = Date.now();
       const randomSuffix = Math.random().toString(36).substring(7);
-      const fileKey = `${input.entityType}/${input.entityId}/${timestamp}-${randomSuffix}-${input.fileName}`;
+      const fileKey = `${input.entityType}/${input.entityId}/${timestamp}-${randomSuffix}-${safeFileName}`;
 
       // Upload to S3
       const { url } = await storagePut(fileKey, buffer, input.mimeType);
 
-      // Save metadata to database
+      // Save metadata to database with sanitized filename
       const file = await db.createFile({
-        fileName: input.fileName,
+        fileName: safeFileName,
         fileKey,
         fileUrl: url,
         fileSize,
