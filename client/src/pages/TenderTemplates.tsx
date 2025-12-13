@@ -25,9 +25,12 @@ import {
 import { Plus, FileText, Trash2, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { TemplateDetailModal } from "@/components/TemplateDetailModal";
 
 export default function TenderTemplates() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   const [defaultRequirements, setDefaultRequirements] = useState("");
@@ -198,7 +201,10 @@ export default function TenderTemplates() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => toast.info("Template details view coming soon")}
+                          onClick={() => {
+                            setSelectedTemplate(template);
+                            setIsDetailOpen(true);
+                          }}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -231,6 +237,14 @@ export default function TenderTemplates() {
           )}
         </CardContent>
       </Card>
+
+      {/* Template Detail Modal */}
+      <TemplateDetailModal
+        template={selectedTemplate}
+        open={isDetailOpen}
+        onOpenChange={setIsDetailOpen}
+        onUpdate={() => utils.tenderTemplates.list.invalidate()}
+      />
     </div>
   );
 }

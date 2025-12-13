@@ -60,6 +60,22 @@ export const tenderTemplatesRouter = router({
       return { success: true, templateId };
     }),
 
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        defaultRequirements: z.string().optional(),
+        defaultTerms: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await db.updateTenderTemplate(id, data);
+      return { success: true };
+    }),
+
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {

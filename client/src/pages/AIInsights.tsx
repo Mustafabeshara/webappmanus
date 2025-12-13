@@ -7,6 +7,7 @@ import { TenderMatchingDashboard } from "@/components/TenderMatchingDashboard";
 import { SemanticSearch } from "@/components/SemanticSearch";
 import { NLPSearchBar } from "@/components/NLPSearchBar";
 import { ProductForecast } from "@/components/ProductForecast";
+import { WinRateAnalysisChart } from "@/components/WinRateAnalysisChart";
 import {
   Brain,
   Target,
@@ -452,21 +453,7 @@ export default function AIInsights() {
         {/* Analytics Tab - Enhanced */}
         <TabsContent value="analytics" className="mt-6">
           <div className="grid gap-6 md:grid-cols-3">
-            <Card className="md:col-span-2 overflow-hidden">
-              <CardHeader className="border-b">
-                <CardTitle>Win Rate Analysis</CardTitle>
-                <CardDescription>AI-powered analysis of your tender success rates</CardDescription>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="h-72 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted rounded-xl border-2 border-dashed">
-                  <div className="text-center text-muted-foreground">
-                    <BarChart3 className="h-16 w-16 mx-auto mb-3 opacity-30" />
-                    <p className="font-medium">Interactive Chart Coming Soon</p>
-                    <p className="text-sm mt-1">Win rate by category, time, and region</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <WinRateAnalysisChart />
 
             <Card className="overflow-hidden">
               <CardHeader className="border-b">

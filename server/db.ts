@@ -47,6 +47,8 @@ import {
   participantBidItems,
   passwordHistory,
   priceHistory,
+  productCatalogInfo,
+  productCompetitors,
   productSpecifications,
   products,
   purchaseOrderItems,
@@ -712,6 +714,114 @@ export async function createProductSpecification(
   return { insertId: getInsertId(result) };
 }
 
+// ============================================
+// PRODUCT CATALOG INFO
+// ============================================
+
+export async function getProductCatalogInfo(productId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(productCatalogInfo)
+    .where(eq(productCatalogInfo.productId, productId))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function upsertProductCatalogInfo(
+  productId: number,
+  data: Partial<typeof productCatalogInfo.$inferInsert>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await getProductCatalogInfo(productId);
+
+  if (existing) {
+    await db
+      .update(productCatalogInfo)
+      .set(data)
+      .where(eq(productCatalogInfo.productId, productId));
+    return { id: existing.id, updated: true };
+  } else {
+    const [result] = await db
+      .insert(productCatalogInfo)
+      .values({ productId, ...data });
+    return { insertId: getInsertId(result), updated: false };
+  }
+}
+
+// ============================================
+// PRODUCT COMPETITORS
+// ============================================
+
+export async function getProductCompetitors(productId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(productCompetitors)
+    .where(eq(productCompetitors.productId, productId))
+    .orderBy(asc(productCompetitors.competitorName));
+}
+
+export async function createProductCompetitor(
+  data: typeof productCompetitors.$inferInsert
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db.insert(productCompetitors).values(data);
+  return { insertId: getInsertId(result) };
+}
+
+export async function updateProductCompetitor(
+  id: number,
+  data: Partial<typeof productCompetitors.$inferInsert>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(productCompetitors)
+    .set(data)
+    .where(eq(productCompetitors.id, id));
+}
+
+export async function deleteProductCompetitor(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(productCompetitors).where(eq(productCompetitors.id, id));
+}
+
+export async function getProductWithFullDetails(productId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const product = await getProductById(productId);
+  if (!product) return null;
+
+  const [catalogInfo, competitors, specs, supplierPricesData] = await Promise.all([
+    getProductCatalogInfo(productId),
+    getProductCompetitors(productId),
+    getProductSpecifications(productId),
+    getProductSupplierPrices(productId),
+  ]);
+
+  return {
+    ...product,
+    catalogInfo,
+    competitors,
+    specifications: specs,
+    supplierPrices: supplierPricesData,
+  };
+}
+
 export async function getSupplierOrders(
   supplierId: number,
   dateRange?: { start?: Date; end?: Date }
@@ -1037,6 +1147,19 @@ export async function deleteTenderTemplate(id: number) {
   await db.delete(templateItems).where(eq(templateItems.templateId, id));
   // Delete template
   await db.delete(tenderTemplates).where(eq(tenderTemplates.id, id));
+}
+
+export async function updateTenderTemplate(
+  id: number,
+  data: Partial<typeof tenderTemplates.$inferInsert>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(tenderTemplates)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(tenderTemplates.id, id));
 }
 
 // ============================================
