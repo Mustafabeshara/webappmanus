@@ -39,6 +39,12 @@ export interface ValidationResult {
   isValid: boolean;
   errors: string[];
   sanitizedValue?: any;
+  fileInfo?: {
+    isSafe: boolean;
+    originalname?: string;
+    mimetype?: string;
+    size?: number;
+  };
 }
 
 export interface SecurityThreat {
@@ -214,6 +220,14 @@ class InputValidationService {
       sanitizedValue: isValid
         ? {
             ...file,
+            originalname: this.sanitizeString(originalname),
+            mimetype,
+            size,
+          }
+        : undefined,
+      fileInfo: isValid
+        ? {
+            isSafe: true,
             originalname: this.sanitizeString(originalname),
             mimetype,
             size,
