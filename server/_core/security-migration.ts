@@ -8,17 +8,22 @@ import * as db from "../db";
 /**
  * Wait for database connection with retries
  */
-async function waitForDatabase(maxRetries = 5, delayMs = 2000): Promise<any> {
+async function waitForDatabase(maxRetries = 5, delayMs = 3000): Promise<any> {
   for (let i = 0; i < maxRetries; i++) {
     try {
+      console.log(`  Attempting database connection ${i + 1}/${maxRetries}...`);
       const database = await db.getDb();
       if (database) {
         // Test the connection
+        console.log(`  Testing connection...`);
         await database.execute("SELECT 1");
+        console.log(`  Database connection successful!`);
         return database;
+      } else {
+        console.log(`  getDb() returned null`);
       }
-    } catch (error) {
-      console.log(`  Database not ready, attempt ${i + 1}/${maxRetries}...`);
+    } catch (error: any) {
+      console.log(`  Database not ready, attempt ${i + 1}/${maxRetries}: ${error?.message || error}`);
     }
     await new Promise(resolve => setTimeout(resolve, delayMs));
   }
