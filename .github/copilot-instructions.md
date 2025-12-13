@@ -27,11 +27,11 @@ WebApp Manus is a comprehensive business management system for tender tracking, 
 
 ### Development & Testing
 - **pnpm** as package manager (NOT npm or yarn)
-- **Vitest** for unit testing (149+ tests)
+- **Vitest** for unit testing
 - **Playwright** for E2E testing
 - **ESLint** for linting
 - **Prettier** for formatting
-- **TypeScript** strict mode
+- **TypeScript** strict mode enabled
 
 ### Deployment
 - **Railway** (auto-deploys from main branch)
@@ -265,7 +265,7 @@ See `.env.example` for complete list.
 ```bash
 # DO NOT manually create in components/ui/
 # Use the CLI with pnpm:
-pnpm dlx shadcn@latest add <component-name>
+pnpm dlx shadcn-ui@latest add <component-name>
 ```
 
 ### Modifying Authentication
