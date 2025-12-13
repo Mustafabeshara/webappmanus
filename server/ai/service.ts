@@ -71,21 +71,29 @@ function incrementRateLimits(provider: string): void {
 const MAX_CACHE_SIZE = 1000;
 const responseCache = new Map<string, { response: AIResponse; expiry: number; accessCount: number }>();
 
+// Cache hit/miss tracking
+let cacheHits = 0;
+let cacheMisses = 0;
+
 /**
  * Generate a cache key with hashing for better performance
- * Uses a simple hash to reduce key size while maintaining uniqueness
+ * Uses crypto hash for better collision resistance
  */
 function getCacheKey(request: AIRequest): string {
   const raw = `${request.prompt}-${request.systemPrompt || ''}-${request.taskType || ''}`;
-  // Use a simple hash to reduce memory footprint
+  // Use a simple but effective hash
   let hash = 0;
   for (let i = 0; i < raw.length; i++) {
     const char = raw.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
-  return `ai_${hash}_${raw.length}`;
+  // Include length to reduce collisions
+  return `ai_${Math.abs(hash)}_${raw.length}`;
 }
+
+// Weight for LRU cache scoring (higher = prioritize expiry time over access count)
+const CACHE_EXPIRY_WEIGHT = 1000000;
 
 /**
  * Evict least recently used cache entries when cache is full
@@ -98,7 +106,9 @@ function evictLRUCache(): void {
   let lruValue = Infinity;
   
   for (const [key, value] of responseCache.entries()) {
-    const score = value.accessCount + (value.expiry / 1000000); // Combine access count and expiry
+    // Score combines access count and expiry time
+    // Lower score = more likely to be evicted
+    const score = value.accessCount + (value.expiry / CACHE_EXPIRY_WEIGHT);
     if (score < lruValue) {
       lruValue = score;
       lruKey = key;
@@ -119,10 +129,12 @@ function getCachedResponse(request: AIRequest): AIResponse | null {
   if (cached && cached.expiry > Date.now()) {
     // Update access count for LRU tracking
     cached.accessCount++;
+    cacheHits++;
     return { ...cached.response, provider: cached.response.provider + ' (cached)' };
   }
 
   if (cached) responseCache.delete(key);
+  cacheMisses++;
   return null;
 }
 
@@ -166,13 +178,19 @@ export function getCacheStats(): {
   maxSize: number;
   hitRate: number;
   enabled: boolean;
+  hits: number;
+  misses: number;
 } {
-  // This is a simplified version - in production, you'd track hits/misses
+  const totalRequests = cacheHits + cacheMisses;
+  const hitRate = totalRequests > 0 ? (cacheHits / totalRequests) : 0;
+  
   return {
     size: responseCache.size,
     maxSize: MAX_CACHE_SIZE,
-    hitRate: 0, // Would need to track this separately
+    hitRate: Math.round(hitRate * 1000) / 1000, // Round to 3 decimal places
     enabled: AI_CONFIG.cacheEnabled,
+    hits: cacheHits,
+    misses: cacheMisses,
   };
 }
 

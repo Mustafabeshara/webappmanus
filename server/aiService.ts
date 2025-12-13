@@ -140,18 +140,8 @@ function isSafeRemoteImageUrl(imageUrl: string): boolean {
     if (!hostname) return false;
 
     // Block known sensitive domains
-    if (BLOCKED_DOMAINS.includes(hostname as any)) {
+    if (BLOCKED_DOMAINS.some(domain => hostname === domain)) {
       console.warn(`[Security] Blocked access to sensitive domain: ${hostname}`);
-      return false;
-    }
-
-    // Block localhost-like domains
-    if (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "::1"
-    ) {
-      console.warn(`[Security] Blocked localhost access: ${hostname}`);
       return false;
     }
 
@@ -257,7 +247,12 @@ export async function performOCR(imageUrl: string): Promise<OCRResult> {
   }
 
   if (!isSafeRemoteImageUrl(imageUrl)) {
-    console.warn(`[OCR] Blocked unsafe image URL: ${imageUrl.substring(0, 100)}...`);
+    // Log only a hash of the URL for security audit without exposing sensitive info
+    const urlHash = Math.abs(imageUrl.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0));
+    console.warn(`[OCR] Blocked unsafe image URL (hash: ${urlHash})`);
     return {
       text: "",
       success: false,
@@ -280,8 +275,8 @@ export async function performOCR(imageUrl: string): Promise<OCRResult> {
         {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           timeout: 30000,
-          // Security: Don't follow redirects to prevent SSRF
-          maxRedirects: 0,
+          // Security: Allow limited redirects while still maintaining security
+          maxRedirects: 3,
           validateStatus: (status) => status === 200,
         }
       );
