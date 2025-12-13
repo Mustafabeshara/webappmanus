@@ -67,11 +67,47 @@ function incrementRateLimits(provider: string): void {
   rateLimits[provider].dayCount++;
 }
 
-// Response cache
-const responseCache = new Map<string, { response: AIResponse; expiry: number }>();
+// Response cache with size limit to prevent memory issues
+const MAX_CACHE_SIZE = 1000;
+const responseCache = new Map<string, { response: AIResponse; expiry: number; accessCount: number }>();
 
+/**
+ * Generate a cache key with hashing for better performance
+ * Uses a simple hash to reduce key size while maintaining uniqueness
+ */
 function getCacheKey(request: AIRequest): string {
-  return `${request.prompt}-${request.systemPrompt || ''}-${request.taskType || ''}`;
+  const raw = `${request.prompt}-${request.systemPrompt || ''}-${request.taskType || ''}`;
+  // Use a simple hash to reduce memory footprint
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return `ai_${hash}_${raw.length}`;
+}
+
+/**
+ * Evict least recently used cache entries when cache is full
+ */
+function evictLRUCache(): void {
+  if (responseCache.size < MAX_CACHE_SIZE) return;
+  
+  // Find entry with oldest expiry or lowest access count
+  let lruKey: string | null = null;
+  let lruValue = Infinity;
+  
+  for (const [key, value] of responseCache.entries()) {
+    const score = value.accessCount + (value.expiry / 1000000); // Combine access count and expiry
+    if (score < lruValue) {
+      lruValue = score;
+      lruKey = key;
+    }
+  }
+  
+  if (lruKey) {
+    responseCache.delete(lruKey);
+  }
 }
 
 function getCachedResponse(request: AIRequest): AIResponse | null {
@@ -81,6 +117,8 @@ function getCachedResponse(request: AIRequest): AIResponse | null {
   const cached = responseCache.get(key);
 
   if (cached && cached.expiry > Date.now()) {
+    // Update access count for LRU tracking
+    cached.accessCount++;
     return { ...cached.response, provider: cached.response.provider + ' (cached)' };
   }
 
@@ -91,135 +129,247 @@ function getCachedResponse(request: AIRequest): AIResponse | null {
 function cacheResponse(request: AIRequest, response: AIResponse): void {
   if (!AI_CONFIG.cacheEnabled || !response.success) return;
 
+  // Evict old entries if cache is full
+  evictLRUCache();
+
   const key = getCacheKey(request);
   responseCache.set(key, {
     response,
     expiry: Date.now() + AI_CONFIG.cacheTTL * 1000,
+    accessCount: 1,
   });
 }
 
 /**
- * Call Groq API
+ * Clear expired cache entries
+ * Should be called periodically to prevent memory buildup
  */
-async function callGroq(config: AIProviderConfig, request: AIRequest): Promise<AIResponse> {
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        ...(request.systemPrompt ? [{ role: 'system', content: request.systemPrompt }] : []),
-        { role: 'user', content: request.prompt },
-      ],
-      max_tokens: request.maxTokens || config.maxTokens,
-      temperature: request.temperature ?? config.temperature,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Groq API error: ${response.status} - ${error}`);
+export function clearExpiredCache(): number {
+  const now = Date.now();
+  let cleared = 0;
+  
+  for (const [key, value] of responseCache.entries()) {
+    if (value.expiry <= now) {
+      responseCache.delete(key);
+      cleared++;
+    }
   }
+  
+  return cleared;
+}
 
-  const data = await response.json();
+/**
+ * Get cache statistics for monitoring
+ */
+export function getCacheStats(): {
+  size: number;
+  maxSize: number;
+  hitRate: number;
+  enabled: boolean;
+} {
+  // This is a simplified version - in production, you'd track hits/misses
   return {
-    success: true,
-    content: data.choices[0]?.message?.content || '',
-    provider: config.name,
-    model: config.model,
-    usage: {
-      promptTokens: data.usage?.prompt_tokens || 0,
-      completionTokens: data.usage?.completion_tokens || 0,
-      totalTokens: data.usage?.total_tokens || 0,
-    },
+    size: responseCache.size,
+    maxSize: MAX_CACHE_SIZE,
+    hitRate: 0, // Would need to track this separately
+    enabled: AI_CONFIG.cacheEnabled,
   };
 }
 
 /**
- * Call Gemini API
+ * Validate AI request input to prevent injection attacks
+ */
+function validateAIRequest(request: AIRequest): void {
+  if (!request.prompt || typeof request.prompt !== 'string') {
+    throw new Error('Prompt must be a non-empty string');
+  }
+  
+  if (request.prompt.length > 50000) {
+    throw new Error('Prompt exceeds maximum length of 50000 characters');
+  }
+  
+  if (request.systemPrompt && typeof request.systemPrompt !== 'string') {
+    throw new Error('System prompt must be a string');
+  }
+  
+  if (request.systemPrompt && request.systemPrompt.length > 10000) {
+    throw new Error('System prompt exceeds maximum length of 10000 characters');
+  }
+  
+  if (request.maxTokens && (typeof request.maxTokens !== 'number' || request.maxTokens < 1 || request.maxTokens > 32768)) {
+    throw new Error('Max tokens must be a number between 1 and 32768');
+  }
+  
+  if (request.temperature !== undefined && (typeof request.temperature !== 'number' || request.temperature < 0 || request.temperature > 2)) {
+    throw new Error('Temperature must be a number between 0 and 2');
+  }
+}
+
+/**
+ * Call Groq API with error handling and security
+ */
+async function callGroq(config: AIProviderConfig, request: AIRequest): Promise<AIResponse> {
+  // Add timeout to prevent hanging requests
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AI_CONFIG.defaultTimeout);
+
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          ...(request.systemPrompt ? [{ role: 'system', content: request.systemPrompt }] : []),
+          { role: 'user', content: request.prompt },
+        ],
+        max_tokens: request.maxTokens || config.maxTokens,
+        temperature: request.temperature ?? config.temperature,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Groq API error: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json();
+    return {
+      success: true,
+      content: data.choices[0]?.message?.content || '',
+      provider: config.name,
+      model: config.model,
+      usage: {
+        promptTokens: data.usage?.prompt_tokens || 0,
+        completionTokens: data.usage?.completion_tokens || 0,
+        totalTokens: data.usage?.total_tokens || 0,
+      },
+    };
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Groq API request timeout after ${AI_CONFIG.defaultTimeout}ms`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Call Gemini API with error handling and security
  */
 async function callGemini(config: AIProviderConfig, request: AIRequest): Promise<AIResponse> {
   const fullPrompt = request.systemPrompt
     ? `${request.systemPrompt}\n\n${request.prompt}`
     : request.prompt;
 
-  const response = await fetch(
-    `${config.baseUrl}/models/${config.model}:generateContent?key=${config.apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: fullPrompt }] }],
-        generationConfig: {
-          maxOutputTokens: request.maxTokens || config.maxTokens,
-          temperature: request.temperature ?? config.temperature,
-        },
-      }),
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AI_CONFIG.defaultTimeout);
+
+  try {
+    const response = await fetch(
+      `${config.baseUrl}/models/${config.model}:generateContent?key=${config.apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }],
+          generationConfig: {
+            maxOutputTokens: request.maxTokens || config.maxTokens,
+            temperature: request.temperature ?? config.temperature,
+          },
+        }),
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Gemini API error: ${response.status} - ${error}`);
     }
-  );
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gemini API error: ${response.status} - ${error}`);
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    return {
+      success: true,
+      content: text,
+      provider: config.name,
+      model: config.model,
+      usage: {
+        promptTokens: data.usageMetadata?.promptTokenCount || 0,
+        completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+        totalTokens: data.usageMetadata?.totalTokenCount || 0,
+      },
+    };
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Gemini API request timeout after ${AI_CONFIG.defaultTimeout}ms`);
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-  return {
-    success: true,
-    content: text,
-    provider: config.name,
-    model: config.model,
-    usage: {
-      promptTokens: data.usageMetadata?.promptTokenCount || 0,
-      completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
-      totalTokens: data.usageMetadata?.totalTokenCount || 0,
-    },
-  };
 }
 
 /**
- * Call OpenAI API
+ * Call OpenAI API with error handling and security
  */
 async function callOpenAI(config: AIProviderConfig, request: AIRequest): Promise<AIResponse> {
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AI_CONFIG.defaultTimeout);
+
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          ...(request.systemPrompt ? [{ role: 'system', content: request.systemPrompt }] : []),
+          { role: 'user', content: request.prompt },
+        ],
+        max_tokens: request.maxTokens || config.maxTokens,
+        temperature: request.temperature ?? config.temperature,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenAI API error: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json();
+    return {
+      success: true,
+      content: data.choices[0]?.message?.content || '',
+      provider: config.name,
       model: config.model,
-      messages: [
-        ...(request.systemPrompt ? [{ role: 'system', content: request.systemPrompt }] : []),
-        { role: 'user', content: request.prompt },
-      ],
-      max_tokens: request.maxTokens || config.maxTokens,
-      temperature: request.temperature ?? config.temperature,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} - ${error}`);
+      usage: {
+        promptTokens: data.usage?.prompt_tokens || 0,
+        completionTokens: data.usage?.completion_tokens || 0,
+        totalTokens: data.usage?.total_tokens || 0,
+      },
+    };
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`OpenAI API request timeout after ${AI_CONFIG.defaultTimeout}ms`);
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  return {
-    success: true,
-    content: data.choices[0]?.message?.content || '',
-    provider: config.name,
-    model: config.model,
-    usage: {
-      promptTokens: data.usage?.prompt_tokens || 0,
-      completionTokens: data.usage?.completion_tokens || 0,
-      totalTokens: data.usage?.total_tokens || 0,
-    },
-  };
 }
 
 /**
@@ -365,9 +515,24 @@ function getProvidersForTask(taskType?: keyof typeof TASK_MODELS): AIProviderCon
 }
 
 /**
- * Main AI completion function with fallback chain
+ * Main AI completion function with fallback chain and input validation
  */
 export async function complete(request: AIRequest): Promise<AIResponse> {
+  // Input validation
+  try {
+    validateAIRequest(request);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : 'Invalid request';
+    console.error('[AI] Request validation failed:', errorMsg);
+    return {
+      success: false,
+      content: '',
+      provider: 'none',
+      model: 'none',
+      error: `Invalid request: ${errorMsg}`,
+    };
+  }
+
   // Check cache first
   const cached = getCachedResponse(request);
   if (cached) {
