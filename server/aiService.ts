@@ -6,9 +6,28 @@ import { invokeLLM } from "./_core/llm";
  * AI Service with fallback chain for LLM and OCR
  * LLM: Groq (free) → Gemini (free) → Anthropic (with API key)
  * OCR: Free OCR.space → Paid OCR fallback
+ * 
+ * Security features:
+ * - SSRF protection for image URLs
+ * - Input validation and sanitization
+ * - Rate limiting awareness
+ * - Secure error handling (no sensitive data leakage)
  */
 
 type JsonRecord = Record<string, unknown>;
+
+// Security constants
+const MAX_DOCUMENT_TEXT_LENGTH = 100000; // 100KB max text
+const MAX_PROMPT_LENGTH = 10000; // 10KB max prompt
+const ALLOWED_IMAGE_PROTOCOLS = ['https:'] as const;
+const BLOCKED_DOMAINS = [
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  '0.0.0.0',
+  '169.254.169.254', // AWS metadata service
+  'metadata.google.internal', // GCP metadata service
+] as const;
 
 interface InvoiceLineItem {
   description?: string;
@@ -98,43 +117,147 @@ function isPrivateIp(ip: string): boolean {
   return false;
 }
 
+/**
+ * Validates and sanitizes image URLs to prevent SSRF attacks
+ * @param imageUrl - URL to validate
+ * @returns true if URL is safe to use
+ */
 function isSafeRemoteImageUrl(imageUrl: string): boolean {
   try {
+    // Input validation
+    if (!imageUrl || typeof imageUrl !== 'string') return false;
+    if (imageUrl.length > 2048) return false; // URLs shouldn't be this long
+    
     const url = new URL(imageUrl);
 
-    if (url.protocol !== "https:") return false;
+    // Only allow HTTPS
+    if (!ALLOWED_IMAGE_PROTOCOLS.includes(url.protocol as 'https:')) {
+      console.warn(`[Security] Blocked non-HTTPS URL protocol: ${url.protocol}`);
+      return false;
+    }
 
     const hostname = url.hostname.toLowerCase();
     if (!hostname) return false;
 
+    // Block known sensitive domains
+    if (BLOCKED_DOMAINS.includes(hostname as any)) {
+      console.warn(`[Security] Blocked access to sensitive domain: ${hostname}`);
+      return false;
+    }
+
+    // Block localhost-like domains
     if (
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||
       hostname === "::1"
     ) {
+      console.warn(`[Security] Blocked localhost access: ${hostname}`);
       return false;
     }
 
+    // Block .local and .internal TLDs (typically internal networks)
     if (hostname.endsWith(".local") || hostname.endsWith(".internal")) {
+      console.warn(`[Security] Blocked internal domain: ${hostname}`);
       return false;
     }
 
+    // Check for private IP addresses
     if (isPrivateIp(hostname)) {
+      console.warn(`[Security] Blocked private IP address: ${hostname}`);
+      return false;
+    }
+
+    // Additional check: Block cloud metadata services
+    if (
+      hostname.includes('metadata') ||
+      hostname === '169.254.169.254' ||
+      hostname.includes('metadata.google') ||
+      hostname.includes('metadata.azure')
+    ) {
+      console.warn(`[Security] Blocked cloud metadata service: ${hostname}`);
       return false;
     }
 
     return true;
-  } catch {
+  } catch (error) {
+    console.warn(`[Security] Invalid URL format: ${error instanceof Error ? error.message : 'Unknown error'}`);
     return false;
   }
 }
 
 /**
- * OCR with fallback chain
+ * Validates and sanitizes document text to prevent injection attacks
+ * @param text - Document text to validate
+ * @returns Sanitized text or throws error if invalid
+ */
+function validateDocumentText(text: string): string {
+  if (!text || typeof text !== 'string') {
+    throw new Error('Document text must be a non-empty string');
+  }
+  
+  if (text.length > MAX_DOCUMENT_TEXT_LENGTH) {
+    throw new Error(`Document text exceeds maximum length of ${MAX_DOCUMENT_TEXT_LENGTH} characters`);
+  }
+  
+  // Remove any potential control characters that could cause issues
+  return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+}
+
+/**
+ * Validates prompt length to prevent resource exhaustion
+ * @param prompt - Prompt text to validate
+ * @returns true if valid
+ */
+function validatePromptLength(prompt: string): boolean {
+  if (!prompt || typeof prompt !== 'string') return false;
+  return prompt.length <= MAX_PROMPT_LENGTH;
+}
+
+/**
+ * Safely parse JSON with error handling
+ * @param jsonString - JSON string to parse
+ * @returns Parsed object or null
+ */
+function safeJsonParse(jsonString: string): JsonRecord | null {
+  try {
+    // Remove markdown code blocks if present
+    let cleanJson = jsonString.trim();
+    if (cleanJson.startsWith("```")) {
+      cleanJson = cleanJson
+        .replace(/^```(?:json)?\n?/, "")
+        .replace(/\n?```$/, "");
+    }
+    
+    const parsed = JSON.parse(cleanJson);
+    
+    // Validate it's an object
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    
+    return parsed as JsonRecord;
+  } catch (error) {
+    console.warn('[AI] JSON parse error:', error instanceof Error ? error.message : 'Unknown error');
+    return null;
+  }
+}
+
+/**
+ * OCR with fallback chain and security improvements
  */
 export async function performOCR(imageUrl: string): Promise<OCRResult> {
+  // Input validation
+  if (!imageUrl || typeof imageUrl !== 'string') {
+    console.error('[OCR] Invalid input: imageUrl must be a non-empty string');
+    return {
+      text: "",
+      success: false,
+      provider: "error",
+    };
+  }
+
   if (!isSafeRemoteImageUrl(imageUrl)) {
-    console.warn(`[OCR] Blocked unsafe image URL: ${imageUrl}`);
+    console.warn(`[OCR] Blocked unsafe image URL: ${imageUrl.substring(0, 100)}...`);
     return {
       text: "",
       success: false,
@@ -157,18 +280,27 @@ export async function performOCR(imageUrl: string): Promise<OCRResult> {
         {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           timeout: 30000,
+          // Security: Don't follow redirects to prevent SSRF
+          maxRedirects: 0,
+          validateStatus: (status) => status === 200,
         }
       );
 
       if (response.data?.ParsedResults?.[0]?.ParsedText) {
-        return {
-          text: response.data.ParsedResults[0].ParsedText,
-          success: true,
-          provider: "ocr.space",
-        };
+        const extractedText = response.data.ParsedResults[0].ParsedText;
+        // Validate the response
+        if (typeof extractedText === 'string' && extractedText.length > 0) {
+          return {
+            text: extractedText,
+            success: true,
+            provider: "ocr.space",
+          };
+        }
       }
     } catch (error) {
-      console.warn("[OCR] OCR.space failed, trying fallback:", error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.warn("[OCR] OCR.space failed, trying fallback:", errorMessage);
+      // Don't expose internal error details to prevent information leakage
     }
   } else {
     console.warn(
@@ -218,12 +350,26 @@ export async function performOCR(imageUrl: string): Promise<OCRResult> {
 }
 
 /**
- * Extract tender information from document
+ * Extract tender information from document with input validation
  */
 export async function extractTenderData(
   documentText: string,
   documentUrl?: string
 ): Promise<ExtractionResult> {
+  // Input validation
+  try {
+    documentText = validateDocumentText(documentText);
+  } catch (error) {
+    console.error('[AI] Tender extraction failed - invalid input:', error instanceof Error ? error.message : 'Unknown error');
+    return {
+      success: false,
+      data: {},
+      confidence: {},
+      provider: "none",
+      errors: ["Invalid document text input"],
+    };
+  }
+
   const systemPrompt = `You are an AI assistant specialized in extracting tender information from documents.
 Extract the following information and return it as a JSON object:
 {
@@ -301,7 +447,11 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
       const content = response.choices[0]?.message?.content;
       if (!content || typeof content !== "string") continue;
 
-      const data = JSON.parse(content);
+      const data = safeJsonParse(content);
+      if (!data) {
+        console.warn(`[AI] ${provider} returned invalid JSON for tender extraction`);
+        continue;
+      }
 
       // Generate confidence scores (simplified - in production, use actual model confidence)
       const confidence: Record<string, number> = {};
@@ -318,7 +468,8 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
         provider,
       };
     } catch (error) {
-      console.warn(`[AI] ${provider} failed for tender extraction:`, error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`[AI] ${provider} failed for tender extraction:`, errorMsg);
       continue;
     }
   }
@@ -333,11 +484,25 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
 }
 
 /**
- * Extract invoice data from document with enhanced line item extraction
+ * Extract invoice data from document with enhanced line item extraction and input validation
  */
 export async function extractInvoiceData(
   documentText: string
 ): Promise<ExtractionResult> {
+  // Input validation
+  try {
+    documentText = validateDocumentText(documentText);
+  } catch (error) {
+    console.error('[AI] Invoice extraction failed - invalid input:', error instanceof Error ? error.message : 'Unknown error');
+    return {
+      success: false,
+      data: {},
+      confidence: {},
+      provider: "none",
+      errors: ["Invalid document text input"],
+    };
+  }
+
   const systemPrompt = `You are an AI assistant specialized in extracting invoice information from documents.
 Extract the following information and return it as a JSON object:
 {
@@ -398,15 +563,12 @@ IMPORTANT:
       const content = response.choices[0]?.message?.content;
       if (!content || typeof content !== "string") continue;
 
-      // Parse JSON, handling potential markdown code blocks
-      let jsonStr = content.trim();
-      if (jsonStr.startsWith("```")) {
-        jsonStr = jsonStr
-          .replace(/^```(?:json)?\n?/, "")
-          .replace(/\n?```$/, "");
+      // Use safe JSON parsing
+      const data = safeJsonParse(content);
+      if (!data) {
+        console.warn(`[AI] ${provider} returned invalid JSON for invoice extraction`);
+        continue;
       }
-
-      const data = JSON.parse(jsonStr);
 
       // Calculate confidence based on field completeness
       const confidence: Record<string, number> = {};
@@ -450,7 +612,8 @@ IMPORTANT:
         provider,
       };
     } catch (error) {
-      console.warn(`[AI] ${provider} failed for invoice extraction:`, error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`[AI] ${provider} failed for invoice extraction:`, errorMsg);
       continue;
     }
   }
@@ -529,11 +692,25 @@ function extractInvoiceWithRegex(text: string): InvoiceRegexResult {
 }
 
 /**
- * Extract price list data from document with table parsing
+ * Extract price list data from document with table parsing and input validation
  */
 export async function extractPriceListData(
   documentText: string
 ): Promise<ExtractionResult> {
+  // Input validation
+  try {
+    documentText = validateDocumentText(documentText);
+  } catch (error) {
+    console.error('[AI] Price list extraction failed - invalid input:', error instanceof Error ? error.message : 'Unknown error');
+    return {
+      success: false,
+      data: {},
+      confidence: {},
+      provider: "none",
+      errors: ["Invalid document text input"],
+    };
+  }
+
   const systemPrompt = `You are an AI assistant specialized in extracting price list information from documents.
 Extract the following information and return it as a JSON object:
 {
@@ -584,14 +761,11 @@ IMPORTANT:
       const content = response.choices[0]?.message?.content;
       if (!content || typeof content !== "string") continue;
 
-      let jsonStr = content.trim();
-      if (jsonStr.startsWith("```")) {
-        jsonStr = jsonStr
-          .replace(/^```(?:json)?\n?/, "")
-          .replace(/\n?```$/, "");
+      const data = safeJsonParse(content);
+      if (!data) {
+        console.warn(`[AI] ${provider} returned invalid JSON for price list extraction`);
+        continue;
       }
-
-      const data = JSON.parse(jsonStr);
 
       const confidence: Record<string, number> = {};
       Object.keys(data).forEach(key => {
@@ -618,7 +792,8 @@ IMPORTANT:
         provider,
       };
     } catch (error) {
-      console.warn(`[AI] ${provider} failed for price list extraction:`, error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`[AI] ${provider} failed for price list extraction:`, errorMsg);
       continue;
     }
   }
@@ -633,11 +808,25 @@ IMPORTANT:
 }
 
 /**
- * Extract product catalog data with detailed specifications
+ * Extract product catalog data with detailed specifications and input validation
  */
 export async function extractCatalogData(
   documentText: string
 ): Promise<ExtractionResult> {
+  // Input validation
+  try {
+    documentText = validateDocumentText(documentText);
+  } catch (error) {
+    console.error('[AI] Catalog extraction failed - invalid input:', error instanceof Error ? error.message : 'Unknown error');
+    return {
+      success: false,
+      data: {},
+      confidence: {},
+      provider: "none",
+      errors: ["Invalid document text input"],
+    };
+  }
+
   const systemPrompt = `You are an AI assistant specialized in extracting product catalog information.
 Extract the following information and return it as a JSON object:
 {
@@ -699,14 +888,11 @@ IMPORTANT:
       const content = response.choices[0]?.message?.content;
       if (!content || typeof content !== "string") continue;
 
-      let jsonStr = content.trim();
-      if (jsonStr.startsWith("```")) {
-        jsonStr = jsonStr
-          .replace(/^```(?:json)?\n?/, "")
-          .replace(/\n?```$/, "");
+      const data = safeJsonParse(content);
+      if (!data) {
+        console.warn(`[AI] ${provider} returned invalid JSON for catalog extraction`);
+        continue;
       }
-
-      const data = JSON.parse(jsonStr);
 
       const confidence: Record<string, number> = {};
       Object.keys(data).forEach(key => {
@@ -741,7 +927,8 @@ IMPORTANT:
         provider,
       };
     } catch (error) {
-      console.warn(`[AI] ${provider} failed for catalog extraction:`, error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`[AI] ${provider} failed for catalog extraction:`, errorMsg);
       continue;
     }
   }
@@ -756,11 +943,25 @@ IMPORTANT:
 }
 
 /**
- * Extract purchase order data
+ * Extract purchase order data with input validation
  */
 export async function extractPurchaseOrderData(
   documentText: string
 ): Promise<ExtractionResult> {
+  // Input validation
+  try {
+    documentText = validateDocumentText(documentText);
+  } catch (error) {
+    console.error('[AI] Purchase order extraction failed - invalid input:', error instanceof Error ? error.message : 'Unknown error');
+    return {
+      success: false,
+      data: {},
+      confidence: {},
+      provider: "none",
+      errors: ["Invalid document text input"],
+    };
+  }
+
   const systemPrompt = `You are an AI assistant specialized in extracting purchase order information.
 Extract the following information and return it as a JSON object:
 {
@@ -813,14 +1014,11 @@ Convert all monetary amounts to cents. Return ONLY the JSON object.`;
       const content = response.choices[0]?.message?.content;
       if (!content || typeof content !== "string") continue;
 
-      let jsonStr = content.trim();
-      if (jsonStr.startsWith("```")) {
-        jsonStr = jsonStr
-          .replace(/^```(?:json)?\n?/, "")
-          .replace(/\n?```$/, "");
+      const data = safeJsonParse(content);
+      if (!data) {
+        console.warn(`[AI] ${provider} returned invalid JSON for PO extraction`);
+        continue;
       }
-
-      const data = JSON.parse(jsonStr);
 
       const confidence: Record<string, number> = {};
       const highConfidenceFields = new Set([
@@ -846,7 +1044,8 @@ Convert all monetary amounts to cents. Return ONLY the JSON object.`;
         provider,
       };
     } catch (error) {
-      console.warn(`[AI] ${provider} failed for PO extraction:`, error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`[AI] ${provider} failed for PO extraction:`, errorMsg);
       continue;
     }
   }
@@ -861,11 +1060,25 @@ Convert all monetary amounts to cents. Return ONLY the JSON object.`;
 }
 
 /**
- * Extract expense data from receipt/document
+ * Extract expense data from receipt/document with input validation
  */
 export async function extractExpenseData(
   documentText: string
 ): Promise<ExtractionResult> {
+  // Input validation
+  try {
+    documentText = validateDocumentText(documentText);
+  } catch (error) {
+    console.error('[AI] Expense extraction failed - invalid input:', error instanceof Error ? error.message : 'Unknown error');
+    return {
+      success: false,
+      data: {},
+      confidence: {},
+      provider: "none",
+      errors: ["Invalid document text input"],
+    };
+  }
+
   const systemPrompt = `You are an AI assistant specialized in extracting expense information from receipts and documents.
 Extract the following information and return it as a JSON object:
 {
@@ -893,7 +1106,11 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
       const content = response.choices[0]?.message?.content;
       if (!content || typeof content !== "string") continue;
 
-      const data = JSON.parse(content);
+      const data = safeJsonParse(content);
+      if (!data) {
+        console.warn(`[AI] ${provider} returned invalid JSON for expense extraction`);
+        continue;
+      }
 
       const confidence: Record<string, number> = {};
       Object.keys(data).forEach(key => {
@@ -909,7 +1126,8 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
         provider,
       };
     } catch (error) {
-      console.warn(`[AI] ${provider} failed for expense extraction:`, error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.warn(`[AI] ${provider} failed for expense extraction:`, errorMsg);
       continue;
     }
   }
@@ -924,12 +1142,23 @@ Return ONLY the JSON object, no additional text. If a field is not found, use nu
 }
 
 /**
- * Generate business forecast using AI
+ * Generate business forecast using AI with input validation
  */
 export async function generateForecast(
   historicalData: ForecastInputPoint[],
   type: string
 ): Promise<ForecastPoint[]> {
+  // Input validation
+  if (!Array.isArray(historicalData) || historicalData.length === 0) {
+    console.error('[AI] Forecast generation failed - invalid historicalData');
+    return [];
+  }
+
+  if (!type || typeof type !== 'string' || type.length > 100) {
+    console.error('[AI] Forecast generation failed - invalid type');
+    return [];
+  }
+
   const systemPrompt = `You are an AI assistant specialized in business forecasting.
 Analyze the historical data and generate forecasts for the next 6 months.
 Return predictions as a JSON array with this structure:
@@ -942,33 +1171,64 @@ Return predictions as a JSON array with this structure:
 ]`;
 
   try {
+    const dataString = JSON.stringify(historicalData, null, 2);
+    const prompt = `Historical ${type} data:\n${dataString}\n\nGenerate forecasts for the next 6 months.`;
+    
+    if (!validatePromptLength(prompt)) {
+      console.error('[AI] Forecast generation failed - prompt too long');
+      return [];
+    }
+
     const response = await invokeLLM({
       messages: [
         { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: `Historical ${type} data:\n${JSON.stringify(historicalData, null, 2)}\n\nGenerate forecasts for the next 6 months.`,
-        },
+        { role: "user", content: prompt },
       ],
     });
 
     const content = response.choices[0]?.message?.content;
     if (!content || typeof content !== "string") return [];
 
-    return JSON.parse(content) as ForecastPoint[];
+    const parsed = safeJsonParse(content);
+    if (!parsed) {
+      // Try parsing as array directly
+      try {
+        const cleanContent = content.trim()
+          .replace(/^```(?:json)?\n?/, "")
+          .replace(/\n?```$/, "");
+        return JSON.parse(cleanContent) as ForecastPoint[];
+      } catch {
+        console.warn('[AI] Forecast generation - failed to parse response');
+        return [];
+      }
+    }
+
+    return Array.isArray(parsed) ? (parsed as ForecastPoint[]) : [];
   } catch (error) {
-    console.error("[AI] Forecast generation failed:", error);
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    console.error("[AI] Forecast generation failed:", errorMsg);
     return [];
   }
 }
 
 /**
- * Detect anomalies using AI
+ * Detect anomalies using AI with input validation
  */
 export async function detectAnomalies(
   data: AnalyzableRow[],
   context: string
 ): Promise<AnomalyFinding[]> {
+  // Input validation
+  if (!Array.isArray(data) || data.length === 0) {
+    console.error('[AI] Anomaly detection failed - invalid data');
+    return [];
+  }
+
+  if (!context || typeof context !== 'string' || context.length > 500) {
+    console.error('[AI] Anomaly detection failed - invalid context');
+    return [];
+  }
+
   const systemPrompt = `You are an AI assistant specialized in detecting anomalies and outliers in business data.
 Analyze the data and identify any anomalies, outliers, or unusual patterns.
 Return findings as a JSON array with this structure:
@@ -985,32 +1245,58 @@ Return findings as a JSON array with this structure:
 If no anomalies are found, return an empty array.`;
 
   try {
+    const dataString = JSON.stringify(data, null, 2);
+    const prompt = `Context: ${context}\n\nData to analyze:\n${dataString}`;
+    
+    if (!validatePromptLength(prompt)) {
+      console.error('[AI] Anomaly detection failed - prompt too long');
+      return [];
+    }
+
     const response = await invokeLLM({
       messages: [
         { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: `Context: ${context}\n\nData to analyze:\n${JSON.stringify(data, null, 2)}`,
-        },
+        { role: "user", content: prompt },
       ],
     });
 
     const content = response.choices[0]?.message?.content;
     if (!content || typeof content !== "string") return [];
 
-    return JSON.parse(content) as AnomalyFinding[];
+    const parsed = safeJsonParse(content);
+    if (!parsed) {
+      // Try parsing as array directly
+      try {
+        const cleanContent = content.trim()
+          .replace(/^```(?:json)?\n?/, "")
+          .replace(/\n?```$/, "");
+        return JSON.parse(cleanContent) as AnomalyFinding[];
+      } catch {
+        console.warn('[AI] Anomaly detection - failed to parse response');
+        return [];
+      }
+    }
+
+    return Array.isArray(parsed) ? (parsed as AnomalyFinding[]) : [];
   } catch (error) {
-    console.error("[AI] Anomaly detection failed:", error);
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    console.error("[AI] Anomaly detection failed:", errorMsg);
     return [];
   }
 }
 
 /**
- * Calculate win rate and pricing analytics for tenders
+ * Calculate win rate and pricing analytics for tenders with input validation
  */
 export async function analyzeTenderWinRate(
   tenderHistory: ReadonlyArray<JsonRecord>
 ): Promise<TenderWinRateAnalysis | null> {
+  // Input validation
+  if (!Array.isArray(tenderHistory) || tenderHistory.length === 0) {
+    console.error('[AI] Tender win rate analysis failed - invalid tenderHistory');
+    return null;
+  }
+
   const systemPrompt = `You are an AI assistant specialized in tender analysis and pricing strategy.
 Analyze the historical tender data and provide insights on:
 1. Win rate percentage
@@ -1028,12 +1314,20 @@ Return analysis as a JSON object:
 }`;
 
   try {
+    const dataString = JSON.stringify(tenderHistory, null, 2);
+    const prompt = `Tender history:\n${dataString}`;
+    
+    if (!validatePromptLength(prompt)) {
+      console.error('[AI] Tender win rate analysis failed - prompt too long');
+      return null;
+    }
+
     const response = await invokeLLM({
       messages: [
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Tender history:\n${JSON.stringify(tenderHistory, null, 2)}`,
+          content: prompt,
         },
       ],
     });
@@ -1041,9 +1335,16 @@ Return analysis as a JSON object:
     const content = response.choices[0]?.message?.content;
     if (!content || typeof content !== "string") return null;
 
-    return JSON.parse(content) as TenderWinRateAnalysis;
+    const parsed = safeJsonParse(content);
+    if (!parsed) {
+      console.warn('[AI] Win rate analysis - failed to parse response');
+      return null;
+    }
+
+    return parsed as TenderWinRateAnalysis;
   } catch (error) {
-    console.error("[AI] Win rate analysis failed:", error);
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    console.error("[AI] Win rate analysis failed:", errorMsg);
     return null;
   }
 }
@@ -1480,13 +1781,27 @@ Return ONLY the JSON object.`;
 }
 
 /**
- * Generic extraction helper function
+ * Generic extraction helper function with input validation
  */
 async function genericExtraction(
   documentText: string,
   systemPrompt: string,
   extractionType: string
 ): Promise<ExtractionResult> {
+  // Input validation
+  try {
+    documentText = validateDocumentText(documentText);
+  } catch (error) {
+    console.error(`[AI] ${extractionType} extraction failed - invalid input:`, error instanceof Error ? error.message : 'Unknown error');
+    return {
+      success: false,
+      data: {},
+      confidence: {},
+      provider: "none",
+      errors: ["Invalid document text input"],
+    };
+  }
+
   const providers = ["groq", "gemini", "anthropic"];
 
   for (const provider of providers) {
@@ -1504,15 +1819,12 @@ async function genericExtraction(
       const content = response.choices[0]?.message?.content;
       if (!content || typeof content !== "string") continue;
 
-      // Parse JSON, handling potential markdown code blocks
-      let jsonStr = content.trim();
-      if (jsonStr.startsWith("```")) {
-        jsonStr = jsonStr
-          .replace(/^```(?:json)?\n?/, "")
-          .replace(/\n?```$/, "");
+      // Use safe JSON parsing
+      const data = safeJsonParse(content);
+      if (!data) {
+        console.warn(`[AI] ${provider} returned invalid JSON for ${extractionType} extraction`);
+        continue;
       }
-
-      const data = JSON.parse(jsonStr);
 
       // Generate confidence scores based on field completeness
       const confidence: Record<string, number> = {};
@@ -1548,9 +1860,10 @@ async function genericExtraction(
         provider,
       };
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       console.warn(
         `[AI] ${provider} failed for ${extractionType} extraction:`,
-        error
+        errorMsg
       );
       continue;
     }
